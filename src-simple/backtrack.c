@@ -7,9 +7,9 @@
 typedef struct Thread Thread;
 struct Thread
 {
-	Inst *pc;
-	char *sp;
-	Sub *sub;
+	Inst *pc; /* Automaton vertex ~= Instruction to execute */
+	char *sp; /* Offset in candidate string, w */
+	Sub *sub; /* Sub-match (capture groups) */
 };
 
 static Thread
@@ -19,9 +19,53 @@ thread(Inst *pc, char *sp, Sub *sub)
 	return t;
 }
 
+Memo initMemoTable(Prog *prog, int nChars, int memoMode)
+{
+	Memo memo;
+	int nStatesToTrack = prog->len;
+	int i;
+	
+	printf("Memo table: %d visit vectors\n", nStatesToTrack);
+	/* Visit vectors */
+	memo.visitVectors = mal(sizeof(char*) * nStatesToTrack);
+
+	printf("Memo table: %d visit vectors x %d chars for each\n", nStatesToTrack, nChars);
+	for (i = 0; i < nStatesToTrack; i++) {
+		memo.visitVectors[i] = mal(sizeof(char) * nChars);
+		memset(memo.visitVectors[i], 0, nChars);
+	}
+
+	return memo;
+}
+
+static int
+statenum(Prog *prog, Inst *pc)
+{
+	return (int) (pc - prog->start);
+}
+
+static int
+woffset(char *input, char *sp)
+{
+	return (int) (sp - input);
+}
+
+static void
+markMemo(Memo *memo, int statenum, int woffset)
+{
+	memo->visitVectors[statenum][woffset] = 1;
+}
+
+static int
+isMarked(Memo *memo, int statenum, int woffset)
+{
+	return memo->visitVectors[statenum][woffset] == 1;
+}
+
 int
 backtrack(Prog *prog, char *input, char **subp, int nsubp)
 {
+	Memo memo;
 	enum { MAX = 1000 };
 	Thread ready[MAX];
 	int i, nready;
@@ -29,10 +73,17 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 	char *sp;
 	Sub *sub;
 
+	/* Prep memo table */
+	if (prog->memoMode != MEMO_NONE) {
+		printf("Initializing memo table\n");
+		memo = initMemoTable(prog, strlen(input), prog->memoMode);
+	}
+
 	/* queue initial thread */
 	sub = newsub(nsubp);
 	for(i=0; i<nsubp; i++)
 		sub->sub[i] = nil;
+	/* Initial thread state is < q0, w[0], current capture group > */
 	ready[0] = thread(prog->start, input, sub);
 	nready = 1;
 
@@ -43,7 +94,20 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 		sp = ready[nready].sp;
 		sub = ready[nready].sub;
 		assert(sub->ref > 0);
-		for(;;) {
+		for(;;) { /* Run thread to completion */
+			if (prog->memoMode != MEMO_NONE) {
+				/* Check if we've been here. */
+				if (isMarked(&memo, statenum(prog, pc), woffset(input, sp))) {
+				    /* Since we return on first match, the prior visit failed.
+					 * Short-circuit thread */
+					goto Dead;
+				}
+
+				/* Mark that we've been here */
+				markMemo(&memo, statenum(prog, pc), woffset(input, sp));
+			}
+
+			/* Proceed as normal */
 			switch(pc->opcode) {
 			case Char:
 				if(*sp != pc->c)
@@ -65,7 +129,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 			case Jmp:
 				pc = pc->x;
 				continue;
-			case Split:
+			case Split: /* Non-deterministic choice */
 				if(nready >= MAX)
 					fatal("backtrack overflow");
 				ready[nready++] = thread(pc->y, sp, incref(sub));

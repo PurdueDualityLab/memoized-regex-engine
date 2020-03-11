@@ -18,3 +18,6 @@ The simple and full regex engines are extensions of existing engines.
   - The original source for `src-perl/` is a fork of Perl, from branch blead commit 34667d08d3bf4da83ed39a692fb83467dc30a4a6 ([Link to GitHub](https://github.com/Perl/perl5/commit/34667d08d3bf4da83ed39a692fb83467dc30a4a6)).
 
 The memoization extensions, test suite, and benchmark suite are my own.
+
+## Guide to src-simple/
+

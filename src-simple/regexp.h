@@ -14,6 +14,7 @@
 typedef struct Regexp Regexp;
 typedef struct Prog Prog;
 typedef struct Inst Inst;
+typedef struct Memo Memo;
 
 struct Regexp
 {
@@ -46,6 +47,7 @@ struct Prog
 {
 	Inst *start;
 	int len;
+	int memoMode; /* MEMO_X */
 };
 
 struct Inst
@@ -53,8 +55,8 @@ struct Inst
 	int opcode;
 	int c;
 	int n;
-	Inst *x;
-	Inst *y;
+	Inst *x; /* Outoging edge -- destination 1 */
+	Inst *y; /* Outoging edge -- destination 2 */
 	int gen;	// global state, oooh!
 };
 
@@ -91,6 +93,20 @@ Sub *incref(Sub*);
 Sub *copy(Sub*);
 Sub *update(Sub*, int, char*);
 void decref(Sub*);
+
+struct Memo
+{
+	char **visitVectors;
+	int mode;
+};
+
+enum /* Memo.mode */
+{
+	MEMO_FULL,
+	MEMO_IN_DEGREE_GT1,
+	MEMO_LOOP_DEST,
+	MEMO_NONE,
+};
 
 int backtrack(Prog*, char*, char**, int);
 int pikevm(Prog*, char*, char**, int);

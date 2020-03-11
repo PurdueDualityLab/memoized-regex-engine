@@ -4,7 +4,7 @@
 
 #include "regexp.h"
 
-static Inst *pc;
+static Inst *pc; /* VM */
 static int count(Regexp*);
 static void emit(Regexp*);
 

@@ -39,10 +39,14 @@ main(int argc, char **argv)
 
 	prog = compile(re);
 	printprog(prog);
+	prog->memoMode = MEMO_FULL; /* TODO */
 
 	for(i=2; i<argc; i++) {
 		printf("#%d %s\n", i, argv[i]);
 		for(j=0; j<nelem(tab); j++) {
+			if (strcmp(tab[j].name, "backtrack") != 0) {
+				continue;
+			}
 			printf("%s ", tab[j].name);
 			memset(sub, 0, sizeof sub);
 			if(!tab[j].fn(prog, argv[i], sub, nelem(sub))) {
