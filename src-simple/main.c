@@ -18,33 +18,52 @@ struct {
 void
 usage(void)
 {
-	fprintf(stderr, "usage: re regexp string...\n");
+	fprintf(stderr, "usage: re none|full|indeg|loop regexp string...\n");
+	fprintf(stderr, "  the first argument dictates the memoization strategy");
 	exit(2);
+}
+
+int
+getMemoMode(char *arg)
+{
+	if (strcmp(arg, "none") == 0)
+		return MEMO_NONE;
+	else if (strcmp(arg, "full") == 0)
+		return MEMO_FULL;
+	else if (strcmp(arg, "indeg") == 0)
+		return MEMO_IN_DEGREE_GT1;
+	else if (strcmp(arg, "loop") == 0)
+		return MEMO_LOOP_DEST;
+    else {
+		fprintf(stderr, "Error, unknown memostrategy %s\n", arg);
+		usage();
+	}
 }
 
 int
 main(int argc, char **argv)
 {
-	int i, j, k, l;
+	int i, j, k, l, memoMode;
 	Regexp *re;
 	Prog *prog;
 	char *sub[MAXSUB];
 
-	if(argc < 2)
+	if(argc < 3)
 		usage();
 	
-	re = parse(argv[1]);
+	memoMode = getMemoMode(argv[1]);
+	re = parse(argv[2]);
 	printre(re);
 	printf("\n");
 
 	prog = compile(re);
 	printprog(prog);
-	prog->memoMode = MEMO_FULL; /* TODO */
+	prog->memoMode = memoMode;
 
-	for(i=2; i<argc; i++) {
+	for(i=3; i<argc; i++) { /* Try each of the strings against the regex */
 		printf("#%d %s\n", i, argv[i]);
-		for(j=0; j<nelem(tab); j++) {
-			if (strcmp(tab[j].name, "backtrack") != 0) {
+		for(j=0; j<nelem(tab); j++) { /* Go through all matchers */
+			if (strcmp(tab[j].name, "backtrack") != 0) { /* We just care about backtrack */
 				continue;
 			}
 			printf("%s ", tab[j].name);

@@ -55,6 +55,7 @@ struct Inst
 	int opcode;
 	int c;
 	int n;
+	int stateNum; /* 0 to Prog->len-1 */
 	Inst *x; /* Outoging edge -- destination 1 */
 	Inst *y; /* Outoging edge -- destination 2 */
 	int gen;	// global state, oooh!
@@ -96,16 +97,17 @@ void decref(Sub*);
 
 struct Memo
 {
-	char **visitVectors;
+	int *pc2vv; /* Map a */
+	int **visitVectors; /* Booleans */
 	int mode;
 };
 
 enum /* Memo.mode */
 {
+	MEMO_NONE,
 	MEMO_FULL,
 	MEMO_IN_DEGREE_GT1,
 	MEMO_LOOP_DEST,
-	MEMO_NONE,
 };
 
 int backtrack(Prog*, char*, char**, int);

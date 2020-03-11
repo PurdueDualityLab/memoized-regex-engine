@@ -5,6 +5,9 @@
 #include "regexp.h"
 
 typedef struct Thread Thread;
+typedef struct VisitTable VisitTable;
+
+
 struct Thread
 {
 	Inst *pc; /* Automaton vertex ~= Instruction to execute */
@@ -19,23 +22,63 @@ thread(Inst *pc, char *sp, Sub *sub)
 	return t;
 }
 
-Memo initMemoTable(Prog *prog, int nChars, int memoMode)
+struct VisitTable
 {
-	Memo memo;
-	int nStatesToTrack = prog->len;
-	int i;
-	
-	printf("Memo table: %d visit vectors\n", nStatesToTrack);
-	/* Visit vectors */
-	memo.visitVectors = mal(sizeof(char*) * nStatesToTrack);
+	int **visitVectors; /* Counters */
+	int nStates;
+	int nChars;
+};
 
-	printf("Memo table: %d visit vectors x %d chars for each\n", nStatesToTrack, nChars);
-	for (i = 0; i < nStatesToTrack; i++) {
-		memo.visitVectors[i] = mal(sizeof(char) * nChars);
-		memset(memo.visitVectors[i], 0, nChars);
+VisitTable 
+initVisitTable(Prog *prog, int nChars)
+{
+	VisitTable visitTable;
+	int nStates = prog->len;
+	int i;
+	char *prefix = "VISIT_TABLE";
+
+	visitTable.nStates = nStates;
+	visitTable.nChars = nChars;
+	visitTable.visitVectors = mal(sizeof(int*) * nStates);
+	for (i = 0; i < nStates; i++) {
+		visitTable.visitVectors[i] = mal(sizeof(int) * nChars);
+		memset(visitTable.visitVectors[i], 0, nChars);
 	}
 
-	return memo;
+	return visitTable;
+}
+
+void
+markVisit(VisitTable *visitTable, int statenum, int woffset)
+{
+	visitTable->visitVectors[statenum][woffset]++;
+}
+
+Memo
+initMemoTable(Prog *prog, int nChars, int memoMode)
+{
+	Memo memo;
+	int cardQ = prog->len;
+	int nStatesToTrack = prog->len;
+	int i;
+	char *prefix = "MEMO_TABLE";
+	
+	printf("%s: cardQ = %d\n", prefix, cardQ);
+	
+	if (memoMode == MEMO_FULL) {
+		printf("%s: %d visit vectors\n", prefix, nStatesToTrack);
+		/* Visit vectors */
+		memo.visitVectors = mal(sizeof(char*) * nStatesToTrack);
+
+		printf("%s: %d visit vectors x %d chars for each\n", prefix, nStatesToTrack, nChars);
+		for (i = 0; i < nStatesToTrack; i++) {
+			memo.visitVectors[i] = mal(sizeof(char) * nChars);
+			memset(memo.visitVectors[i], 0, nChars);
+		}
+
+		return memo;
+	}
+
 }
 
 static int
@@ -62,16 +105,47 @@ isMarked(Memo *memo, int statenum, int woffset)
 	return memo->visitVectors[statenum][woffset] == 1;
 }
 
+static void
+printStats(Memo *memo, VisitTable *visitTable)
+{
+	int i;
+	int j;
+	int mostVisitedState = -1;
+	int maxVisits = -1;
+	int *visitsPerState;
+
+	/* Most-visited vertex */
+	visitsPerState = mal(sizeof(int) * visitTable->nStates);
+	for (i = 0; i < visitTable->nStates; i++) {
+		visitsPerState[i] = 0;
+		for (j = 0; j < visitTable->nChars; j++) {
+			visitsPerState[i] += visitTable->visitVectors[i][j];
+		}
+
+		if (visitsPerState[i]  > maxVisits) {
+			mostVisitedState = i;
+			maxVisits = visitsPerState[i];
+		}
+	}
+
+	/* TODO Why is this >1 for FULL? */
+	printf("Most-visited vertex: %d (%d) visits\n", mostVisitedState, maxVisits);
+}
+
 int
 backtrack(Prog *prog, char *input, char **subp, int nsubp)
 {
 	Memo memo;
+	VisitTable visitTable;
 	enum { MAX = 1000 };
 	Thread ready[MAX];
 	int i, nready;
 	Inst *pc;
 	char *sp;
 	Sub *sub;
+
+	/* Prep visit table */
+	visitTable = initVisitTable(prog, strlen(input));
 
 	/* Prep memo table */
 	if (prog->memoMode != MEMO_NONE) {
@@ -95,17 +169,21 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 		sub = ready[nready].sub;
 		assert(sub->ref > 0);
 		for(;;) { /* Run thread to completion */
+
 			if (prog->memoMode != MEMO_NONE) {
 				/* Check if we've been here. */
-				if (isMarked(&memo, statenum(prog, pc), woffset(input, sp))) {
+				if (isMarked(&memo, pc->stateNum, woffset(input, sp))) {
 				    /* Since we return on first match, the prior visit failed.
 					 * Short-circuit thread */
 					goto Dead;
 				}
 
 				/* Mark that we've been here */
-				markMemo(&memo, statenum(prog, pc), woffset(input, sp));
+				markMemo(&memo, pc->stateNum, woffset(input, sp));
 			}
+
+			/* "Visit" means that we evaluate pc appropriately. */
+			markVisit(&visitTable, pc->stateNum, woffset(input, sp));
 
 			/* Proceed as normal */
 			switch(pc->opcode) {
@@ -125,6 +203,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 				for(i=0; i<nsubp; i++)
 					subp[i] = sub->sub[i];
 				decref(sub);
+				printStats(&memo, &visitTable);
 				return 1;
 			case Jmp:
 				pc = pc->x;
@@ -144,6 +223,8 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 	Dead:
 		decref(sub);
 	}
+
+	printStats(&memo, &visitTable);
 	return 0;
 }
 

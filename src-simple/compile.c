@@ -4,13 +4,14 @@
 
 #include "regexp.h"
 
-static Inst *pc; /* VM */
+static Inst *pc; /* VM array */
 static int count(Regexp*);
 static void emit(Regexp*);
 
 Prog*
 compile(Regexp *r)
 {
+	int i;
 	int n;
 	Prog *p;
 
@@ -22,6 +23,12 @@ compile(Regexp *r)
 	pc->opcode = Match;
 	pc++;
 	p->len = pc - p->start;
+
+	/* Assign state numbers */
+	for (i = 0; i < p->len; i++) {
+		p->start[i].stateNum = i;
+	}
+
 	return p;
 }
 
@@ -50,6 +57,7 @@ count(Regexp *r)
 	}
 }
 
+// Populate pc for r, recursively
 static void
 emit(Regexp *r)
 {
@@ -156,21 +164,27 @@ printprog(Prog *p)
 			fatal("printprog");
 		case Split:
 			printf("%2d. split %d, %d\n", (int)(pc-p->start), (int)(pc->x-p->start), (int)(pc->y-p->start));
+			printf("%2d. split %d, %d\n", (int)(pc->stateNum), (int)(pc->x->stateNum), (int)(pc->y->stateNum));
 			break;
 		case Jmp:
 			printf("%2d. jmp %d\n", (int)(pc-p->start), (int)(pc->x-p->start));
+			printf("%2d. jmp %d\n", (int)(pc->stateNum), (int)(pc->x->stateNum));
 			break;
 		case Char:
 			printf("%2d. char %c\n", (int)(pc-p->start), pc->c);
+			printf("%2d. char %c\n", (int)(pc->stateNum), pc->c);
 			break;
 		case Any:
 			printf("%2d. any\n", (int)(pc-p->start));
+			printf("%2d. any\n", (int)(pc->stateNum));
 			break;
 		case Match:
 			printf("%2d. match\n", (int)(pc-p->start));
+			printf("%2d. match\n", (int)(pc->stateNum));
 			break;
 		case Save:
 			printf("%2d. save %d\n", (int)(pc-p->start), pc->n);
+			printf("%2d. save %d\n", (int)(pc->stateNum), pc->n);
 		}
 	}
 }
