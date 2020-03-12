@@ -121,6 +121,8 @@ printStats(Memo *memo, VisitTable *visitTable)
 	int i;
 	int j;
 
+	char *prefix = "STATS";
+
 	/* Per-search state */
 	int maxVisitsPerSearchState = -1;
 	int vertexWithMostVisitedSearchState = -1;
@@ -148,8 +150,8 @@ printStats(Memo *memo, VisitTable *visitTable)
 		}
 	}
 
-	printf("Most-visited search state: belongs to %d (%d visits)\n", vertexWithMostVisitedSearchState, maxVisitsPerSearchState);
-	printf("Most-visited vertex: %d (%d visits over all its search states)\n", mostVisitedVertex, maxVisitsPerVertex);
+	printf("%s: Most-visited search state: belongs to %d (%d visits)\n", prefix, vertexWithMostVisitedSearchState, maxVisitsPerSearchState);
+	printf("%s: Most-visited vertex: %d (%d visits over all its search states)\n", prefix, mostVisitedVertex, maxVisitsPerVertex);
 }
 
 int
