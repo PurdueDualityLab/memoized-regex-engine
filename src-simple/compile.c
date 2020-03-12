@@ -147,7 +147,6 @@ count(Regexp *r)
  *   We use memoMode here because Alt and Star are compiled into similar-looking opcodes
  *   Easiest to handle MEMO_LOOP_DEST during emit().
  */ 
-// TODO I AM HERE, studying structures via code and command-line
 static void
 emit(Regexp *r, int memoMode)
 {
