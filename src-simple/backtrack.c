@@ -6,6 +6,8 @@
 
 #include "regexp.h"
 
+static int VERBOSE = 0;
+
 typedef struct Thread Thread;
 typedef struct VisitTable VisitTable;
 
@@ -56,10 +58,15 @@ initVisitTable(Prog *prog, int nChars)
 void
 markVisit(VisitTable *visitTable, int statenum, int woffset)
 {
-	/*
-	if (visitTable->visitVectors[statenum][woffset] > 1)
-		printf("Hmm, already visited s%d c%d\n", statenum, woffset);
-	*/
+	if (VERBOSE) {
+		printf("Visit: Visiting <%d, %d>\n", statenum, woffset);
+	
+		if (visitTable->visitVectors[statenum][woffset] > 0)
+			printf("Hmm, already visited <%d, %d>\n", statenum, woffset);
+	}
+	assert(statenum < visitTable->nStates);
+	assert(woffset < visitTable->nChars);
+	
 	visitTable->visitVectors[statenum][woffset]++;
 }
 
@@ -75,11 +82,13 @@ initMemoTable(Prog *prog, int nChars, int memoMode)
 	printf("%s: cardQ = %d, Phi_memo = %d\n", prefix, cardQ, nStatesToTrack);
 	
 	/* Visit vectors */
-	memo.visitVectors = mal(sizeof(char*) * nStatesToTrack);
+	memo.nStates = nStatesToTrack;
+	memo.nChars = nChars;
+	memo.visitVectors = mal(sizeof(int*) * nStatesToTrack);
 
 	printf("%s: %d visit vectors x %d chars for each\n", prefix, nStatesToTrack, nChars);
 	for (i = 0; i < nStatesToTrack; i++) {
-		memo.visitVectors[i] = mal(sizeof(char) * nChars);
+		memo.visitVectors[i] = mal(sizeof(int) * nChars);
 		for (j = 0; j < nChars; j++) {
 			memo.visitVectors[i][j] = 0;
 		}
@@ -98,8 +107,16 @@ woffset(char *input, char *sp)
 static void
 markMemo(Memo *memo, int statenum, int woffset)
 {
-	if (memo->visitVectors[statenum][woffset])
-		printf("Hmm, already marked s%d c%d\n", statenum, woffset);
+	if (VERBOSE) {
+		printf("Memo: Marking <%d, %d>\n", statenum, woffset);
+
+		if (memo->visitVectors[statenum][woffset])
+			printf("\n****\n\n   Hmm, already marked s%d c%d\n\n*****\n\n", statenum, woffset);
+	}
+
+	assert(statenum < memo->nStates);
+	assert(woffset < memo->nChars);
+
 	memo->visitVectors[statenum][woffset] = 1;
 }
 
@@ -110,7 +127,7 @@ isMarked(Memo *memo, int statenum, int woffset)
 }
 
 static void
-printStats(Memo *memo, VisitTable *visitTable)
+printStats(Memo *memo, VisitTable *visitTable, int memoMode)
 {
 	int i;
 	int j;
@@ -120,6 +137,7 @@ printStats(Memo *memo, VisitTable *visitTable)
 	/* Per-search state */
 	int maxVisitsPerSearchState = -1;
 	int vertexWithMostVisitedSearchState = -1;
+	int mostVisitedOffset = -1;
 
 	/* Sum over all offsets */
 	int maxVisitsPerVertex = -1;
@@ -131,21 +149,31 @@ printStats(Memo *memo, VisitTable *visitTable)
 	for (i = 0; i < visitTable->nStates; i++) {
 		visitsPerVertex[i] = 0;
 		for (j = 0; j < visitTable->nChars; j++) {
+			/* Running sum */
 			visitsPerVertex[i] += visitTable->visitVectors[i][j];
+
+			/* Largest individual visits over all search states? */
 			if (visitTable->visitVectors[i][j] > maxVisitsPerSearchState) {
 				maxVisitsPerSearchState = visitTable->visitVectors[i][j];
 				vertexWithMostVisitedSearchState = i;
+				mostVisitedOffset = j;
 			}
 		}
 
+		/* Largest overall visits per vertex? */
 		if (visitsPerVertex[i]  > maxVisitsPerVertex) {
-			mostVisitedVertex = i;
 			maxVisitsPerVertex = visitsPerVertex[i];
+			mostVisitedVertex = i;
 		}
 	}
 
-	printf("%s: Most-visited search state: belongs to %d (%d visits)\n", prefix, vertexWithMostVisitedSearchState, maxVisitsPerSearchState);
+	printf("%s: Most-visited search state: <%d, %d> (%d visits)\n", prefix, vertexWithMostVisitedSearchState, mostVisitedOffset, maxVisitsPerSearchState);
 	printf("%s: Most-visited vertex: %d (%d visits over all its search states)\n", prefix, mostVisitedVertex, maxVisitsPerVertex);
+
+	if (memoMode == MEMO_FULL || memoMode == MEMO_IN_DEGREE_GT1) {
+		/* I have proved this is impossible. */
+		assert(maxVisitsPerSearchState <= 1);
+	}
 }
 
 int
@@ -161,13 +189,20 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 	Sub *sub; /* submatch (capture group) */
 
 	/* Prep visit table */
-	visitTable = initVisitTable(prog, strlen(input));
+	printf("Initializing visit table\n");
+	visitTable = initVisitTable(prog, strlen(input) + 1);
 
 	/* Prep memo table */
 	if (prog->memoMode != MEMO_NONE) {
 		printf("Initializing memo table\n");
-		memo = initMemoTable(prog, strlen(input), prog->memoMode);
+		memo = initMemoTable(prog, strlen(input) + 1, prog->memoMode);
 	}
+
+	if (VERBOSE) {
+		printStats(&memo, &visitTable, prog->memoMode);
+	}
+
+	printf("\n\n***************\n\n  Backtrack: Simulation begins\n\n************\n\n");
 
 	/* queue initial thread */
 	sub = newsub(nsubp);
@@ -185,13 +220,21 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 		sub = ready[nready].sub;
 		assert(sub->ref > 0);
 		for(;;) { /* Run thread to completion */
+			if (VERBOSE)
+				printf("  search state: <%d (M: %d), %d>\n", pc->stateNum, pc->memoStateNum, woffset(input, sp));
 
 			if (prog->memoMode != MEMO_NONE && pc->memoStateNum >= 0) {
 				/* Check if we've been here. */
 				if (isMarked(&memo, pc->memoStateNum, woffset(input, sp))) {
 				    /* Since we return on first match, the prior visit failed.
 					 * Short-circuit thread */
-					goto Dead;
+					assert(pc->opcode != Match);
+
+					if (pc->opcode == Char || pc->opcode == Any) {
+						goto Dead;
+					} else {
+						break;
+					}
 				}
 
 				/* Mark that we've been here */
@@ -219,7 +262,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 				for(i=0; i<nsubp; i++)
 					subp[i] = sub->sub[i];
 				decref(sub);
-				printStats(&memo, &visitTable);
+				printStats(&memo, &visitTable, prog->memoMode);
 				return 1;
 			case Jmp:
 				pc = pc->x;
@@ -240,7 +283,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 		decref(sub);
 	}
 
-	printStats(&memo, &visitTable);
+	printStats(&memo, &visitTable, prog->memoMode);
 	return 0;
 }
 

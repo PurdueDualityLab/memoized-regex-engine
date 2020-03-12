@@ -259,27 +259,27 @@ printprog(Prog *p)
 		default:
 			fatal("printprog");
 		case Split:
-			printf("%2d. split %d, %d\n", (int)(pc-p->start), (int)(pc->x-p->start), (int)(pc->y-p->start));
+			printf("%2d. split %d, %d (memo? %d -- state %d)\n", (int)(pc-p->start), (int)(pc->x-p->start), (int)(pc->y-p->start), pc->shouldMemo, pc->memoStateNum);
 			//printf("%2d. split %d, %d\n", (int)(pc->stateNum), (int)(pc->x->stateNum), (int)(pc->y->stateNum));
 			break;
 		case Jmp:
-			printf("%2d. jmp %d\n", (int)(pc-p->start), (int)(pc->x-p->start));
+			printf("%2d. jmp %d (memo? %d -- state %d)\n", (int)(pc-p->start), (int)(pc->x-p->start), pc->shouldMemo, pc->memoStateNum);
 			//printf("%2d. jmp %d\n", (int)(pc->stateNum), (int)(pc->x->stateNum));
 			break;
 		case Char:
-			printf("%2d. char %c\n", (int)(pc-p->start), pc->c);
+			printf("%2d. char %c (memo? %d -- state %d)\n", (int)(pc-p->start), pc->c, pc->shouldMemo, pc->memoStateNum);
 			//printf("%2d. char %c\n", (int)(pc->stateNum), pc->c);
 			break;
 		case Any:
-			printf("%2d. any\n", (int)(pc-p->start));
+			printf("%2d. any (memo? %d -- state %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum);
 			//printf("%2d. any\n", (int)(pc->stateNum));
 			break;
 		case Match:
-			printf("%2d. match\n", (int)(pc-p->start));
+			printf("%2d. match (memo? %d -- state %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum);
 			//printf("%2d. match\n", (int)(pc->stateNum));
 			break;
 		case Save:
-			printf("%2d. save %d\n", (int)(pc-p->start), pc->n);
+			printf("%2d. save %d (memo? %d -- state %d)\n", (int)(pc-p->start), pc->n, pc->shouldMemo, pc->memoStateNum);
 			//printf("%2d. save %d\n", (int)(pc->stateNum), pc->n);
 		}
 	}

@@ -102,6 +102,8 @@ void decref(Sub*);
 struct Memo
 {
 	int **visitVectors; /* Booleans */
+	int nStates;
+	int nChars;
 	int mode;
 };
 
