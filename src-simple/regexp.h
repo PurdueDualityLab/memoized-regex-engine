@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <assert.h>
+#include "uthash.h"
 
 #define nil ((void*)0)
 #define nelem(x) (sizeof(x)/sizeof((x)[0]))
@@ -15,6 +16,8 @@ typedef struct Regexp Regexp;
 typedef struct Prog Prog;
 typedef struct Inst Inst;
 typedef struct Memo Memo;
+typedef struct SearchState SearchState;
+typedef struct SearchStateTable SearchStateTable;
 
 struct Regexp
 {
@@ -47,7 +50,8 @@ struct Prog
 {
 	Inst *start;
 	int len;
-	int memoMode; /* MEMO_X */
+	int memoMode; /* Memo.mode */
+	int memoEncoding; /* Memo.encoding */
 	int nMemoizedStates;
 };
 
@@ -99,12 +103,33 @@ Sub *copy(Sub*);
 Sub *update(Sub*, int, char*);
 void decref(Sub*);
 
+struct SearchState
+{
+	int stateNum;
+	int stringIndex;
+};
+
+struct SearchStateTable
+{
+	SearchState key;
+	UT_hash_handle hh; /* Makes this structure hashable */
+};
+
 struct Memo
 {
-	int **visitVectors; /* Booleans */
 	int nStates;
 	int nChars;
 	int mode;
+	int encoding;
+
+	/* Carries structures for use under the various supported encodings.
+     * I suppose this could be a union ;-) */
+
+	/* ENCODING_NONE */
+	int **visitVectors; /* Booleans */
+
+	/* ENCODING_NEGATIVE */
+	SearchStateTable *searchStateTable; /* < q, i > */
 };
 
 enum /* Memo.mode */
@@ -113,6 +138,13 @@ enum /* Memo.mode */
 	MEMO_FULL,
 	MEMO_IN_DEGREE_GT1,
 	MEMO_LOOP_DEST,
+};
+
+enum /* Memo.encoding */
+{
+	ENCODING_NONE,
+	ENCODING_NEGATIVE, /* Hash table */
+	ENCODING_RLE,      /* Run-length encoding */
 };
 
 int backtrack(Prog*, char*, char**, int);

@@ -27,6 +27,8 @@ thread(Inst *pc, char *sp, Sub *sub)
 	return t;
 }
 
+/* Visit table */
+
 struct VisitTable
 {
 	int **visitVectors; /* Counters */
@@ -70,28 +72,44 @@ markVisit(VisitTable *visitTable, int statenum, int woffset)
 	visitTable->visitVectors[statenum][woffset]++;
 }
 
+/* Memo table */
+
 Memo
-initMemoTable(Prog *prog, int nChars, int memoMode)
+initMemoTable(Prog *prog, int nChars, int memoMode, int memoEncoding)
 {
 	Memo memo;
 	int cardQ = prog->len;
 	int nStatesToTrack = prog->nMemoizedStates;
 	int i, j;
 	char *prefix = "MEMO_TABLE";
-	
-	printf("%s: cardQ = %d, Phi_memo = %d\n", prefix, cardQ, nStatesToTrack);
-	
-	/* Visit vectors */
+
+	memo.mode = memoMode;
+	memo.encoding = memoEncoding;
 	memo.nStates = nStatesToTrack;
 	memo.nChars = nChars;
-	memo.visitVectors = mal(sizeof(int*) * nStatesToTrack);
+	
+	if (memo.encoding == ENCODING_NONE) {
+		printf("%s: Initializing with encoding NONE\n", prefix);
+		printf("%s: cardQ = %d, Phi_memo = %d\n", prefix, cardQ, nStatesToTrack);
+		/* Visit vectors */
+		memo.visitVectors = mal(sizeof(int*) * nStatesToTrack);
 
-	printf("%s: %d visit vectors x %d chars for each\n", prefix, nStatesToTrack, nChars);
-	for (i = 0; i < nStatesToTrack; i++) {
-		memo.visitVectors[i] = mal(sizeof(int) * nChars);
-		for (j = 0; j < nChars; j++) {
-			memo.visitVectors[i][j] = 0;
+		printf("%s: %d visit vectors x %d chars for each\n", prefix, nStatesToTrack, nChars);
+		for (i = 0; i < nStatesToTrack; i++) {
+			memo.visitVectors[i] = mal(sizeof(int) * nChars);
+			for (j = 0; j < nChars; j++) {
+				memo.visitVectors[i][j] = 0;
+			}
 		}
+	} else if (memo.encoding == ENCODING_NEGATIVE) {
+		printf("%s: Initializing with encoding NEGATIVE\n", prefix);
+		memo.searchStateTable = NULL;
+	} else if (memo.encoding == ENCODING_RLE) {
+		printf("%s: Initializing with encoding RLE\n", prefix);
+		assert(0);
+	} else {
+		printf("%s: Unexpected encoding %d", prefix, memo.encoding);
+		assert(0);
 	}
 
 	printf("%s: initialized\n", prefix);
@@ -104,30 +122,56 @@ woffset(char *input, char *sp)
 	return (int) (sp - input);
 }
 
+static int
+isMarked(Memo *memo, int statenum, int woffset)
+{
+	if (memo->encoding == ENCODING_NONE) {
+		return memo->visitVectors[statenum][woffset] == 1;
+	} else if (memo->encoding == ENCODING_NEGATIVE) {
+		SearchStateTable entry;
+		SearchStateTable *p;
+
+		memset(&entry, 0, sizeof(SearchStateTable));
+		entry.key.stateNum = statenum;
+		entry.key.stringIndex = woffset;
+
+		HASH_FIND(hh, memo->searchStateTable, &entry.key, sizeof(SearchState), p);
+		return p != NULL;
+	} else if (memo->encoding == ENCODING_RLE) {
+		assert(0);
+	}
+}
+
 static void
 markMemo(Memo *memo, int statenum, int woffset)
 {
 	if (VERBOSE) {
 		printf("Memo: Marking <%d, %d>\n", statenum, woffset);
 
-		if (memo->visitVectors[statenum][woffset])
+		if (isMarked(memo, statenum, woffset)) {
 			printf("\n****\n\n   Hmm, already marked s%d c%d\n\n*****\n\n", statenum, woffset);
+		}
 	}
 
-	assert(statenum < memo->nStates);
-	assert(woffset < memo->nChars);
-
-	memo->visitVectors[statenum][woffset] = 1;
+	if (memo->encoding == ENCODING_NONE) {
+		assert(statenum < memo->nStates);
+		assert(woffset < memo->nChars);
+		memo->visitVectors[statenum][woffset] = 1;
+	} else if (memo->encoding == ENCODING_NEGATIVE) {
+		SearchStateTable *entry = mal(sizeof(*entry));
+		memset(entry, 0, sizeof(*entry));
+		entry->key.stateNum = statenum;
+		entry->key.stringIndex = woffset;
+		HASH_ADD(hh, memo->searchStateTable, key, sizeof(SearchState), entry);
+	} else if (memo->encoding == ENCODING_RLE) {
+		assert(0);
+	}
 }
 
-static int
-isMarked(Memo *memo, int statenum, int woffset)
-{
-	return memo->visitVectors[statenum][woffset] == 1;
-}
+/* Summary statistics */
 
 static void
-printStats(Memo *memo, VisitTable *visitTable, int memoMode)
+printStats(Memo *memo, VisitTable *visitTable)
 {
 	int i;
 	int j;
@@ -170,11 +214,18 @@ printStats(Memo *memo, VisitTable *visitTable, int memoMode)
 	printf("%s: Most-visited search state: <%d, %d> (%d visits)\n", prefix, vertexWithMostVisitedSearchState, mostVisitedOffset, maxVisitsPerSearchState);
 	printf("%s: Most-visited vertex: %d (%d visits over all its search states)\n", prefix, mostVisitedVertex, maxVisitsPerVertex);
 
-	if (memoMode == MEMO_FULL || memoMode == MEMO_IN_DEGREE_GT1) {
+	if (memo->mode == MEMO_FULL || memo->mode == MEMO_IN_DEGREE_GT1) {
 		/* I have proved this is impossible. */
 		assert(maxVisitsPerSearchState <= 1);
 	}
+
+	if (memo->encoding == ENCODING_NEGATIVE) {
+		printf("%s: %d slots used (out of %d possible)\n",
+		  prefix, HASH_COUNT(memo->searchStateTable), memo->nStates * memo->nChars);
+	}
 }
+
+/* NFA simulation */
 
 int
 backtrack(Prog *prog, char *input, char **subp, int nsubp)
@@ -185,7 +236,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 	Thread ready[MAX];
 	int i, nready;
 	Inst *pc; /* Current position in VM (pc) */
-	char *sp; /* Current position in *input */
+	char *sp; /* Current position in input */
 	Sub *sub; /* submatch (capture group) */
 
 	/* Prep visit table */
@@ -195,11 +246,11 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 	/* Prep memo table */
 	if (prog->memoMode != MEMO_NONE) {
 		printf("Initializing memo table\n");
-		memo = initMemoTable(prog, strlen(input) + 1, prog->memoMode);
+		memo = initMemoTable(prog, strlen(input) + 1, prog->memoMode, prog->memoEncoding);
 	}
 
 	if (VERBOSE) {
-		printStats(&memo, &visitTable, prog->memoMode);
+		printStats(&memo, &visitTable);
 	}
 
 	printf("\n\n***************\n\n  Backtrack: Simulation begins\n\n************\n\n");
@@ -262,7 +313,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 				for(i=0; i<nsubp; i++)
 					subp[i] = sub->sub[i];
 				decref(sub);
-				printStats(&memo, &visitTable, prog->memoMode);
+				printStats(&memo, &visitTable);
 				return 1;
 			case Jmp:
 				pc = pc->x;
@@ -283,7 +334,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 		decref(sub);
 	}
 
-	printStats(&memo, &visitTable, prog->memoMode);
+	printStats(&memo, &visitTable);
 	return 0;
 }
 

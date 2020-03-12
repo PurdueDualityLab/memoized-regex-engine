@@ -18,8 +18,9 @@ struct {
 void
 usage(void)
 {
-	fprintf(stderr, "usage: re {none|full|indeg|loop} regexp [string ...]\n");
-	fprintf(stderr, "  The first argument dictates the memoization strategy\n");
+	fprintf(stderr, "usage: re {none|full|indeg|loop} {none|neg|rle} regexp [string ...]\n");
+	fprintf(stderr, "  The first argument is the memoization strategy\n");
+	fprintf(stderr, "  The second argument is the memo table encoding scheme\n");
 	fprintf(stderr, "  Engine follows partial-match semantics");
 	exit(2);
 }
@@ -42,26 +43,43 @@ getMemoMode(char *arg)
 }
 
 int
+getEncoding(char *arg)
+{
+	if (strcmp(arg, "none") == 0)
+		return ENCODING_NONE;
+	else if (strcmp(arg, "neg") == 0)
+		return ENCODING_NEGATIVE;
+	else if (strcmp(arg, "rle") == 0)
+		return ENCODING_RLE;
+    else {
+		fprintf(stderr, "Error, unknown encoding %s\n", arg);
+		usage();
+	}
+}
+
+int
 main(int argc, char **argv)
 {
-	int i, j, k, l, memoMode;
+	int i, j, k, l, memoMode, memoEncoding;
 	Regexp *re;
 	Prog *prog;
 	char *sub[MAXSUB];
 
-	if(argc < 3)
+	if(argc < 4)
 		usage();
 	
 	memoMode = getMemoMode(argv[1]);
-	re = parse(argv[2]);
+	memoEncoding = getEncoding(argv[2]);
+	re = parse(argv[3]);
 	printre(re);
 	printf("\n");
 
 	prog = compile(re, memoMode);
 	printprog(prog);
 	prog->memoMode = memoMode;
+	prog->memoEncoding = memoEncoding;
 
-	for(i=3; i<argc; i++) { /* Try each of the strings against the regex */
+	for(i=4; i<argc; i++) { /* Try each of the strings against the regex */
 		printf("#%d %s\n", i, argv[i]);
 		for(j=0; j<nelem(tab); j++) { /* Go through all matchers */
 			if (strcmp(tab[j].name, "backtrack") != 0) { /* We just care about backtrack */
