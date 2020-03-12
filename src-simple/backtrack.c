@@ -1,13 +1,16 @@
 // Copyright 2007-2009 Russ Cox.  All Rights Reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
+//
+// Annotations, statistics, and memoization by James Davis, 2020.
 
 #include "regexp.h"
 
 typedef struct Thread Thread;
 typedef struct VisitTable VisitTable;
 
-
+/* Introduced whenever we make a non-deterministic choice.
+ * The current thread proceeds, and the other is saved to try later. */
 struct Thread
 {
 	Inst *pc; /* Automaton vertex ~= Instruction to execute */
@@ -65,34 +68,25 @@ initMemoTable(Prog *prog, int nChars, int memoMode)
 {
 	Memo memo;
 	int cardQ = prog->len;
-	int nStatesToTrack = prog->len;
+	int nStatesToTrack = prog->nMemoizedStates;
 	int i, j;
 	char *prefix = "MEMO_TABLE";
 	
-	printf("%s: cardQ = %d\n", prefix, cardQ);
+	printf("%s: cardQ = %d, Phi_memo = %d\n", prefix, cardQ, nStatesToTrack);
 	
-	if (memoMode == MEMO_FULL) {
-		printf("%s: %d visit vectors\n", prefix, nStatesToTrack);
-		/* Visit vectors */
-		memo.visitVectors = mal(sizeof(char*) * nStatesToTrack);
+	/* Visit vectors */
+	memo.visitVectors = mal(sizeof(char*) * nStatesToTrack);
 
-		printf("%s: %d visit vectors x %d chars for each\n", prefix, nStatesToTrack, nChars);
-		for (i = 0; i < nStatesToTrack; i++) {
-			memo.visitVectors[i] = mal(sizeof(char) * nChars);
-			for (j = 0; j < nChars; j++) {
-				memo.visitVectors[i][j] = 0;
-			}
+	printf("%s: %d visit vectors x %d chars for each\n", prefix, nStatesToTrack, nChars);
+	for (i = 0; i < nStatesToTrack; i++) {
+		memo.visitVectors[i] = mal(sizeof(char) * nChars);
+		for (j = 0; j < nChars; j++) {
+			memo.visitVectors[i][j] = 0;
 		}
-
-		return memo;
 	}
 
-}
-
-static int
-statenum(Prog *prog, Inst *pc)
-{
-	return (int) (pc - prog->start);
+	printf("%s: initialized\n", prefix);
+	return memo;
 }
 
 static int
@@ -162,9 +156,9 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 	enum { MAX = 1000 };
 	Thread ready[MAX];
 	int i, nready;
-	Inst *pc;
-	char *sp;
-	Sub *sub;
+	Inst *pc; /* Current position in VM (pc) */
+	char *sp; /* Current position in *input */
+	Sub *sub; /* submatch (capture group) */
 
 	/* Prep visit table */
 	visitTable = initVisitTable(prog, strlen(input));
@@ -192,16 +186,16 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 		assert(sub->ref > 0);
 		for(;;) { /* Run thread to completion */
 
-			if (prog->memoMode != MEMO_NONE) {
+			if (prog->memoMode != MEMO_NONE && pc->memoStateNum >= 0) {
 				/* Check if we've been here. */
-				if (isMarked(&memo, pc->stateNum, woffset(input, sp))) {
+				if (isMarked(&memo, pc->memoStateNum, woffset(input, sp))) {
 				    /* Since we return on first match, the prior visit failed.
 					 * Short-circuit thread */
 					goto Dead;
 				}
 
 				/* Mark that we've been here */
-				markMemo(&memo, pc->stateNum, woffset(input, sp));
+				markMemo(&memo, pc->memoStateNum, woffset(input, sp));
 			}
 
 			/* "Visit" means that we evaluate pc appropriately. */

@@ -18,8 +18,9 @@ struct {
 void
 usage(void)
 {
-	fprintf(stderr, "usage: re none|full|indeg|loop regexp string...\n");
-	fprintf(stderr, "  the first argument dictates the memoization strategy");
+	fprintf(stderr, "usage: re {none|full|indeg|loop} regexp [string ...]\n");
+	fprintf(stderr, "  The first argument dictates the memoization strategy\n");
+	fprintf(stderr, "  Engine follows partial-match semantics");
 	exit(2);
 }
 
@@ -56,7 +57,7 @@ main(int argc, char **argv)
 	printre(re);
 	printf("\n");
 
-	prog = compile(re);
+	prog = compile(re, memoMode);
 	printprog(prog);
 	prog->memoMode = memoMode;
 

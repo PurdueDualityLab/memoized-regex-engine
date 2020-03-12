@@ -27,14 +27,14 @@ struct Regexp
 
 enum	/* Regexp.type */
 {
-	Alt = 1,
-	Cat,
-	Lit,
-	Dot,
-	Paren,
-	Quest,
-	Star,
-	Plus,
+	Alt = 1, /* A | B */
+	Cat,     /* AB */
+	Lit,     /* "a" */
+	Dot,     /* any char */
+	Paren,   /* (...) */
+	Quest,   /* A? */
+	Star,    /* A* */
+	Plus,    /* A+ */
 };
 
 Regexp *parse(char*);
@@ -48,16 +48,20 @@ struct Prog
 	Inst *start;
 	int len;
 	int memoMode; /* MEMO_X */
+	int nMemoizedStates;
 };
 
 struct Inst
 {
-	int opcode;
-	int c;
-	int n;
+	int opcode; /* Instruction. Determined by the corresponding Regex node */
+	int c; /* For Lit: The literal character to match */
+	int n; /* Flag set during parsing. 1 means greedy. Also used for non-capture groups? */
 	int stateNum; /* 0 to Prog->len-1 */
-	Inst *x; /* Outoging edge -- destination 1 */
-	Inst *y; /* Outoging edge -- destination 2 */
+	int shouldMemo;
+	int inDegree;
+	int memoStateNum; /* -1 if "don't memo", else 0 to |Phi_memo| */
+	Inst *x; /* Outgoing edge -- destination 1 (default option) */
+	Inst *y; /* Outgoing edge -- destination 2 (backup) */
 	int gen;	// global state, oooh!
 };
 
@@ -71,7 +75,7 @@ enum	/* Inst.opcode */
 	Save,
 };
 
-Prog *compile(Regexp*);
+Prog *compile(Regexp*, int);
 void printprog(Prog*);
 
 extern int gen;
@@ -97,7 +101,6 @@ void decref(Sub*);
 
 struct Memo
 {
-	int *pc2vv; /* Map a */
 	int **visitVectors; /* Booleans */
 	int mode;
 };
