@@ -34,7 +34,7 @@ initVisitTable(Prog *prog, int nChars)
 {
 	VisitTable visitTable;
 	int nStates = prog->len;
-	int i;
+	int i, j;
 	char *prefix = "VISIT_TABLE";
 
 	visitTable.nStates = nStates;
@@ -42,7 +42,9 @@ initVisitTable(Prog *prog, int nChars)
 	visitTable.visitVectors = mal(sizeof(int*) * nStates);
 	for (i = 0; i < nStates; i++) {
 		visitTable.visitVectors[i] = mal(sizeof(int) * nChars);
-		memset(visitTable.visitVectors[i], 0, nChars);
+		for (j = 0; j < nChars; j++) {
+			visitTable.visitVectors[i][j] = 0;
+		}
 	}
 
 	return visitTable;
@@ -51,6 +53,10 @@ initVisitTable(Prog *prog, int nChars)
 void
 markVisit(VisitTable *visitTable, int statenum, int woffset)
 {
+	/*
+	if (visitTable->visitVectors[statenum][woffset] > 1)
+		printf("Hmm, already visited s%d c%d\n", statenum, woffset);
+	*/
 	visitTable->visitVectors[statenum][woffset]++;
 }
 
@@ -60,7 +66,7 @@ initMemoTable(Prog *prog, int nChars, int memoMode)
 	Memo memo;
 	int cardQ = prog->len;
 	int nStatesToTrack = prog->len;
-	int i;
+	int i, j;
 	char *prefix = "MEMO_TABLE";
 	
 	printf("%s: cardQ = %d\n", prefix, cardQ);
@@ -73,7 +79,9 @@ initMemoTable(Prog *prog, int nChars, int memoMode)
 		printf("%s: %d visit vectors x %d chars for each\n", prefix, nStatesToTrack, nChars);
 		for (i = 0; i < nStatesToTrack; i++) {
 			memo.visitVectors[i] = mal(sizeof(char) * nChars);
-			memset(memo.visitVectors[i], 0, nChars);
+			for (j = 0; j < nChars; j++) {
+				memo.visitVectors[i][j] = 0;
+			}
 		}
 
 		return memo;
@@ -96,6 +104,8 @@ woffset(char *input, char *sp)
 static void
 markMemo(Memo *memo, int statenum, int woffset)
 {
+	if (memo->visitVectors[statenum][woffset])
+		printf("Hmm, already marked s%d c%d\n", statenum, woffset);
 	memo->visitVectors[statenum][woffset] = 1;
 }
 
@@ -110,26 +120,36 @@ printStats(Memo *memo, VisitTable *visitTable)
 {
 	int i;
 	int j;
-	int mostVisitedState = -1;
-	int maxVisits = -1;
-	int *visitsPerState;
+
+	/* Per-search state */
+	int maxVisitsPerSearchState = -1;
+	int vertexWithMostVisitedSearchState = -1;
+
+	/* Sum over all offsets */
+	int maxVisitsPerVertex = -1;
+	int mostVisitedVertex = -1;
+	int *visitsPerVertex; /* Per-vertex sum of visits over all offsets */
 
 	/* Most-visited vertex */
-	visitsPerState = mal(sizeof(int) * visitTable->nStates);
+	visitsPerVertex = mal(sizeof(int) * visitTable->nStates);
 	for (i = 0; i < visitTable->nStates; i++) {
-		visitsPerState[i] = 0;
+		visitsPerVertex[i] = 0;
 		for (j = 0; j < visitTable->nChars; j++) {
-			visitsPerState[i] += visitTable->visitVectors[i][j];
+			visitsPerVertex[i] += visitTable->visitVectors[i][j];
+			if (visitTable->visitVectors[i][j] > maxVisitsPerSearchState) {
+				maxVisitsPerSearchState = visitTable->visitVectors[i][j];
+				vertexWithMostVisitedSearchState = i;
+			}
 		}
 
-		if (visitsPerState[i]  > maxVisits) {
-			mostVisitedState = i;
-			maxVisits = visitsPerState[i];
+		if (visitsPerVertex[i]  > maxVisitsPerVertex) {
+			mostVisitedVertex = i;
+			maxVisitsPerVertex = visitsPerVertex[i];
 		}
 	}
 
-	/* TODO Why is this >1 for FULL? */
-	printf("Most-visited vertex: %d (%d) visits\n", mostVisitedState, maxVisits);
+	printf("Most-visited search state: belongs to %d (%d visits)\n", vertexWithMostVisitedSearchState, maxVisitsPerSearchState);
+	printf("Most-visited vertex: %d (%d visits over all its search states)\n", mostVisitedVertex, maxVisitsPerVertex);
 }
 
 int
