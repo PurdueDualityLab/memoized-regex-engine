@@ -15,10 +15,14 @@ OFILES=\
 	sub.o\
 	thompson.o\
 	y.tab.o\
+	avl_tree.o\
+	rle.o\
 
 HFILES=\
 	regexp.h\
 	y.tab.h\
+	avl_tree.h\
+	rle.h\
 
 re: $(OFILES)
 	$(CC) -o re $(OFILES)

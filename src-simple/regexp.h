@@ -8,6 +8,7 @@
 #include <stdarg.h>
 #include <assert.h>
 #include "uthash.h"
+#include "rle.h"
 
 #define nil ((void*)0)
 #define nelem(x) (sizeof(x)/sizeof((x)[0]))
@@ -130,6 +131,9 @@ struct Memo
 
 	/* ENCODING_NEGATIVE */
 	SearchStateTable *searchStateTable; /* < q, i > */
+
+	/* ENCODING_RLE */
+	RLEVector **rleVectors;
 };
 
 enum /* Memo.mode */

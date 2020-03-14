@@ -6,7 +6,7 @@
 
 #include "regexp.h"
 
-static int VERBOSE = 0;
+static int VERBOSE = 1;
 
 typedef struct Thread Thread;
 typedef struct VisitTable VisitTable;
@@ -92,7 +92,7 @@ initMemoTable(Prog *prog, int nChars, int memoMode, int memoEncoding)
 		printf("%s: Initializing with encoding NONE\n", prefix);
 		printf("%s: cardQ = %d, Phi_memo = %d\n", prefix, cardQ, nStatesToTrack);
 		/* Visit vectors */
-		memo.visitVectors = mal(sizeof(int*) * nStatesToTrack);
+		memo.visitVectors = mal(sizeof(*memo.visitVectors) * nStatesToTrack);
 
 		printf("%s: %d visit vectors x %d chars for each\n", prefix, nStatesToTrack, nChars);
 		for (i = 0; i < nStatesToTrack; i++) {
@@ -106,7 +106,12 @@ initMemoTable(Prog *prog, int nChars, int memoMode, int memoEncoding)
 		memo.searchStateTable = NULL;
 	} else if (memo.encoding == ENCODING_RLE) {
 		printf("%s: Initializing with encoding RLE\n", prefix);
-		assert(0);
+		memo.rleVectors = mal(sizeof(*memo.rleVectors) * nStatesToTrack);
+
+		printf("%s: %d RLE-encoded visit vectors\n", prefix, nStatesToTrack);
+		for (i = 0; i < nStatesToTrack; i++) {
+			memo.rleVectors[i] = RLEVector_create();
+		}
 	} else {
 		printf("%s: Unexpected encoding %d", prefix, memo.encoding);
 		assert(0);
@@ -125,6 +130,10 @@ woffset(char *input, char *sp)
 static int
 isMarked(Memo *memo, int statenum, int woffset)
 {
+	if (VERBOSE) {
+		printf("  isMarked: querying <%d, %d>\n", statenum, woffset);
+	}
+
 	if (memo->encoding == ENCODING_NONE) {
 		return memo->visitVectors[statenum][woffset] == 1;
 	} else if (memo->encoding == ENCODING_NEGATIVE) {
@@ -138,7 +147,7 @@ isMarked(Memo *memo, int statenum, int woffset)
 		HASH_FIND(hh, memo->searchStateTable, &entry.key, sizeof(SearchState), p);
 		return p != NULL;
 	} else if (memo->encoding == ENCODING_RLE) {
-		assert(0);
+		return RLEVector_get(memo->rleVectors[statenum], woffset) != 0;
 	}
 }
 
@@ -164,7 +173,7 @@ markMemo(Memo *memo, int statenum, int woffset)
 		entry->key.stringIndex = woffset;
 		HASH_ADD(hh, memo->searchStateTable, key, sizeof(SearchState), entry);
 	} else if (memo->encoding == ENCODING_RLE) {
-		assert(0);
+		RLEVector_set(memo->rleVectors[statenum], woffset);
 	}
 }
 
@@ -219,9 +228,24 @@ printStats(Memo *memo, VisitTable *visitTable)
 		assert(maxVisitsPerSearchState <= 1);
 	}
 
-	if (memo->encoding == ENCODING_NEGATIVE) {
+	switch(memo->encoding) {
+    case ENCODING_NONE:
+		// TODO
+		break;
+	case ENCODING_NEGATIVE:
 		printf("%s: %d slots used (out of %d possible)\n",
 		  prefix, HASH_COUNT(memo->searchStateTable), memo->nStates * memo->nChars);
+		break;
+	case ENCODING_RLE:
+		// TODO: Print max possible
+		for (i = 0; i < memo->nStates; i++) {
+			printf("%s: vector %d has %d runs (max during execution: %d)\n",
+				prefix, i,
+				RLEVector_currSize(memo->rleVectors[i]),
+				RLEVector_maxObservedSize(memo->rleVectors[i]));
+		}
+		break;
+    default: assert(0);
 	}
 }
 
