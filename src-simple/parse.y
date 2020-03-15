@@ -18,15 +18,43 @@ static int nparen;
 	int nparen;
 }
 
-%token	<c> CHAR EOL
+%token	<c> BOL_ANCHOR CHAR EOL_ANCHOR EOL
 %type	<re>	alt concat repeat single escape line 
 %type	<nparen> count
 
 %%
 
-line: alt EOL
+line: 
+	BOL_ANCHOR alt EOL_ANCHOR EOL
 	{
+		printf("double anchors\n");
+		parsed_regexp = $2;
+		parsed_regexp->bolAnchor = 1;
+		parsed_regexp->eolAnchor = 1;
+		return 1;
+	}
+|	BOL_ANCHOR alt EOL
+	{
+		printf("bol anchor\n");
+		parsed_regexp = $2;
+		parsed_regexp->bolAnchor = 1;
+		parsed_regexp->eolAnchor = 0;
+		return 1;
+	}
+|	alt EOL_ANCHOR EOL
+	{
+		printf("eol anchor\n");
 		parsed_regexp = $1;
+		parsed_regexp->bolAnchor = 0;
+		parsed_regexp->eolAnchor = 1;
+		return 1;
+	}
+|	alt EOL
+	{
+		printf("no anchors\n");
+		parsed_regexp = $1;
+		parsed_regexp->bolAnchor = 0;
+		parsed_regexp->eolAnchor = 0;
 		return 1;
 	}
 
@@ -180,6 +208,10 @@ yylex(void)
 	c = *input++;
 	if(strchr("|*+?():.\\", c))
 		return c;
+	if(c == '^')
+		return BOL_ANCHOR;
+	if(c == '$')
+		return EOL_ANCHOR;
 	yylval.c = c;
 	return CHAR;
 }
@@ -207,7 +239,7 @@ yyerror(char *s)
 Regexp*
 parse(char *s)
 {
-	Regexp *r, *dotstar;
+	Regexp *r, *bolDotstar, *eolDotstar, *combine;
 
 	input = s;
 	parsed_regexp = nil;
@@ -218,9 +250,24 @@ parse(char *s)
 		yyerror("parser nil");
 		
 	r = reg(Paren, parsed_regexp, nil);	// $0 parens
-	dotstar = reg(Star, reg(Dot, nil, nil), nil);
-	dotstar->n = 1;	// non-greedy
-	return reg(Cat, dotstar, r);
+	bolDotstar = reg(Star, reg(Dot, nil, nil), nil);
+	bolDotstar->n = 1;	// non-greedy
+	eolDotstar = reg(Star, reg(Dot, nil, nil), nil);
+	eolDotstar->n = 1;	// non-greedy
+
+	/* Tack on the dotstars */
+	combine = r;
+	if (!parsed_regexp->bolAnchor) {
+		printf("No ^, tacking on leading .*\n");
+		combine = reg(Cat, bolDotstar, combine);
+	}
+	if (!parsed_regexp->eolAnchor) {
+		printf("No $, tacking on trailing .*\n");
+		combine = reg(Cat, combine, eolDotstar);
+	}
+	combine->bolAnchor = parsed_regexp->bolAnchor;
+	combine->eolAnchor = parsed_regexp->eolAnchor;
+	return combine;
 }
 
 void*

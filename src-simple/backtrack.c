@@ -375,6 +375,9 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 	Inst *pc; /* Current position in VM (pc) */
 	char *sp; /* Current position in input */
 	Sub *sub; /* submatch (capture group) */
+	char *inputEOL; /* Position of \0 terminating input */
+
+	inputEOL = input + strlen(input);
 
 	/* Prep visit table */
 	if (VERBOSE)
@@ -386,10 +389,6 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 		if (VERBOSE)
 			printf("Initializing memo table\n");
 		memo = initMemoTable(prog, strlen(input) + 1, prog->memoMode, prog->memoEncoding);
-	}
-
-	if (VERBOSE) {
-		printStats(&memo, &visitTable);
 	}
 
 	printf("\n\n***************\n\n  Backtrack: Simulation begins\n\n************\n\n");
@@ -432,6 +431,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 			}
 
 			/* "Visit" means that we evaluate pc appropriately. */
+			printf("Marking visit\n");
 			markVisit(&visitTable, pc->stateNum, woffset(input, sp));
 
 			/* Proceed as normal */
@@ -449,30 +449,45 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 				sp++;
 				continue;
 			case CharClass:
+				if (*sp == 0)
+					goto Dead;
 				/* Look through char class mins/maxes */
-				printf("Does char %d match CC %d (inv %d)? charClassCounts %d\n", *sp, pc->c, pc->invert, pc->charClassCounts);
+				if (VERBOSE)
+					printf("Does char %d match CC %d (inv %d)? charClassCounts %d\n",
+						*sp, pc->c, pc->invert, pc->charClassCounts);
 				inCharClass = 0;
 				for (j = 0; j < pc->charClassCounts; j++) {
-					printf("testing range [%d, %d]\n", pc->charClassMins[j], pc->charClassMaxes[j]);
-					if (pc->charClassMins[j] <= *sp && *sp <= pc->charClassMaxes[j]) {
-						printf("in char class %d\n", j);
+					if (VERBOSE)
+						printf("testing range [%d, %d]\n", pc->charClassMins[j], pc->charClassMaxes[j]);
+					if (pc->charClassMins[j] <= (int) *sp && (int) *sp <= pc->charClassMaxes[j]) {
+						if (VERBOSE)
+							printf("in range %d\n", j);
 						inCharClass = 1;
 					}
 				}
 
 				/* Check for match, honoring invert */
-				if ((inCharClass && pc->invert) || (!inCharClass && !pc->invert))
+				if ((inCharClass && pc->invert) || (!inCharClass && !pc->invert)) {
+					if (VERBOSE)
+						printf("no match (inCharClass %d invert %d)\n", inCharClass, pc->invert);
 					goto Dead;
-				printf("char %d matched CC %d\n", *sp, pc->c);
+				}
+				if (VERBOSE)
+					printf("char %d matched CC %d\n", *sp, pc->c);
 				pc++;
 				sp++;	
 				continue;
 			case Match:
-				for(i=0; i<nsubp; i++)
-					subp[i] = sub->sub[i];
-				decref(sub);
-				printStats(&memo, &visitTable);
-				return 1;
+				if (VERBOSE)
+					printf("Match: eolAnchor %d sp %p inputEOL %p\n", prog->eolAnchor, sp, inputEOL);
+				if (!prog->eolAnchor || (prog->eolAnchor && sp == inputEOL)) {
+					for(i=0; i<nsubp; i++)
+						subp[i] = sub->sub[i];
+					decref(sub);
+					printStats(&memo, &visitTable);
+					return 1;
+				}
+				goto Dead;
 			case Jmp:
 				pc = pc->x;
 				continue;

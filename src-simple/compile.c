@@ -24,6 +24,7 @@ compile(Regexp *r, int memoMode)
 	pc->opcode = Match;
 	pc++;
 	p->len = pc - p->start;
+	p->eolAnchor = r->eolAnchor;
 
 	/* Assign state numbers */
 	for (i = 0; i < p->len; i++) {
@@ -185,6 +186,7 @@ emit(Regexp *r, int memoMode)
 		break;
 
 	case CharEscape:
+		pc->c = r->ch;
 		switch (r->ch) {
 		case 's':
 		case 'S':
@@ -199,10 +201,10 @@ emit(Regexp *r, int memoMode)
 		case 'W':
 			/* a-z A-Z 0-9 */
 			pc->opcode = CharClass;
-			pc->charClassCounts = 2;
 			pc->charClassMins[0] = 97; pc->charClassMaxes[0] = 122;
-			pc->charClassMins[1] = 65; pc->charClassMaxes[1] = 91;
+			pc->charClassMins[1] = 65; pc->charClassMaxes[1] = 90;
 			pc->charClassMins[2] = 48; pc->charClassMaxes[2] = 57;
+			pc->charClassCounts = 3;
 			pc->invert = isupper(r->ch);
 			break;
 		case 'd':

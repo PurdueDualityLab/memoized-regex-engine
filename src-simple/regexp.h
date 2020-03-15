@@ -27,6 +27,8 @@ struct Regexp
 	int ch;
 	Regexp *left;
 	Regexp *right;
+	int bolAnchor;
+	int eolAnchor;
 };
 
 enum	/* Regexp.type */
@@ -55,6 +57,7 @@ struct Prog
 	int memoMode; /* Memo.mode */
 	int memoEncoding; /* Memo.encoding */
 	int nMemoizedStates;
+	int eolAnchor;
 };
 
 struct Inst
