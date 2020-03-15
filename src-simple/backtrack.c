@@ -6,7 +6,32 @@
 
 #include "regexp.h"
 
-static int VERBOSE = 1;
+void
+vec_strcat(char **dest, int *dAlloc, char *src)
+{
+	int combinedLen = strlen(*dest) + strlen(src) + 5;
+	// printf("vec_strcat: dest %p *dest %p *dAlloc %d; string <%s>\n", dest, *dest, *dAlloc, *dest);
+
+	if (combinedLen > *dAlloc) {
+		/* Re-alloc */
+		char *old = *dest;
+		char *new = mal(sizeof(char) * 2 * combinedLen);
+
+		/* Copy over */
+		strcpy(new, old);
+
+		/* Book-keeping */
+		*dAlloc = sizeof(char) * 2 * combinedLen;
+		free(old);
+		*dest = new;
+	}
+	
+	strcat(*dest, src);
+	// printf("vec_strcat: dest %p *dest %p *dAlloc %d; string <%s>\n", dest, *dest, *dAlloc, *dest);
+	return;
+}
+
+static int VERBOSE = 0;
 
 typedef struct Thread Thread;
 typedef struct VisitTable VisitTable;
@@ -32,8 +57,8 @@ thread(Inst *pc, char *sp, Sub *sub)
 struct VisitTable
 {
 	int **visitVectors; /* Counters */
-	int nStates;
-	int nChars;
+	int nStates; /* |Q| */
+	int nChars;  /* |w| */
 };
 
 VisitTable 
@@ -179,13 +204,11 @@ markMemo(Memo *memo, int statenum, int woffset)
 
 /* Summary statistics */
 
+/* Prints human-readable to stdout, and JSON to stderr */
 static void
 printStats(Memo *memo, VisitTable *visitTable)
 {
-	int i;
-	int j;
-
-	char *prefix = "STATS";
+	int i, j, n;
 
 	/* Per-search state */
 	int maxVisitsPerSearchState = -1;
@@ -195,15 +218,59 @@ printStats(Memo *memo, VisitTable *visitTable)
 	/* Sum over all offsets */
 	int maxVisitsPerVertex = -1;
 	int mostVisitedVertex = -1;
-	int *visitsPerVertex; /* Per-vertex sum of visits over all offsets */
+	int *visitsPerVertex = NULL; /* Per-vertex sum of visits over all offsets */
+	int nTotalVisits = 0;
+
+	char *prefix = "STATS";
+
+	char memoConfig_vertexSelection[32];
+	char memoConfig_encoding[32];
+	char numBufForSprintf[128];
+	int csv_maxObservedCostsPerMemoizedVertex_len = 2*sizeof(char);
+	char *csv_maxObservedCostsPerMemoizedVertex = mal(csv_maxObservedCostsPerMemoizedVertex_len);
+	vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, "");
+
+	switch (memo->mode) {
+	case MEMO_NONE:
+		strcpy(memoConfig_vertexSelection, "\"NONE\"");
+		break;
+	case MEMO_FULL:
+		strcpy(memoConfig_vertexSelection, "\"ALL\"");
+		break;
+	case MEMO_IN_DEGREE_GT1:
+		strcpy(memoConfig_vertexSelection, "\"INDEG>1\"");
+		break;
+	case MEMO_LOOP_DEST:
+		strcpy(memoConfig_vertexSelection, "\"LOOP\"");
+		break;
+	}
+
+	switch (memo->encoding) {
+	case ENCODING_NONE:
+		strcpy(memoConfig_encoding, "\"NONE\"");
+		break;
+	case ENCODING_NEGATIVE:
+		strcpy(memoConfig_encoding, "\"NEGATIVE\"");
+		break;
+	case ENCODING_RLE:
+		strcpy(memoConfig_encoding, "\"RLE\"");
+		break;
+	}
+
+	fprintf(stderr, "{");
+	/* Info about input */
+	fprintf(stderr, "\"inputInfo\": { \"nStates\": %d, \"lenW\": %d }",
+		visitTable->nStates,
+		visitTable->nChars);
 
 	/* Most-visited vertex */
 	visitsPerVertex = mal(sizeof(int) * visitTable->nStates);
 	for (i = 0; i < visitTable->nStates; i++) {
 		visitsPerVertex[i] = 0;
 		for (j = 0; j < visitTable->nChars; j++) {
-			/* Running sum */
+			/* Running sums */
 			visitsPerVertex[i] += visitTable->visitVectors[i][j];
+			nTotalVisits += visitTable->visitVectors[i][j];
 
 			/* Largest individual visits over all search states? */
 			if (visitTable->visitVectors[i][j] > maxVisitsPerSearchState) {
@@ -222,6 +289,9 @@ printStats(Memo *memo, VisitTable *visitTable)
 
 	printf("%s: Most-visited search state: <%d, %d> (%d visits)\n", prefix, vertexWithMostVisitedSearchState, mostVisitedOffset, maxVisitsPerSearchState);
 	printf("%s: Most-visited vertex: %d (%d visits over all its search states)\n", prefix, mostVisitedVertex, maxVisitsPerVertex);
+	/* Info about simulation */
+	fprintf(stderr, ", \"simulationInfo\": { \"nTotalVisits\": %d, \"nPossibleTotalVisitsWithMemoization\": %d, \"visitsToMostVisitedSearchState\": %d, \"vistsToMostVisitedVertex\": %d }",
+		nTotalVisits, visitTable->nStates * visitTable->nChars, maxVisitsPerSearchState, maxVisitsPerVertex);
 
 	if (memo->mode == MEMO_FULL || memo->mode == MEMO_IN_DEGREE_GT1) {
 		/* I have proved this is impossible. */
@@ -230,23 +300,66 @@ printStats(Memo *memo, VisitTable *visitTable)
 
 	switch(memo->encoding) {
     case ENCODING_NONE:
-		// TODO
+		/* All memoized states cost |w| */
+		printf("%s: No encoding, so all memoized vertices paid the full cost of |w| = %d slots\n", prefix, memo->nChars);
+		for (i = 0; i < memo->nStates; i++) {
+			sprintf(numBufForSprintf, "%d", memo->nChars);
+			vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
+			if (i + 1 != memo->nStates) {
+				vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
+			}
+		}
 		break;
 	case ENCODING_NEGATIVE:
 		printf("%s: %d slots used (out of %d possible)\n",
 		  prefix, HASH_COUNT(memo->searchStateTable), memo->nStates * memo->nChars);
+
+		/* Memoized state costs vary by number of visits to each */
+		for (i = 0; i < memo->nStates; i++) {
+			sprintf(numBufForSprintf, "%d", visitsPerVertex[i]);
+			vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
+			if (i + 1 != memo->nStates) {
+				vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
+			}
+		}
+		
+		// Sanity check: HASH_COUNT does correspond to the number of marked <q, i> search states
+		n = 0;
+		for (i = 0; i < memo->nStates; i++) {
+			for (j = 0; j < memo->nChars; j++) {
+				if (isMarked(memo, i, j)) {
+					n++;
+				}
+			}
+		}
+		assert(n == HASH_COUNT(memo->searchStateTable));
+
 		break;
 	case ENCODING_RLE:
-		// TODO: Print max possible
 		for (i = 0; i < memo->nStates; i++) {
-			printf("%s: vector %d has %d runs (max during execution: %d)\n",
+			printf("%s: vector %d has %d runs (max observed during execution: %d, max possible: %d)\n",
 				prefix, i,
 				RLEVector_currSize(memo->rleVectors[i]),
-				RLEVector_maxObservedSize(memo->rleVectors[i]));
+				RLEVector_maxObservedSize(memo->rleVectors[i]),
+				(memo->nChars / 2) + 1
+				);
+
+			sprintf(numBufForSprintf, "%d", RLEVector_maxObservedSize(memo->rleVectors[i]));
+			vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
+			if (i + 1 != memo->nStates) {
+				vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
+			}
 		}
 		break;
     default: assert(0);
 	}
+	fprintf(stderr, ", \"memoizationInfo\": { \"config\": { \"vertexSelection\": %s, \"encoding\": %s }, \"results\": { \"nSelectedVertices\": %d, \"lenW\": %d, \"maxObservedCostPerMemoizedVertex\": [%s]}}",
+		memoConfig_vertexSelection, memoConfig_encoding,
+		memo->nStates, memo->nChars,
+		csv_maxObservedCostsPerMemoizedVertex
+	);
+
+	fprintf(stderr, "}\n");
 }
 
 /* NFA simulation */
@@ -264,12 +377,14 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 	Sub *sub; /* submatch (capture group) */
 
 	/* Prep visit table */
-	printf("Initializing visit table\n");
+	if (VERBOSE)
+		printf("Initializing visit table\n");
 	visitTable = initVisitTable(prog, strlen(input) + 1);
 
 	/* Prep memo table */
 	if (prog->memoMode != MEMO_NONE) {
-		printf("Initializing memo table\n");
+		if (VERBOSE)
+			printf("Initializing memo table\n");
 		memo = initMemoTable(prog, strlen(input) + 1, prog->memoMode, prog->memoEncoding);
 	}
 

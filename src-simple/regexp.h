@@ -118,8 +118,8 @@ struct SearchStateTable
 
 struct Memo
 {
-	int nStates;
-	int nChars;
+	int nStates; /* |Phi| */
+	int nChars;  /* |w| */
 	int mode;
 	int encoding;
 

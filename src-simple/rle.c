@@ -27,7 +27,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "rle.h"
 #include "avl_tree.h"
 
-int TEST = 1;
+static int TEST = 0;
+enum {
+  VERBOSE_LVL_NONE,
+  VERBOSE_LVL_SOME,
+  VERBOSE_LVL_ALL,
+};
+static int VERBOSE_LVL = VERBOSE_LVL_NONE;
 
 /* Internal API: RLENode */
 typedef struct RLENode RLENode;
@@ -51,7 +57,8 @@ RLENode_avl_tree_cmp(const struct avl_tree_node *target, const struct avl_tree_n
   RLENode *_target = avl_tree_entry(target, RLENode, node);
   RLENode *_curr = avl_tree_entry(curr, RLENode, node);
 
-  printf("Hello in RLENode_avl_tree_cmp\n");
+  if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
+    printf("Hello in RLENode_avl_tree_cmp\n");
 
   if (_target->offset < _curr->offset) {
     /* _target is smaller than _curr */
@@ -146,7 +153,10 @@ _RLEVector_validate(RLEVector *vec)
   RLENode *prev = NULL, *curr = NULL;
   int nNodes = 0;
 
-  printf("  _RLEVector_validate: Validating vec %p (size %d)\n", vec, vec->currNEntries);
+  if (VERBOSE_LVL >= VERBOSE_LVL_ALL) {
+    printf("  _RLEVector_validate: Validating vec %p (size %d)\n", vec, vec->currNEntries);
+  }
+
 
   if (vec->currNEntries == 0) {
     return;
@@ -169,7 +179,9 @@ _RLEVector_validate(RLEVector *vec)
     }
   }
 
-  printf("nNodes %d currNEntries %d\n", nNodes, vec->currNEntries);
+  if (VERBOSE_LVL >= VERBOSE_LVL_ALL) {
+    printf("nNodes %d currNEntries %d\n", nNodes, vec->currNEntries);
+  }
   assert(vec->currNEntries == nNodes);
 }
 
@@ -180,7 +192,8 @@ RLEVector_set(RLEVector *vec, int ix)
   RLENode *pred = NULL, *succ = NULL;
   int abutsPred = 0, abutsSucc = 0;
 
-  printf("RLEVector_set: %d\n", ix);
+  if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
+    printf("RLEVector_set: %d\n", ix);
 
   _RLEVector_validate(vec);
   assert(RLEVector_get(vec, ix) == 0); /* Shouldn't be set already */
@@ -189,13 +202,16 @@ RLEVector_set(RLEVector *vec, int ix)
   target.offset = ix;
   target.length = -1;
   pred = avl_tree_entry(avl_tree_lookup_node_pred(vec->root, &target.node, RLENode_avl_tree_cmp), RLENode, node);
-  printf("pred: %p\n", pred);
+  if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
+    printf("pred: %p\n", pred);
+
   if (pred == NULL) {
     succ = avl_tree_entry(avl_tree_first_in_order(vec->root), RLENode, node);
   } else {
     succ = avl_tree_entry(avl_tree_next_in_order(&pred->node), RLENode, node);
   }
-  printf("succ: %p\n", succ);
+  if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
+    printf("succ: %p\n", succ);
 
   /* Relevant position */
   if (pred != NULL && pred->offset + pred->length == ix) {
@@ -207,11 +223,13 @@ RLEVector_set(RLEVector *vec, int ix)
 
   if (abutsPred) {
     /* Extend pred */
-    printf("%d: Extending pred\n", ix);
+    if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
+      printf("%d: Extending pred\n", ix);
     RLENode_extendRight(pred);
     if (succ != NULL && abutsSucc) {
       /* Merge. */
-      printf("%d: Merging succ\n", ix);
+      if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
+        printf("%d: Merging succ\n", ix);
       avl_tree_remove(&vec->root, &succ->node);
       _RLEVector_subtractRun(vec);
       pred->length += succ->length;
@@ -219,11 +237,13 @@ RLEVector_set(RLEVector *vec, int ix)
   } else if (abutsSucc) {
     /* Extend succ.
      * Since pred was not adjacent, this does not violate the binary search property. */
-    printf("%d: Extending succ\n", ix);
+    if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
+      printf("%d: Extending succ\n", ix);
     RLENode_extendLeft(succ);
   } else {
     /* New run, not adjacent to existing runs */
-    printf("%d: New run\n", ix);
+    if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
+      printf("%d: New run\n", ix);
     RLENode *newNode = RLENode_create(ix, 1);
     assert(avl_tree_insert(&vec->root, &newNode->node, RLENode_avl_tree_cmp) == NULL);
     _RLEVector_addRun(vec);
@@ -239,7 +259,8 @@ RLEVector_get(RLEVector *vec, int ix)
   RLENode target;
   RLENode *match = NULL;
 
-  printf("RLEVector_get: %d\n", ix);
+  if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
+    printf("RLEVector_get: %d\n", ix);
   _RLEVector_validate(vec);
 
   target.offset = ix;
@@ -251,7 +272,8 @@ RLEVector_get(RLEVector *vec, int ix)
   if (match == NULL) {
     return 0;
   }
-  printf("match: %p\n", match);
+  if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
+    printf("match: %p\n", match);
   return 1;
 }
 
