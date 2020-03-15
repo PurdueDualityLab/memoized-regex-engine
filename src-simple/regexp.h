@@ -35,6 +35,7 @@ enum	/* Regexp.type */
 	Cat,     /* AB */
 	Lit,     /* "a" */
 	Dot,     /* any char */
+	CharEscape, /* \s, \S, etc. */
 	Paren,   /* (...) */
 	Quest,   /* A? */
 	Star,    /* A* */
@@ -68,6 +69,11 @@ struct Inst
 	Inst *x; /* Outgoing edge -- destination 1 (default option) */
 	Inst *y; /* Outgoing edge -- destination 2 (backup) */
 	int gen;	// global state, oooh!
+	
+	int charClassMins[8]; 
+	int charClassMaxes[8]; /* Inclusive */
+	int charClassCounts;
+	int invert;
 };
 
 enum	/* Inst.opcode */
@@ -77,6 +83,7 @@ enum	/* Inst.opcode */
 	Jmp,
 	Split,
 	Any,
+	CharClass,
 	Save,
 };
 

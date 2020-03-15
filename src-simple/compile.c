@@ -65,6 +65,10 @@ compile(Regexp *r, int memoMode)
 				/* Always goes to next instr */
 				p->start[i+1].inDegree++;
 				break;
+			case CharClass:
+				/* Always goes to next instr */
+				p->start[i+1].inDegree++;
+				break;
 			case Save:
 				/* Always goes to next instr */
 				p->start[i+1].inDegree++;
@@ -115,6 +119,7 @@ count(Regexp *r)
 		return count(r->left) + count(r->right);
 	case Lit:
 	case Dot:
+	case CharEscape:
 		return 1;
 	case Paren:
 		return 2 + count(r->left);
@@ -176,6 +181,43 @@ emit(Regexp *r, int memoMode)
 	case Lit:
 		pc->opcode = Char;
 		pc->c = r->ch;
+		pc++;
+		break;
+
+	case CharEscape:
+		switch (r->ch) {
+		case 's':
+		case 'S':
+			/* space, newline, tab, vertical wsp, a few others */
+			pc->opcode = CharClass;
+			pc->charClassMins[0] = 9; pc->charClassMaxes[0] = 13;
+			pc->charClassMins[1] = 28; pc->charClassMaxes[1] = 32;
+			pc->charClassCounts = 2;
+			pc->invert = isupper(r->ch);
+			break;
+		case 'w':
+		case 'W':
+			/* a-z A-Z 0-9 */
+			pc->opcode = CharClass;
+			pc->charClassCounts = 2;
+			pc->charClassMins[0] = 97; pc->charClassMaxes[0] = 122;
+			pc->charClassMins[1] = 65; pc->charClassMaxes[1] = 91;
+			pc->charClassMins[2] = 48; pc->charClassMaxes[2] = 57;
+			pc->invert = isupper(r->ch);
+			break;
+		case 'd':
+		case 'D':
+			/* 0-9 */
+			pc->opcode = CharClass;
+			pc->charClassMins[0] = 48; pc->charClassMaxes[0] = 57;
+			pc->charClassCounts = 1;
+			pc->invert = isupper(r->ch);
+			break;
+		default: 
+			/* Not a char class, treat as the char itself */
+			pc->opcode = Char;
+			pc->c = r->ch;
+		}
 		pc++;
 		break;
 	
@@ -271,6 +313,10 @@ printprog(Prog *p)
 			break;
 		case Any:
 			printf("%2d. any (memo? %d -- state %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum);
+			//printf("%2d. any\n", (int)(pc->stateNum));
+			break;
+		case CharClass:
+			printf("%2d. charClass (memo? %d -- state %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum);
 			//printf("%2d. any\n", (int)(pc->stateNum));
 			break;
 		case Match:

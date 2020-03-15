@@ -19,7 +19,7 @@ static int nparen;
 }
 
 %token	<c> CHAR EOL
-%type	<re>	alt concat repeat single line
+%type	<re>	alt concat repeat single escape line 
 %type	<nparen> count
 
 %%
@@ -83,6 +83,60 @@ count:
 	}
 ;
 
+// Anything can be escaped -- breakdown is from yylex()
+escape:
+	'\\' CHAR
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = $2;
+	}
+|	'\\' '|'
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = '|';
+	}
+|	'\\' '*'
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = '*';
+	}
+|	'\\' '+'
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = '+';
+	}
+|	'\\' '?'
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = '?';
+	}
+|	'\\' '('
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = '(';
+	}
+|	'\\' ')'
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = ')';
+	}
+|	'\\' ':'
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = ':';
+	}
+|	'\\' '.'
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = '.';
+	}
+|	'\\' '\\'
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = '\\';
+	}
+;
+
 single:
 	'(' count alt ')'
 	{
@@ -93,8 +147,13 @@ single:
 	{
 		$$ = $4;
 	}
+|	escape
+	{
+		$$ = $1;
+	}
 |	CHAR
 	{
+		printf("CHAR: %d\n", $1);
 		$$ = reg(Lit, nil, nil);
 		$$->ch = $1;
 	}
@@ -119,7 +178,7 @@ yylex(void)
 	if(input == NULL || *input == 0)
 		return EOL;
 	c = *input++;
-	if(strchr("|*+?():.", c))
+	if(strchr("|*+?():.\\", c))
 		return c;
 	yylval.c = c;
 	return CHAR;
@@ -218,6 +277,10 @@ printre(Regexp *r)
 	
 	case Dot:
 		printf("Dot");
+		break;
+
+	case CharEscape:
+		printf("Esc(%c)", r->ch);
 		break;
 
 	case Paren:

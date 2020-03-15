@@ -371,7 +371,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 	VisitTable visitTable;
 	enum { MAX = 1000 };
 	Thread ready[MAX];
-	int i, nready;
+	int i, j, inCharClass, nready;
 	Inst *pc; /* Current position in VM (pc) */
 	char *sp; /* Current position in input */
 	Sub *sub; /* submatch (capture group) */
@@ -447,6 +447,25 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 					goto Dead;
 				pc++;
 				sp++;
+				continue;
+			case CharClass:
+				/* Look through char class mins/maxes */
+				printf("Does char %d match CC %d (inv %d)? charClassCounts %d\n", *sp, pc->c, pc->invert, pc->charClassCounts);
+				inCharClass = 0;
+				for (j = 0; j < pc->charClassCounts; j++) {
+					printf("testing range [%d, %d]\n", pc->charClassMins[j], pc->charClassMaxes[j]);
+					if (pc->charClassMins[j] <= *sp && *sp <= pc->charClassMaxes[j]) {
+						printf("in char class %d\n", j);
+						inCharClass = 1;
+					}
+				}
+
+				/* Check for match, honoring invert */
+				if ((inCharClass && pc->invert) || (!inCharClass && !pc->invert))
+					goto Dead;
+				printf("char %d matched CC %d\n", *sp, pc->c);
+				pc++;
+				sp++;	
 				continue;
 			case Match:
 				for(i=0; i<nsubp; i++)
