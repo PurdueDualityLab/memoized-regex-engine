@@ -5,6 +5,7 @@
 // Annotations, statistics, and memoization by James Davis, 2020.
 
 #include "regexp.h"
+#include <sys/time.h>
 
 void
 vec_strcat(char **dest, int *dAlloc, char *src)
@@ -204,11 +205,22 @@ markMemo(Memo *memo, int statenum, int woffset)
 
 /* Summary statistics */
 
+static uint64_t
+now(void)
+{
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	return tv.tv_sec*(uint64_t)1000000 + tv.tv_usec;
+}
+
 /* Prints human-readable to stdout, and JSON to stderr */
 static void
-printStats(Memo *memo, VisitTable *visitTable)
+printStats(Memo *memo, VisitTable *visitTable, uint64_t startTime)
 {
 	int i, j, n;
+
+	uint64_t endTime = now();
+	uint64_t elapsed_US = endTime - startTime;
 
 	/* Per-search state */
 	int maxVisitsPerSearchState = -1;
@@ -290,8 +302,8 @@ printStats(Memo *memo, VisitTable *visitTable)
 	printf("%s: Most-visited search state: <%d, %d> (%d visits)\n", prefix, vertexWithMostVisitedSearchState, mostVisitedOffset, maxVisitsPerSearchState);
 	printf("%s: Most-visited vertex: %d (%d visits over all its search states)\n", prefix, mostVisitedVertex, maxVisitsPerVertex);
 	/* Info about simulation */
-	fprintf(stderr, ", \"simulationInfo\": { \"nTotalVisits\": %d, \"nPossibleTotalVisitsWithMemoization\": %d, \"visitsToMostVisitedSearchState\": %d, \"vistsToMostVisitedVertex\": %d }",
-		nTotalVisits, visitTable->nStates * visitTable->nChars, maxVisitsPerSearchState, maxVisitsPerVertex);
+	fprintf(stderr, ", \"simulationInfo\": { \"nTotalVisits\": %d, \"nPossibleTotalVisitsWithMemoization\": %d, \"visitsToMostVisitedSearchState\": %d, \"vistsToMostVisitedVertex\": %d, \"simTime_us\": %llu }",
+		nTotalVisits, visitTable->nStates * visitTable->nChars, maxVisitsPerSearchState, maxVisitsPerVertex, elapsed_US);
 
 	if (memo->mode == MEMO_FULL || memo->mode == MEMO_IN_DEGREE_GT1) {
 		/* I have proved this is impossible. */
@@ -369,13 +381,14 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 {
 	Memo memo;
 	VisitTable visitTable;
-	enum { MAX = 1000 };
+	enum { MAX = 100000 };
 	Thread ready[MAX];
 	int i, j, inCharClass, nready;
 	Inst *pc; /* Current position in VM (pc) */
 	char *sp; /* Current position in input */
 	Sub *sub; /* submatch (capture group) */
 	char *inputEOL; /* Position of \0 terminating input */
+	uint64_t startTime;
 
 	inputEOL = input + strlen(input);
 
@@ -392,6 +405,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 	}
 
 	printf("\n\n***************\n\n  Backtrack: Simulation begins\n\n************\n\n");
+	startTime = now();
 
 	/* queue initial thread */
 	sub = newsub(nsubp);
@@ -484,7 +498,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 					for(i=0; i<nsubp; i++)
 						subp[i] = sub->sub[i];
 					decref(sub);
-					printStats(&memo, &visitTable);
+					printStats(&memo, &visitTable, startTime);
 					return 1;
 				}
 				goto Dead;
@@ -507,7 +521,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 		decref(sub);
 	}
 
-	printStats(&memo, &visitTable);
+	printStats(&memo, &visitTable, startTime);
 	return 0;
 }
 
