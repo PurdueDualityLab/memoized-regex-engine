@@ -25,7 +25,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdlib.h>
 #include <stdio.h>
 #include "rle.h"
-#include "avl_tree.h"
+#include "vendor/avl_tree.h"
 
 static int TEST = 0;
 enum {

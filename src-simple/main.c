@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 #include "regexp.h"
-#include "jsmn.h"
+#include "vendor/jsmn.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

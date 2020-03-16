@@ -15,18 +15,21 @@ OFILES=\
 	sub.o\
 	thompson.o\
 	y.tab.o\
-	avl_tree.o\
+	vendor/avl_tree.o\
 	rle.o\
 
 HFILES=\
 	regexp.h\
 	y.tab.h\
-	avl_tree.h\
+	vendor/avl_tree.h\
 	rle.h\
 
 re: $(OFILES)
 	$(CC) -o re $(OFILES)
 
+vendor/avl_tree.o:
+	cd vendor; make; cd -;
+	
 %.o: %.c $(HFILES)
 	$(CC) -c $(CFLAGS) $*.c
 
@@ -35,3 +38,4 @@ y.tab.h y.tab.c: parse.y
 
 clean:
 	rm -f *.o core re y.tab.[ch] y.output
+	cd vendor; make clean; cd -
