@@ -3,6 +3,7 @@
 // license that can be found in the LICENSE file.
 
 #include "regexp.h"
+#include <ctype.h>
 
 static Inst *pc; /* VM array */
 static int count(Regexp*);
@@ -218,7 +219,16 @@ emit(Regexp *r, int memoMode)
 		default: 
 			/* Not a char class, treat as the char itself */
 			pc->opcode = Char;
-			pc->c = r->ch;
+
+			// a la "raw mode", treat the 2-char sequences \n and \t as literal newline and tab
+			if (r->ch == 'n') {
+				pc->c = '\n';
+			}
+			else if (r->ch == 't'){
+				pc->c = '\t';
+			}
+			else
+				pc->c = r->ch;
 		}
 		pc++;
 		break;

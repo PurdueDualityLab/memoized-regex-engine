@@ -16,12 +16,14 @@ OFILES=\
 	thompson.o\
 	y.tab.o\
 	vendor/avl_tree.o\
+	vendor/cJSON.o\
 	rle.o\
 
 HFILES=\
 	regexp.h\
 	y.tab.h\
 	vendor/avl_tree.h\
+	vendor/cJSON.h\
 	rle.h\
 
 re: $(OFILES)
@@ -29,6 +31,9 @@ re: $(OFILES)
 
 vendor/avl_tree.o:
 	cd vendor; make; cd -;
+
+vendor/cJSON.o: vendor/avl_tree.o
+	# Do nothing, vendor/Makefile handles this
 	
 %.o: %.c $(HFILES)
 	$(CC) -c $(CFLAGS) $*.c

@@ -10,12 +10,20 @@ Prototype of memoized regex engine.
 | WIP (Full-featured regex engine) | WIP (Source code for the Perl regex engine (baseline and variants)) | src-perl/ |
 | Evaluation (semantics / performance) | Prototype evaluation. Test suite, benchmark suite               | eval/ |
 
+## Configuration
+
+Set the following environment variables:
+- `MEMOIZATION_PROJECT_ROOT`: The directory to which you cloned this
+- `ECOSYSTEM_REGEXP_PROJECT_ROOT`: The directory to which you cloned the EcosystemRegexps project (TODO No, the artifact!)
+
+The file `.sample_config` has examples. You might run `. .sample_config`.
+
 ## Statement of origin
 
 The simple and full regex engines are extensions of existing engines.
   - The original source for `src-simple/` is from Cox's re1 project, available from Google Code Archive [here](https://code.google.com/archive/p/re1/).
   - The original source for `src-perl/` is a fork of Perl, from branch blead commit 34667d08d3bf4da83ed39a692fb83467dc30a4a6 ([Link to GitHub](https://github.com/Perl/perl5/commit/34667d08d3bf4da83ed39a692fb83467dc30a4a6)).
   - The hash table used for "negative entries" is [uthash](https://github.com/troydhanson/uthash), by T. Hanson and A. O'Dwyer (and their collaborators)
-  - The JSON library used for the CLI is [jsmn](https://github.com/zserge/jsmn), by S. Zaitsev (and their collaborators).
+  - The JSON library used for the CLI is [cJSON](https://github.com/DaveGamble/cJSON), by D. Gamble (and their collaborators).
 
 The memoization extensions, test suite, and benchmark suite are my own.

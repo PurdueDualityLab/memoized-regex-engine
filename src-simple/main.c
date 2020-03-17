@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 #include "regexp.h"
-#include "vendor/jsmn.h"
+#include "vendor/cJSON.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,15 +15,6 @@ struct Query
 	char *regex;
 	char *input;
 };
-
-// https://github.com/zserge/jsmn/blob/master/example/simple.c
-static int jsonStrEq(char *jsonStr, jsmntok_t *tok, const char *s) {
-  if (tok->type == JSMN_STRING && (int) strlen(s) == tok->end - tok->start &&
-      strncmp(jsonStr + tok->start, s, tok->end - tok->start) == 0) {
-    return 0;
-  }
-  return -1;
-}
 
 struct {
 	char *name;
@@ -68,11 +59,9 @@ char *loadFile(char *fileName)
 Query
 loadQuery(char *inFile)
 {
-	int i, nKeys = 0;
 	Query q;
 	char *rawJson;
-	jsmn_parser p;
-	jsmntok_t t[128]; /* We expect no more than 128 JSON tokens */
+	cJSON *parsedJson, *key;
 
 	// Read file
 	printf("Reading %s\n", inFile);
@@ -81,36 +70,21 @@ loadQuery(char *inFile)
 
 	// Parse contents
 	printf("json parse\n");
-	jsmn_init(&p);
-	nKeys = jsmn_parse(&p, rawJson, strlen(rawJson), t, 128);
-	printf("%d keys\n", nKeys);
-	if (nKeys < 0)
-		assert(!"json parse failed\n");
+	parsedJson = cJSON_Parse(rawJson);
+	printf("%d keys\n", cJSON_GetArraySize(parsedJson));
+	assert(cJSON_GetArraySize(parsedJson) >= 2);
+	
+	key = cJSON_GetObjectItem(parsedJson, "pattern");
+	assert(key != NULL);
+	q.regex = strdup(key->valuestring);
+	printf("regex: <%s>\n", q.regex);
 
-	// Extract regex and input
-	printf("extracting pattern and input\n");
-	if (nKeys < 1 || t[0].type != JSMN_OBJECT)
-		assert(!"Object expected\n");
+	key = cJSON_GetObjectItem(parsedJson, "input");
+	assert(key != NULL);
+	q.input = strdup(key->valuestring);
+	printf("input: <%s>\n", q.input);
 
-	/* Loop over all keys of the root object */
-	for (i = 1; i < nKeys; i++) {
-		printf("i: %d\n", i);
-		printf("key: %.*s\n", t[i].end - t[i].start, rawJson + t[i].start);
-		if (jsonStrEq(rawJson, &t[i], "pattern") == 0) {
-			//printf("pattern: %s\n", rawJson + t[i + 1].start);
-			q.regex = strndup(rawJson + t[i + 1].start, t[i+1].end - t[i+1].start);
-			printf("regex: <%s>\n", q.regex);
-			i++;
-		} else if (jsonStrEq(rawJson, &t[i], "input") == 0) {
-			//printf("input: %s\n", JSMN_STRING + t[i + 1].start);
-			q.input = strndup(rawJson + t[i + 1].start, t[i+1].end - t[i+1].start);
-			printf("input: <%s>\n", q.input);
-			i++;
-		} else {
-			assert(!"Unexpected key\n");
-		}
-	}
-
+	cJSON_Delete(parsedJson);
 	free(rawJson);
 	return q;
 }
@@ -129,6 +103,7 @@ getMemoMode(char *arg)
     else {
 		fprintf(stderr, "Error, unknown memostrategy %s\n", arg);
 		usage();
+		return -1; // Compiler warning
 	}
 }
 
@@ -144,6 +119,7 @@ getEncoding(char *arg)
     else {
 		fprintf(stderr, "Error, unknown encoding %s\n", arg);
 		usage();
+		return -1; // Compiler warning
 	}
 }
 

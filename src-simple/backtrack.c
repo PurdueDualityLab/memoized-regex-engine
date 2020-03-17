@@ -6,6 +6,7 @@
 
 #include "regexp.h"
 #include <sys/time.h>
+#include <assert.h>
 
 void
 vec_strcat(char **dest, int *dAlloc, char *src)
@@ -68,7 +69,6 @@ initVisitTable(Prog *prog, int nChars)
 	VisitTable visitTable;
 	int nStates = prog->len;
 	int i, j;
-	char *prefix = "VISIT_TABLE";
 
 	visitTable.nStates = nStates;
 	visitTable.nChars = nChars;
@@ -175,6 +175,9 @@ isMarked(Memo *memo, int statenum, int woffset)
 	} else if (memo->encoding == ENCODING_RLE) {
 		return RLEVector_get(memo->rleVectors[statenum], woffset) != 0;
 	}
+
+	assert(!"Unreachable");
+	return -1;
 }
 
 static void
