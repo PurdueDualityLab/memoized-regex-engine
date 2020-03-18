@@ -2,6 +2,9 @@
 # Measure the size of the various "phi" vertex subsets for selective memoization.
 # This analysis can run single-node many-core.
 
+# Import libMemo
+import libMemo
+
 # Import libLF
 import os
 import sys
@@ -18,19 +21,9 @@ import time
 
 TMP_FILE_PREFIX = 'measure-phi-sizes-{}-{}'.format(time.time(), os.getpid())
 
-PROTOTYPE_REGEX_ENGINE_CLI = os.path.join(os.environ['MEMOIZATION_PROJECT_ROOT'], "src-simple", "re")
-shellDeps = [PROTOTYPE_REGEX_ENGINE_CLI ]
+shellDeps = [ libMemo.PROTOTYPE_REGEX_ENGINE_CLI ]
 
 ##########
-
-class SimpleRegex:
-  def __init__(self):
-    return
-  
-  def initFromNDJSON(self, line):
-    obj = json.loads(line)
-    self.pattern = obj['pattern']
-    return self
 
 class MyTask(libLF.parallel.ParallelTask):
   def __init__(self, simpleRegex):
@@ -69,7 +62,7 @@ class MyTask(libLF.parallel.ParallelTask):
       phi2size = {}
       
       for phi, cliName in libLF.MemoizationStaticAnalysis.MEMO_POLICIES_TO_COXRE_NICKNAMES.items():
-        rc, stdout, stderr = libLF.runcmd_OutAndErr(' '.join([PROTOTYPE_REGEX_ENGINE_CLI, cliName, 'none', '-f', queryFile]))
+        rc, stdout, stderr = libLF.runcmd_OutAndErr(' '.join([libMemo.PROTOTYPE_REGEX_ENGINE_CLI, cliName, 'none', '-f', queryFile]))
         if rc != 0:
           raise BaseException('Invocation failed; rc {} stdout\n  {}\n\nstderr\n  {}'.format(rc, stdout, stderr))
         res = json.loads(stderr)
@@ -105,7 +98,7 @@ def loadRegexFile(regexFile):
       
       try:
         # Build a Regex
-        regex = SimpleRegex()
+        regex = libMemo.SimpleRegex()
         regex.initFromNDJSON(line)
         regexes.append(regex)
       except KeyboardInterrupt:
