@@ -7,5 +7,4 @@ from libLF.lf_ndjson import *
 from libLF.lf_module import *
 from libLF.lf_github import *
 from libLF.lf_superLinear import *
-from libLF.lf_memoizationAnalysis import *
 import libLF.lf_parallel as parallel

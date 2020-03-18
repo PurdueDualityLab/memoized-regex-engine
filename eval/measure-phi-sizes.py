@@ -21,7 +21,7 @@ import time
 
 TMP_FILE_PREFIX = 'measure-phi-sizes-{}-{}'.format(time.time(), os.getpid())
 
-shellDeps = [ libMemo.PROTOTYPE_REGEX_ENGINE_CLI ]
+shellDeps = [ libMemo.ProtoRegexEngine.CLI ]
 
 ##########
 
@@ -43,33 +43,28 @@ class MyTask(libLF.parallel.ParallelTask):
       libLF.log('Exception while testing regex /{}/: '.format(self.simpleRegex.pattern) + err)
       return err
     
-  def _createQueryFile(self, simpleRegex):
-    fd, name = tempfile.mkstemp(suffix=".json", prefix=TMP_FILE_PREFIX + "-queryFile")
-    os.close(fd)
-    with open(name, 'w') as outStream:
-      json.dump({ "pattern": simpleRegex.pattern, "input": "a" }, outStream)
-    return name
-
   def _measurePhis(self, simpleRegex):
     """Returns MemoizationStaticAnalysis or raises an exception"""
     try:
       libLF.log('Measuring for regex: <{}>'.format(simpleRegex.pattern))
 
       # Create query file
-      queryFile = self._createQueryFile(simpleRegex)
+      queryFile = libMemo.ProtoRegexEngine.buildQueryFile(simpleRegex.pattern, "a")
 
       # Collect information for each |phi|
       phi2size = {}
       
-      for phi, cliName in libLF.MemoizationStaticAnalysis.MEMO_POLICIES_TO_COXRE_NICKNAMES.items():
-        rc, stdout, stderr = libLF.runcmd_OutAndErr(' '.join([libMemo.PROTOTYPE_REGEX_ENGINE_CLI, cliName, 'none', '-f', queryFile]))
-        if rc != 0:
-          raise BaseException('Invocation failed; rc {} stdout\n  {}\n\nstderr\n  {}'.format(rc, stdout, stderr))
-        res = json.loads(stderr)
-        phi2size[phi] = res['memoizationInfo']['results']['nSelectedVertices']
+      for phi in libMemo.ProtoRegexEngine.SELECTION_SCHEME.scheme2cox.keys():
+        if phi == libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_None:
+          continue
+
+        engMeas = libMemo.ProtoRegexEngine.query(
+          phi, libMemo.ProtoRegexEngine.ENCODING_SCHEME.ES_None, queryFile
+        )
+        phi2size[phi] = engMeas.mi_results_nSelectedVertices
         libLF.log('Regex /{}/ had |phi={}| = {}'.format(simpleRegex.pattern, phi, phi2size[phi]))
       
-      msa = libLF.MemoizationStaticAnalysis()
+      msa = libMemo.MemoizationStaticAnalysis()
       msa.initFromRaw(simpleRegex.pattern, phi2size)
       os.unlink(queryFile)
       return msa
@@ -139,7 +134,7 @@ def main(regexFile, outFile, parallelism):
   with open(outFile, 'w') as outStream:
     for msa in results:
         # Emit
-        if type(msa) is libLF.MemoizationStaticAnalysis:
+        if type(msa) is libMemo.MemoizationStaticAnalysis:
           nSuccesses += 1
           outStream.write(msa.toNDJSON() + '\n')
         else:
@@ -158,7 +153,7 @@ def main(regexFile, outFile, parallelism):
 parser = argparse.ArgumentParser(description='Measure |Q|, |Phi_indeg>1| and |Phi_loop| for a set of regexes, as determined using the prototype engine.')
 parser.add_argument('--regex-file', type=str, help='In: NDJSON file of objects containing at least the key "pattern"', required=True,
   dest='regexFile')
-parser.add_argument('--out-file', type=str, help='Out: File of libLF.MemoizationStaticAnalysis objects', required=True,
+parser.add_argument('--out-file', type=str, help='Out: File of libMemo.MemoizationStaticAnalysis objects', required=True,
   dest='outFile')
 parser.add_argument('--parallelism', type=int, help='Maximum cores to use', required=False, default=libLF.parallel.CPUCount.CPU_BOUND,
   dest='parallelism')
