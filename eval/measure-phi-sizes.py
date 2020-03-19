@@ -19,8 +19,7 @@ import argparse
 import traceback
 import time
 
-TMP_FILE_PREFIX = 'measure-phi-sizes-{}-{}'.format(time.time(), os.getpid())
-
+# Shell dependencies
 shellDeps = [ libMemo.ProtoRegexEngine.CLI ]
 
 ##########
@@ -82,7 +81,7 @@ def getTasks(regexFile):
   return tasks
 
 def loadRegexFile(regexFile):
-  """Return a list of SimpleRegex's"""
+  """Return a list of libMemo.SimpleRegex's"""
   regexes = []
   libLF.log('Loading regexes from {}'.format(regexFile))
   with open(regexFile, 'r') as inStream:
