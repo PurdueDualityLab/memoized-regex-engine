@@ -227,6 +227,9 @@ emit(Regexp *r, int memoMode)
 			else if (r->ch == 't'){
 				pc->c = '\t';
 			}
+			else if (r->ch == 'b') {
+				pc->c = '\b';
+			}
 			else
 				pc->c = r->ch;
 		}
