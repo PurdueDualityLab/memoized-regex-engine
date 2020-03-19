@@ -448,7 +448,6 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 			}
 
 			/* "Visit" means that we evaluate pc appropriately. */
-			printf("Marking visit\n");
 			markVisit(&visitTable, pc->stateNum, woffset(input, sp));
 
 			/* Proceed as normal */
@@ -460,7 +459,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 				sp++;
 				continue;
 			case Any:
-				if(*sp == 0)
+				if(*sp == 0 || *sp == '\n')
 					goto Dead;
 				pc++;
 				sp++;
