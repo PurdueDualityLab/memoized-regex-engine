@@ -47,7 +47,7 @@ def runcmd(cmd):
   completedProcess = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, close_fds=True)
   return completedProcess.returncode, completedProcess.stdout.decode('utf-8')
 
-def runcmd_OutAndErr(cmd):
+def runcmd_OutAndErr(cmd, timeout=None):
   """Run this command
 
   Args:
@@ -57,9 +57,11 @@ def runcmd_OutAndErr(cmd):
     rc (int)
     stdout (str)
     stderr (str)
+  
+  Raises: TimeoutExpired
   """
   log('CMD: {}'.format(cmd))
-  completedProcess = subprocess.run(cmd, shell=True, capture_output=True, close_fds=True)
+  completedProcess = subprocess.run(cmd, shell=True, capture_output=True, close_fds=True, timeout=timeout)
   return completedProcess.returncode, completedProcess.stdout.decode('utf-8'), completedProcess.stderr.decode('utf-8')
 
 def chkcmd(cmd):

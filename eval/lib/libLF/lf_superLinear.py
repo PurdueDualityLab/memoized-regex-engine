@@ -8,6 +8,7 @@ import json
 
 import os
 import tempfile
+import copy
 
 class PumpPair:
   """Represents a prefix + pump pair as part of a libLF.EvilInput"""
@@ -65,13 +66,43 @@ class EvilInput:
   def initFromNDJSON(self, jsonStr):
     obj = libLF.fromNDJSON(jsonStr)
     return self.initFromDict(obj)
+  
+  def expand(self):
+    """Expand to multiple EvilInput
+
+    High-polynomial regex predictions can be buggy.
+    In the event of an error in the detector, using fewer pumps might work.
+    See vuln-regex-detector's validate-vuln.pl
+
+    returns: EvilInput[]: All "prefixes" of 1 or more pumpPairs
+    """
+    if not self.couldParse:
+      return copy.deepycpy(self)
+    eis = []
+    for i in range(0, len(self.pumpPairs)):
+      ei = EvilInput()
+      ei.couldParse = self.couldParse
+      ei.pumpPairs = self.pumpPairs[:i+1]
+      ei.suffix = self.suffix
+      ei = copy.deepcopy(ei)
+      eis.append(ei)
+    return eis
+  
+  def build(self, nPumps):
+    """Build attack string using this many pumps"""
+    attackStr = ''
+    for pp in self.pumpPairs:
+      attackStr += pp.prefix
+      attackStr += pp.pump * nPumps
+    attackStr += self.suffix
+    return attackStr
 
   def toNDJSON(self):
     _dict = {
       'couldParse': self.couldParse
     }
     if self.couldParse:
-      _dict['pumpPairs'] =  [json.loads(p.toNDJSON()) for p in self.pumpPairs]
+      _dict['pumpPairs'] = [json.loads(p.toNDJSON()) for p in self.pumpPairs]
       _dict['suffix'] = self.suffix
     
     return json.dumps(_dict)

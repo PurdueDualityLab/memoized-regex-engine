@@ -66,27 +66,29 @@ class ProtoRegexEngine:
         return name
 
     @staticmethod
-    def query(selectionScheme, encodingScheme, queryFile):
+    def query(selectionScheme, encodingScheme, queryFile, timeout=None):
         """Query the engine
 
         selectionScheme: SELECTION_SCHEME
         encodingScheme: ENCODING_SCHEME
         queryFile: file path
+        timeout: integer seconds before raising subprocess.TimeoutExpired
 
         returns: EngineMeasurements
-        throws: on rc != 0
+        raises: on rc != 0, or on timeout
         """
         rc, stdout, stderr = libLF.runcmd_OutAndErr(' '.join(
             [ProtoRegexEngine.CLI,
             ProtoRegexEngine.SELECTION_SCHEME.scheme2cox[selectionScheme],
             ProtoRegexEngine.ENCODING_SCHEME.scheme2cox[encodingScheme],
-            '-f', queryFile]
-        ))
-        # libLF.log("Queried engine (rc {})".format(rc))
-        # libLF.log(stdout)
-        # libLF.log(stderr)
+            '-f', queryFile]),
+            timeout=timeout
+        )
         if rc != 0:
-            raise BaseException('Invocation failed; rc {} stdout\n  {}\n\nstderr\n  {}'.format(rc, stdout, stderr))
+            if "syntax error" in stderr:
+                raise SyntaxError("Engine raised syntax error\n  rc: {}\nstdout:\n{}\n\nstderr:\n{}".format(rc, stdout, stderr))
+            else:
+                raise BaseException('Invocation failed; rc {} stdout\n  {}\n\nstderr\n  {}'.format(rc, stdout, stderr))
         return ProtoRegexEngine.EngineMeasurements(stderr)
     
     class EngineMeasurements:
@@ -135,10 +137,13 @@ class SimpleRegex:
   def initFromNDJSON(self, line):
     obj = json.loads(line)
     self.pattern = obj['pattern']
-    if 'evilInput' in obj:
-      ei = libLF.evilInput()
-      ei.initFromDict(obj['evilInput'])
-      self.evilInput = ei
+    self.evilInputs = []
+    if 'evilInputs' in obj:
+      for _ei in obj['evilInputs']:
+        _ei['couldParse'] = True # Hack
+        ei = libLF.EvilInput()
+        ei.initFromDict(_ei)
+        self.evilInputs.append(ei)
 
     return self
 
