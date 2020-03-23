@@ -154,7 +154,7 @@ woffset(char *input, char *sp)
 }
 
 static int
-isMarked(Memo *memo, int statenum, int woffset)
+isMarked(Memo *memo, int statenum /* PC's memoStateNum */, int woffset)
 {
 	if (VERBOSE) {
 		printf("  isMarked: querying <%d, %d>\n", statenum, woffset);
@@ -218,9 +218,9 @@ now(void)
 
 /* Prints human-readable to stdout, and JSON to stderr */
 static void
-printStats(Memo *memo, VisitTable *visitTable, uint64_t startTime)
+printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime)
 {
-	int i, j, n;
+	int i, j, k, n, count;
 
 	uint64_t endTime = now();
 	uint64_t elapsed_US = endTime - startTime;
@@ -329,15 +329,19 @@ printStats(Memo *memo, VisitTable *visitTable, uint64_t startTime)
 		printf("%s: %d slots used (out of %d possible)\n",
 		  prefix, HASH_COUNT(memo->searchStateTable), memo->nStates * memo->nChars);
 
-		/* Memoized state costs vary by number of visits to each */
-		for (i = 0; i < memo->nStates; i++) {
-			sprintf(numBufForSprintf, "%d", visitsPerVertex[i]);
-			vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
-			if (i + 1 != memo->nStates) {
-				vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
+		/* Memoized state costs vary by number of visits to each node. */
+		count = 0;
+		for (i = 0; i < prog->len; i++) {
+			if (prog->start[i].shouldMemo) {
+				count += visitsPerVertex[i];
+
+				sprintf(numBufForSprintf, "%d", visitsPerVertex[i]);
+				vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
+				if (prog->start[i].memoStateNum + 1 != memo->nStates) {
+					vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
+				}
 			}
 		}
-		
 		// Sanity check: HASH_COUNT does correspond to the number of marked <q, i> search states
 		n = 0;
 		for (i = 0; i < memo->nStates; i++) {
@@ -348,6 +352,7 @@ printStats(Memo *memo, VisitTable *visitTable, uint64_t startTime)
 			}
 		}
 		assert(n == HASH_COUNT(memo->searchStateTable));
+		assert(n == count);
 
 		break;
 	case ENCODING_RLE:
@@ -500,7 +505,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 					for(i=0; i<nsubp; i++)
 						subp[i] = sub->sub[i];
 					decref(sub);
-					printStats(&memo, &visitTable, startTime);
+					printStats(prog, &memo, &visitTable, startTime);
 					return 1;
 				}
 				goto Dead;
@@ -523,7 +528,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 		decref(sub);
 	}
 
-	printStats(&memo, &visitTable, startTime);
+	printStats(prog, &memo, &visitTable, startTime);
 	return 0;
 }
 
