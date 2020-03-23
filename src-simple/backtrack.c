@@ -459,7 +459,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 				sp++;
 				continue;
 			case Any:
-				if(*sp == 0 || *sp == '\n')
+				if(*sp == 0 || *sp == '\n' || *sp == '\r')
 					goto Dead;
 				pc++;
 				sp++;

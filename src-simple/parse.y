@@ -179,9 +179,13 @@ single:
 	{
 		$$ = $1;
 	}
+|	':'
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = ':';
+	}
 |	CHAR
 	{
-		printf("CHAR: %d\n", $1);
 		$$ = reg(Lit, nil, nil);
 		$$->ch = $1;
 	}
