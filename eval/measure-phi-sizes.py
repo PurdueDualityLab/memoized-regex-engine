@@ -149,8 +149,8 @@ def main(regexFile, outFile, parallelism):
 #####################################################
 
 # Parse args
-parser = argparse.ArgumentParser(description='Measure |Q|, |Phi_indeg>1| and |Phi_loop| for a set of regexes, as determined using the prototype engine.')
-parser.add_argument('--regex-file', type=str, help='In: NDJSON file of objects containing at least the key "pattern"', required=True,
+parser = argparse.ArgumentParser(description='Measure the static costs of memoization -- |Q|, |Phi_indeg>1| and |Phi_loop| for a set of regexes, as determined using the prototype engine.')
+parser.add_argument('--regex-file', type=str, help='n: NDJSON file of objects containing libMemo.SimpleRegex objects (at least the key "pattern", and "evilInput" if you want an SL-specific analysis)', required=True,
   dest='regexFile')
 parser.add_argument('--out-file', type=str, help='Out: File of libMemo.MemoizationStaticAnalysis objects', required=True,
   dest='outFile')

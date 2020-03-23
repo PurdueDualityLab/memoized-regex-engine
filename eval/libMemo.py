@@ -112,7 +112,7 @@ class ProtoRegexEngine:
             self.mi_config_encoding = dict['config']['encoding']
             self.mi_config_vertexSelection = dict['config']['vertexSelection']
 
-            self.mi_results = dict['results']['maxObservedCostPerMemoizedVertex']
+            self.mi_results_maxObservedCostPerVertex = dict['results']['maxObservedCostPerMemoizedVertex']
             self.mi_results_nSelectedVertices = dict['results']['nSelectedVertices']
             self.mi_results_lenW = dict['results']['lenW']
 
@@ -124,7 +124,7 @@ class ProtoRegexEngine:
             self.si_visitsToMostVisitedSearchState = dict['visitsToMostVisitedSearchState']
 
 ###
-# Classes
+# Input classes
 ###
 
 class SimpleRegex:
@@ -147,15 +147,12 @@ class SimpleRegex:
 
     return self
 
+###
+# Output classes
+###
+
 class MemoizationStaticAnalysis:
   """Represents the result of regex pattern static analysis for memoization purposes"""
-  MEMO_POLICIES_TO_COXRE_NICKNAMES = {
-    "memoNone": "none",
-    "memoAll": "full",
-    "memoInDegGT1": "indeg",
-    "memoLoop": "loop",
-  }
-
   def __init__(self):
     self.pattern = None
     self.policy2nSelectedVertices = {}
@@ -186,4 +183,75 @@ class MemoizationStaticAnalysis:
       'policy2nSelectedVertices': self.policy2nSelectedVertices
     }
     return json.dumps(_dict)
+
+class MemoizationDynamicAnalysis:
+  """Represents the result of regex pattern dynamic analysis for memoization purposes"""
+  def __init__(self):
+    self.pattern = None
+    self.inputLength = -1
+
+    self.evilInput = None # If an SL regex
+    self.nPumps = -1 # If an SL regex
+
+    self.selectionPolicy_to_enc2space = {} # Numeric space cost
+    self.selectionPolicy_to_enc2time = {} # Numeric time cost
+
+    for scheme in ProtoRegexEngine.SELECTION_SCHEME.scheme2cox.keys():
+      if scheme != ProtoRegexEngine.SELECTION_SCHEME.SS_None:
+        self.selectionPolicy_to_enc2space[scheme] = {}
+        self.selectionPolicy_to_enc2time[scheme] = {}
+  
+  def initFromRaw(self, pattern, inputLength, evilInput, nPumps, selectionPolicy_to_enc2space, selectionPolicy_to_enc2time):
+    self.pattern = pattern
+    self.inputLength = inputLength
+    self.evilInput = evilInput
+    self.nPumps = nPumps
+    self.selectionPolicy_to_enc2space = selectionPolicy_to_enc2space
+    self.selectionPolicy_to_enc2time = selectionPolicy_to_enc2time
+    return self
+  
+  def initFromNDJSON(self, jsonStr):
+    obj = libLF.fromNDJSON(jsonStr)
+    return self.initFromDict(obj)
+
+  def initFromDict(self, obj):
+    self.pattern = obj['pattern']
+    self.inputLength = obj['inputLength']
+
+    if obj['evilInput'] is not None:
+      ei = libLF.EvilInput()
+      ei.initFromNDJSON(obj['evilInput'])
+      self.evilInput = ei
+    else:
+      self.evilInput = None
+
+    self.nPumps = obj['nPumps']
+
+    self.selectionPolicy_to_enc2space = obj['selectionPolicy_to_enc2space']
+    self.selectionPolicy_to_enc2time = obj['selectionPolicy_to_enc2time']
+    return self
+  
+  def toNDJSON(self):
+    _dict = {
+      'pattern': self.pattern,
+      'inputLength': self.inputLength,
+      'evilInput': self.evilInput.toNDJSON() if self.evilInput else None,
+      'nPumps': self.nPumps,
+      'selectionPolicy_to_enc2space': self.selectionPolicy_to_enc2space,
+      'selectionPolicy_to_enc2time': self.selectionPolicy_to_enc2time,
+    }
+    return json.dumps(_dict)
+  
+  def validate(self):
+    """Returns True if everything looks OK, else raises an error"""
+    # Full should have the most space complexity
+    fullSpaceCost = self.selectionPolicy_to_enc2space[
+      ProtoRegexEngine.SELECTION_SCHEME.SS_Full
+    ][
+      ProtoRegexEngine.ENCODING_SCHEME.ES_None
+    ]
+    for selectionScheme, enc2space in self.selectionPolicy_to_enc2space.items():
+      for encodingScheme, spaceCost in enc2space.items():
+        assert(spaceCost <= fullSpaceCost)
+    return True
   

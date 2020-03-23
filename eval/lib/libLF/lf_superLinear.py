@@ -84,8 +84,12 @@ class EvilInput:
       ei.couldParse = self.couldParse
       ei.pumpPairs = self.pumpPairs[:i+1]
       ei.suffix = self.suffix
-      ei = copy.deepcopy(ei)
-      eis.append(ei)
+      ei1 = copy.deepcopy(ei)
+      ei2 = copy.deepcopy(ei)
+      ei3 = copy.deepcopy(ei)
+      ei2.suffix += "\n" # For regexes that end in '.+$'
+      ei3.suffix = "\n" + ei3.suffix # For regexes that end in '.+P'
+      eis += [ei1, ei2, ei3]
     return eis
   
   def build(self, nPumps):
