@@ -101,9 +101,10 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
     assert(min(indivSpaceCosts) == max(indivSpaceCosts))
 
     # Let's check that time costs do not vary too much, warn if it's too high
-    space_coefficientOfVariance = statistics.stdev(indivSpaceCosts) / statistics.mean(indivSpaceCosts)
-    if 0.5 < space_coefficientOfVariance:
-      libLF.log("Warning, time CV {} was >= 0.5".format(space_coefficientOfVariance))
+    time_coefficientOfVariance = statistics.stdev(indivTimeCosts) / statistics.mean(indivTimeCosts)
+    libLF.log("Time coefficient of variance: {}".format(round(time_coefficientOfVariance, 2)))
+    if 0.5 < time_coefficientOfVariance:
+      libLF.log("Warning, time CV {} was >= 0.5".format(time_coefficientOfVariance))
 
     # Condense
     time = statistics.median_low(indivTimeCosts)
@@ -234,16 +235,6 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
       libLF.log("False SL regex: /{}/".format(regex.pattern))
 
     return eiWithLargestGrowthRate, eiLargestGrowthRate
-
-  def _measureCosts(self, regex):
-    """Returns MemoizationDynamicAnalysis or raises an exception"""
-    raise BaseException("TODO")
-    try:
-      libLF.log('Measuring for regex: <{}>'.format(regex.pattern))
-      # Create query file
-    except:
-      raise
-    return None
 
 ################
 
