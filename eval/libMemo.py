@@ -192,6 +192,8 @@ class MemoizationDynamicAnalysis:
   def __init__(self):
     self.pattern = None
     self.automatonSize = -1
+    self.phiInDeg = -1
+    self.phiQuantifier = -1
     self.inputLength = -1
 
     self.evilInput = None # If an SL regex
@@ -205,9 +207,11 @@ class MemoizationDynamicAnalysis:
         self.selectionPolicy_to_enc2space[scheme] = {}
         self.selectionPolicy_to_enc2time[scheme] = {}
   
-  def initFromRaw(self, pattern, automatonSize, inputLength, evilInput, nPumps, selectionPolicy_to_enc2space, selectionPolicy_to_enc2time):
+  def initFromRaw(self, pattern, automatonSize, phiInDeg, phiQuantifier, inputLength, evilInput, nPumps, selectionPolicy_to_enc2space, selectionPolicy_to_enc2time):
     self.pattern = pattern
     self.automatonSize = automatonSize
+    self.phiInDeg = phiInDeg
+    self.phiQuantifier = phiQuantifier
     self.inputLength = inputLength
     self.evilInput = evilInput
     self.nPumps = nPumps
@@ -221,6 +225,9 @@ class MemoizationDynamicAnalysis:
 
   def initFromDict(self, obj):
     self.pattern = obj['pattern']
+    self.automatonSize = obj['automatonSize']
+    self.phiInDeg = obj['phiInDeg']
+    self.phiQuantifier = obj['phiQuantifier']
     self.inputLength = obj['inputLength']
 
     if obj['evilInput'] is not None:
@@ -240,6 +247,8 @@ class MemoizationDynamicAnalysis:
     _dict = {
       'pattern': self.pattern,
       'automatonSize': self.automatonSize,
+      'phiInDeg': self.phiInDeg,
+      'phiQuantifier': self.phiQuantifier,
       'inputLength': self.inputLength,
       'evilInput': self.evilInput.toNDJSON() if self.evilInput else None,
       'nPumps': self.nPumps,
@@ -250,9 +259,11 @@ class MemoizationDynamicAnalysis:
   
   def validate(self):
     """Returns True if everything looks OK, else raises an error"""
-    assert self.automatonSize > 0, "automaton too small"
+    assert self.automatonSize >= 0, "No automaton"
+    assert self.phiInDeg >= 0, "Negative |Phi_in-deg|?"
+    assert self.phiQuantifier >= 0, "Negative |Phi_quantifier|?"
     assert self.inputLength > 0, "no input"
-    # Full space cost should be |Q| * |w|
+    # Full space cost for Phi=Q should be |Q| * |w|
     fullSpaceCost = self.selectionPolicy_to_enc2space[
       ProtoRegexEngine.SELECTION_SCHEME.SS_Full
     ][
@@ -265,7 +276,9 @@ class MemoizationDynamicAnalysis:
     for selectionScheme, enc2space in self.selectionPolicy_to_enc2space.items():
       for encodingScheme, spaceCost in enc2space.items():
         assert spaceCost <= fullSpaceCost, \
-          "fullSpaceCost < cost for {}-{}".format(selectionScheme, encodingScheme)
+          "General fullSpaceCost < cost for {}-{}".format(selectionScheme, encodingScheme)
+        assert spaceCost <= enc2space[ProtoRegexEngine.ENCODING_SCHEME.ES_None], \
+          "Phi-specific fullSpaceCost < cost for {}-{}".format(selectionScheme, encodingScheme)
 
     return True
   
@@ -280,7 +293,9 @@ class MemoizationDynamicAnalysis:
         rows.append( {
           "pattern": self.pattern,
           "|Q|": self.automatonSize,
-          "|w|": self.inputLength,
+          "|Phi_{in-deg > 1}|": self.phiInDeg,
+          "|Phi_{quantifier}|": self.phiQuantifier,
+          "|w|": self.inputLength + 1, # Count the null byte
           "SL": True,
           "nPumps": self.nPumps,
           "selectionPolicy": selectionPolicy,

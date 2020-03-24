@@ -80,7 +80,7 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
   def _measureCondition(self, regex, mostEI, nPumps, selectionScheme, encodingScheme, nTrialsPerCondition):
     """Obtain the average time and space costs for this condition
     
-    Returns: automatonSize (integer), time (numeric), space (numeric)
+    Returns: automatonSize (integer), phiSize (integer), time (numeric), space (numeric)
     """
     queryFile = libMemo.ProtoRegexEngine.buildQueryFile(regex.pattern, mostEI.build(nPumps))
 
@@ -113,10 +113,11 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
 
     # Condense
     automatonSize = measures[0].ii_nStates
+    phiSize = measures[0].mi_results_nSelectedVertices
     time = statistics.median_low(indivTimeCosts)
     space = statistics.median_low(indivSpaceCosts)
     
-    return automatonSize, time, space
+    return automatonSize, phiSize, time, space
   
   def _runSLDynamicAnalysis(self, regex, mostEI, nTrialsPerCondition):
     """Obtain MDAs for this <regex, EI> pair
@@ -143,7 +144,6 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
     # memoization selection and encoding schemes
     pump_to_mda = {}
     for nPumps in MyTask.PERF_PUMPS_TO_TRY:
-      conditionIx = 1
 
       # Prep an MDA
       mda = libMemo.MemoizationDynamicAnalysis()
@@ -152,22 +152,30 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
       mda.evilInput = mostEI
       mda.nPumps = nPumps
 
+      conditionIx = 1
       for selectionScheme in selectionSchemes:
         selectionScheme_to_encodingScheme2engineMeasurement[selectionScheme] = {}
         for encodingScheme in encodingSchemes:
           libLF.log("    Trying selection/encoding combination {}/{}".format(conditionIx, nConditions))
           conditionIx += 1
 
-          automatonSize, timeCost, spaceCost = self._measureCondition(regex, mostEI, nPumps, selectionScheme, encodingScheme, nTrialsPerCondition)
+          automatonSize, phiSize, timeCost, spaceCost = self._measureCondition(regex, mostEI, nPumps, selectionScheme, encodingScheme, nTrialsPerCondition)
+          libLF.log("{}: space cost {}".format(encodingScheme, spaceCost))
 
+          # Automaton statistics
           mda.automatonSize = automatonSize
+          if selectionScheme == libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_InDeg:
+            mda.phiInDeg = phiSize
+          elif selectionScheme == libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_Loop:
+            mda.phiQuantifier = phiSize
+
           mda.selectionPolicy_to_enc2time[selectionScheme][encodingScheme] = timeCost
           mda.selectionPolicy_to_enc2space[selectionScheme][encodingScheme] = spaceCost
 
-          # Did we screw up?
-          mda.validate()
+      # Did we screw up?
+      mda.validate()
 
-          pump_to_mda[nPumps] = mda
+      pump_to_mda[nPumps] = mda
     return pump_to_mda
   
   def _findMostSLInput(self, regex):
@@ -323,6 +331,7 @@ def main(regexFile, nTrialsPerCondition, outFile):
   #### Emit results
   libLF.log('Writing results to {}'.format(outFile))
   df.to_pickle(outFile)
+  libLF.log("Data columns: {}".format(df.columns))
 
 #####################################################
 
