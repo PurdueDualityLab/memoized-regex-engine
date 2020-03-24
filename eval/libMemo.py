@@ -10,6 +10,7 @@ import libLF
 # Other imports
 import json
 import tempfile
+import pandas as pd
 
 ###
 # Constants
@@ -105,23 +106,25 @@ class ProtoRegexEngine:
             self._unpackSimulationInfo(obj['simulationInfo'])
         
         def _unpackInputInfo(self, dict):
-            self.ii_lenW = dict['lenW']
-            self.ii_nStates = dict['nStates']
+            self.ii_lenW = int(dict['lenW'])
+            self.ii_nStates = int(dict['nStates'])
 
         def _unpackMemoizationInfo(self, dict):
             self.mi_config_encoding = dict['config']['encoding']
             self.mi_config_vertexSelection = dict['config']['vertexSelection']
 
-            self.mi_results_maxObservedCostPerVertex = dict['results']['maxObservedCostPerMemoizedVertex']
-            self.mi_results_nSelectedVertices = dict['results']['nSelectedVertices']
-            self.mi_results_lenW = dict['results']['lenW']
+            self.mi_results_maxObservedCostPerVertex = [
+              int(cost) for cost in dict['results']['maxObservedCostPerMemoizedVertex']
+            ]
+            self.mi_results_nSelectedVertices = int(dict['results']['nSelectedVertices'])
+            self.mi_results_lenW = int(dict['results']['lenW'])
 
         def _unpackSimulationInfo(self, dict):
-            self.si_nTotalVisits = dict['nTotalVisits']
-            self.si_simTimeUS = dict['simTimeUS']
-            self.si_visitsToMostVisitedSearchState = dict['visitsToMostVisitedSearchState']
-            self.si_nPossibleTotalVisitsWithMemoization = dict['nPossibleTotalVisitsWithMemoization']
-            self.si_visitsToMostVisitedSearchState = dict['visitsToMostVisitedSearchState']
+            self.si_nTotalVisits = int(dict['nTotalVisits'])
+            self.si_simTimeUS = int(dict['simTimeUS'])
+            self.si_visitsToMostVisitedSearchState = int(dict['visitsToMostVisitedSearchState'])
+            self.si_nPossibleTotalVisitsWithMemoization = int(dict['nPossibleTotalVisitsWithMemoization'])
+            self.si_visitsToMostVisitedSearchState = int(dict['visitsToMostVisitedSearchState'])
 
 ###
 # Input classes
@@ -164,7 +167,7 @@ class MemoizationStaticAnalysis:
     # All memoization policies measured?
     s1 = set(policy2nSelectedVertices.keys())
     s2 = set(policy2nSelectedVertices.keys())
-    assert(s1 <= s2 and s2 <= s1)
+    assert s1 <= s2 <= s1
     
     return self
   
@@ -188,6 +191,7 @@ class MemoizationDynamicAnalysis:
   """Represents the result of regex pattern dynamic analysis for memoization purposes"""
   def __init__(self):
     self.pattern = None
+    self.automatonSize = -1
     self.inputLength = -1
 
     self.evilInput = None # If an SL regex
@@ -201,8 +205,9 @@ class MemoizationDynamicAnalysis:
         self.selectionPolicy_to_enc2space[scheme] = {}
         self.selectionPolicy_to_enc2time[scheme] = {}
   
-  def initFromRaw(self, pattern, inputLength, evilInput, nPumps, selectionPolicy_to_enc2space, selectionPolicy_to_enc2time):
+  def initFromRaw(self, pattern, automatonSize, inputLength, evilInput, nPumps, selectionPolicy_to_enc2space, selectionPolicy_to_enc2time):
     self.pattern = pattern
+    self.automatonSize = automatonSize
     self.inputLength = inputLength
     self.evilInput = evilInput
     self.nPumps = nPumps
@@ -234,6 +239,7 @@ class MemoizationDynamicAnalysis:
   def toNDJSON(self):
     _dict = {
       'pattern': self.pattern,
+      'automatonSize': self.automatonSize,
       'inputLength': self.inputLength,
       'evilInput': self.evilInput.toNDJSON() if self.evilInput else None,
       'nPumps': self.nPumps,
@@ -244,14 +250,42 @@ class MemoizationDynamicAnalysis:
   
   def validate(self):
     """Returns True if everything looks OK, else raises an error"""
-    # Full should have the most space complexity
+    assert self.automatonSize > 0, "automaton too small"
+    assert self.inputLength > 0, "no input"
+    # Full space cost should be |Q| * |w|
     fullSpaceCost = self.selectionPolicy_to_enc2space[
       ProtoRegexEngine.SELECTION_SCHEME.SS_Full
     ][
       ProtoRegexEngine.ENCODING_SCHEME.ES_None
     ]
+    assert fullSpaceCost == self.automatonSize * (self.inputLength+1), \
+      "fullSpaceCost {} != {} * {}".format(fullSpaceCost, self.automatonSize, self.inputLength)
+
+    # Full table should have the most space complexity
     for selectionScheme, enc2space in self.selectionPolicy_to_enc2space.items():
       for encodingScheme, spaceCost in enc2space.items():
-        assert(spaceCost <= fullSpaceCost)
+        assert spaceCost <= fullSpaceCost, \
+          "fullSpaceCost < cost for {}-{}".format(selectionScheme, encodingScheme)
+
     return True
   
+  def toDataFrame(self):
+    """Return a pandas DataFrame
+    
+    This expands the selection-encoding dictionaries
+    """
+    rows = []
+    for selectionPolicy, d in self.selectionPolicy_to_enc2space.items():
+      for encodingPolicy, space in d.items():
+        rows.append( {
+          "pattern": self.pattern,
+          "|Q|": self.automatonSize,
+          "|w|": self.inputLength,
+          "SL": True,
+          "nPumps": self.nPumps,
+          "selectionPolicy": selectionPolicy,
+          "encodingPolicy": encodingPolicy,
+          "spaceCost": space,
+          "timeCost": self.selectionPolicy_to_enc2time[selectionPolicy][encodingPolicy],
+        })
+    return pd.DataFrame(data=rows)

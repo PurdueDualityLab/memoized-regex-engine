@@ -20,6 +20,7 @@ import traceback
 import time
 import subprocess
 import statistics
+import pandas as pd
 
 # Shell dependencies
 shellDeps = [ libMemo.ProtoRegexEngine.CLI ]
@@ -43,7 +44,7 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
   PUMPS_TO_TRY = [ i*3 for i in range(1,5) ]
 
   # Can be much longer because memoization prevents geometric growth of the backtracking stack
-  PERF_PUMPS_TO_TRY = [ i*500 for i in range(1,5) ]
+  PERF_PUMPS_TO_TRY = [ 1000 ] # i*500 for i in range(1,5) ]
 
   def __init__(self, regex, nTrialsPerCondition):
     self.regex = regex
@@ -68,17 +69,18 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
 
       # Return
       libLF.log('Completed regex /{}/'.format(self.regex.pattern))
-      return self.pump_to_mdas
+      return self.pump_to_mdas[MyTask.PERF_PUMPS_TO_TRY[-1]] # Just return the biggest one for now
     except KeyboardInterrupt:
       raise
     except BaseException as err:
-      libLF.log('Exception while testing regex /{}/'.format(self.regex.pattern))
+      libLF.log('Exception while testing regex /{}/: {}'.format(self.regex.pattern, err))
+      traceback.print_exc()
       return err
   
   def _measureCondition(self, regex, mostEI, nPumps, selectionScheme, encodingScheme, nTrialsPerCondition):
     """Obtain the average time and space costs for this condition
     
-    Returns: time (numeric), space (numeric)
+    Returns: automatonSize (integer), time (numeric), space (numeric)
     """
     queryFile = libMemo.ProtoRegexEngine.buildQueryFile(regex.pattern, mostEI.build(nPumps))
 
@@ -98,7 +100,7 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
     ]
 
     # Space costs should be constant
-    assert(min(indivSpaceCosts) == max(indivSpaceCosts))
+    assert min(indivSpaceCosts) == max(indivSpaceCosts), "Space costs are not constant"
 
     # Let's check that time costs do not vary too much, warn if it's too high
     time_coefficientOfVariance = statistics.stdev(indivTimeCosts) / statistics.mean(indivTimeCosts)
@@ -107,10 +109,11 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
       libLF.log("Warning, time CV {} was >= 0.5".format(time_coefficientOfVariance))
 
     # Condense
+    automatonSize = measures[0].ii_nStates
     time = statistics.median_low(indivTimeCosts)
     space = statistics.median_low(indivSpaceCosts)
     
-    return time, space
+    return automatonSize, time, space
   
   def _runSLDynamicAnalysis(self, regex, mostEI, nTrialsPerCondition):
     """Obtain MDAs for this <regex, EI> pair
@@ -152,13 +155,14 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
           libLF.log("    Trying selection/encoding combination {}/{}".format(conditionIx, nConditions))
           conditionIx += 1
 
-          timeCost, spaceCost = self._measureCondition(regex, mostEI, nPumps, selectionScheme, encodingScheme, nTrialsPerCondition)
+          automatonSize, timeCost, spaceCost = self._measureCondition(regex, mostEI, nPumps, selectionScheme, encodingScheme, nTrialsPerCondition)
 
+          mda.automatonSize = automatonSize
           mda.selectionPolicy_to_enc2time[selectionScheme][encodingScheme] = timeCost
           mda.selectionPolicy_to_enc2space[selectionScheme][encodingScheme] = spaceCost
 
           # Did we screw up?
-          assert(mda.validate())
+          mda.validate()
 
           pump_to_mda[nPumps] = mda
     return pump_to_mda
@@ -170,7 +174,7 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
              None, -1 if all are linear-time (e.g. RE1's semantics differ from PCRE)
     """
     libLF.log('Testing whether this regex exhibits SL behavior: /{}/'.format(regex.pattern))
-    assert(regex.evilInputs)
+    assert regex.evilInputs, "regex has no evil inputs"
 
     if EXPAND_EVIL_INPUT:
       # Expand the evil inputs.
@@ -281,48 +285,41 @@ def main(regexFile, nTrialsPerCondition, outFile):
   tasks = getTasks(regexFile, nTrialsPerCondition)
   nRegexes = len(tasks)
 
-  #### Process data
-
-  results = [] # List of results -- libMemo.MemoizationDynamicAnalysis | False | BaseException
-  for t in tasks:
-    try:
-      res = t.run()
-      if type(res) is not type({}) and \
-         type(res) != MyTask.NOT_SL:
-        libLF.log("Exception on /{}/: {}".format(t.regex.pattern, res))
-
-      results.append(res)
-    except BaseException as err:
-      libLF.log("Exception on /{}/: {}".format(t.regex.pattern, err))
-      results.append(err)
-
-  #### Emit results
-
-  # TODO It will be *way* cheaper to turn this into a Pandas dataframe
-  # Let's do this during the RunTask() to minimize space costs
-  # Do this conversion tomorrow.
-
-  # TODO I find the negative space cost estimate hard to believe for the 1.json file.
-  # Double-check these.
-
-  libLF.log('Writing results to {}'.format(outFile))
+  #### Collect data
+  
+  df = None
   nSL = 0
   nNonSL = 0
   nExceptions = 0
-  with open(outFile, 'w') as outStream:
-    for pump2mda in results:
-        # Emit
-        if type(pump2mda) is type({}):
-          nSL += 1
-          for mda in pump2mda.values():
-            outStream.write(mda.toNDJSON() + '\n')
-        elif pump2mda == MyTask.NOT_SL:
-          nNonSL += 1
-        else:
-          nExceptions += 1
-          libLF.log("Error message: " + str(pump2mda))
 
-  libLF.log('{} regexes were SL, {} were linear, {} exceptions'.format(nSL, nNonSL, nExceptions))
+  for i, t in enumerate(tasks):
+    libLF.log("Working on task %d/%d" % (i+1, len(tasks)))
+    try:
+      res = t.run()
+      if type(res) is libMemo.MemoizationDynamicAnalysis:
+        nSL += 1
+
+        resDF = res.toDataFrame()
+        if df is None:
+          df = resDF
+        else:
+          df = df.append(resDF)
+      elif type(res) is type(MyTask.NOT_SL) and res == MyTask.NOT_SL:
+        nNonSL += 1
+      else:
+        libLF.log("Exception on /{}/: {}".format(t.regex.pattern, res))
+        nExceptions += 1
+
+    except BaseException as err:
+      libLF.log("Exception on /{}/: {}".format(t.regex.pattern, err))
+      traceback.print_exc()
+      nExceptions += 1
+  
+  libLF.log("{} regexes were SL, {} non-SL, {} exceptions".format(nSL, nNonSL, nExceptions))
+
+  #### Emit results
+  libLF.log('Writing results to {}'.format(outFile))
+  df.to_pickle(outFile)
 
 #####################################################
 
@@ -330,9 +327,9 @@ def main(regexFile, nTrialsPerCondition, outFile):
 parser = argparse.ArgumentParser(description='Measure the dynamic costs of memoization -- the space and time costs of memoizing this set of regexes, as determined using the prototype engine.')
 parser.add_argument('--regex-file', type=str, help='In: NDJSON file of objects containing libMemo.SimpleRegex objects (at least the key "pattern", and "evilInput" if you want an SL-specific analysis)', required=True,
   dest='regexFile')
-parser.add_argument('--trials', type=str, help='In: Number of trials per experimental condition (only affects time complexity)', required=False, default=20,
+parser.add_argument('--trials', type=int, help='In: Number of trials per experimental condition (only affects time complexity)', required=False, default=20,
   dest='nTrialsPerCondition')
-parser.add_argument('--out-file', type=str, help='Out: File of libMemo.MemoizationDynamicAnalysis objects', required=True,
+parser.add_argument('--out-file', type=str, help='Out: A pickled dataframe converted from libMemo.MemoizationDynamicAnalysis objects. For best performance, the name should end in .pkl.bz2', required=True,
   dest='outFile')
 
 # Parse args
