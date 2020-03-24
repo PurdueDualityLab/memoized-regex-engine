@@ -7,7 +7,104 @@
 
 static Inst *pc; /* VM array */
 static int count(Regexp*);
+static void determineSimpleLanguageLengths(Regexp *r);
 static void emit(Regexp*, int);
+
+static void
+lli_addEntry(LanguageLengthInfo *lli, int newLength)
+{
+	int i;
+
+	/* Already too full? */
+	if (lli->tooManyLengths)
+		return;
+
+	/* Check if it's present already */
+	for (i = 0; i < lli->nLanguageLengths; i++) {
+		if (newLength == lli->languageLengths[i]) {
+			return;
+		}
+	}
+
+	/* Insert. */
+	if (lli->nLanguageLengths >= nelem(lli->languageLengths)) {
+		/* No space. */
+		lli->tooManyLengths = 1;
+		return;
+	}
+
+	lli->languageLengths[ lli->nLanguageLengths ] = newLength;
+	lli->nLanguageLengths++;
+	return;
+}
+
+/* printf, ends in a newline */
+static void
+lli_print(LanguageLengthInfo *lli)
+{
+	int i;
+
+	/* Already too full? */
+	if (lli->tooManyLengths)
+		printf("LLI: Over-full\n");
+
+	/* Check if it's present already */
+	printf("LLI: %d lengths: ", lli->nLanguageLengths);
+	for (i = 0; i < lli->nLanguageLengths; i++) {
+		printf("%d,", lli->languageLengths[i]);
+	}
+	printf("\n");
+
+	return;
+}
+
+static int
+lli_chooseRunLength(LanguageLengthInfo *lli)
+{
+	int i, product = 1, largest = -1, possibleLCM;
+	if (lli->tooManyLengths)
+		return 2; /* A good default -- no worse than 1, and maybe better */
+
+	/* Find the LCM of the language lengths */
+
+	/* Compute upper bound on LCM, and get largest length. */
+	printf("LCM: Values: ");
+	for (i = 0; i < lli->nLanguageLengths; i++) {
+		if (lli->languageLengths[i] > 0) {
+			printf("%d,", lli->languageLengths[i]);
+			product *= lli->languageLengths[i];
+			if (lli->languageLengths[i] > largest) {
+				largest = lli->languageLengths[i];
+			}
+		}
+	}
+	printf("\nLCM: largest %d, product: %d\n", largest, product);
+
+	if (largest < 1)
+		return 1;
+
+	/* Consider all values from largest to product. */
+	possibleLCM = largest;
+	while (possibleLCM < product) {
+		int isLCM = 1;
+		for (i = 0; i < lli->nLanguageLengths; i++) {
+			if (lli->languageLengths[i] > 1 && possibleLCM % lli->languageLengths[i] != 0) {
+				isLCM = 0;
+				break;
+			}
+		}
+		if (isLCM) {
+			printf("LCM: %d\n", possibleLCM);
+			return possibleLCM;
+		}
+
+		possibleLCM++;
+	}
+
+	printf("LCM: %d\n", product);
+	return product;
+}
+
 
 Prog*
 compile(Regexp *r, int memoMode)
@@ -18,9 +115,14 @@ compile(Regexp *r, int memoMode)
 	Prog *p;
 
 	n = count(r) + 1;
+	determineSimpleLanguageLengths(r);
+
 	p = mal(sizeof *p + n*sizeof p->start[0]);
 	p->start = (Inst*)(p+1);
 	pc = p->start;
+	for (i = 0; i < n; i++) {
+		pc[i].runLength = -1; /* A good default */
+	}
 	emit(r, memoMode);
 	pc->opcode = Match;
 	pc++;
@@ -134,6 +236,83 @@ count(Regexp *r)
 	}
 }
 
+// Determine size of simple languages for r
+// Recursively populates sub-patterns
+static void
+determineSimpleLanguageLengths(Regexp *r)
+{
+	int i, j;
+	switch(r->type) {
+	default:
+		fatal("bad count");
+	case Alt:
+		determineSimpleLanguageLengths(r->left);
+		determineSimpleLanguageLengths(r->right);
+		
+		/* Combine: A giant OR */
+		r->lli.nLanguageLengths = 0;
+		for (i = 0; i < r->left->lli.nLanguageLengths; i++) {
+			lli_addEntry(&r->lli, r->left->lli.languageLengths[i]);
+		}
+		for (i = 0; i < r->right->lli.nLanguageLengths; i++) {
+			lli_addEntry(&r->lli, r->right->lli.languageLengths[i]);
+		}
+
+		printf("LLI: Alt\n");
+		lli_print(&r->lli);
+		break;
+	case Cat:
+		determineSimpleLanguageLengths(r->left);
+		determineSimpleLanguageLengths(r->right);
+
+		/* Combine: Cartesian product */
+		r->lli.nLanguageLengths = 0;
+		for (i = 0; i < r->left->lli.nLanguageLengths; i++) {
+			for (j = 0; j < r->right->lli.nLanguageLengths; j++) {
+				lli_addEntry(&r->lli, r->left->lli.languageLengths[i] + r->right->lli.languageLengths[j]);
+			}
+		}
+
+		printf("LLI: Cat\n");
+		lli_print(&r->lli);
+		break;
+	case Lit:
+	case Dot:
+	case CharEscape:
+		r->lli.nLanguageLengths = 1;
+		r->lli.languageLengths[0] = 1;
+		printf("LLI: Lit,Dot,CharEscape\n");
+		lli_print(&r->lli);
+		break;
+	case Paren:
+		determineSimpleLanguageLengths(r->left);
+		r->lli = r->left->lli;
+		printf("LLI: Paren\n");
+		lli_print(&r->lli);
+		break;
+	case Quest:
+		determineSimpleLanguageLengths(r->left);
+		r->lli = r->left->lli;
+		lli_addEntry(&r->lli, 0);
+		printf("LLI: Quest:\n");
+		lli_print(&r->lli);
+		break;
+	case Star:
+		determineSimpleLanguageLengths(r->left);
+		r->lli = r->left->lli;
+		lli_addEntry(&r->lli, 0);
+		printf("LLI: Star\n");
+		lli_print(&r->lli);
+		break;
+	case Plus:
+		determineSimpleLanguageLengths(r->left);
+		r->lli = r->left->lli;
+		printf("LLI: Plus\n");
+		lli_print(&r->lli);
+		break;
+	}
+}
+
 /* Populate pc for r
  *   emit() produces instructions corresponding to r
  *   and saves them into the global pc array
@@ -153,6 +332,8 @@ count(Regexp *r)
  * 
  *   We use memoMode here because Alt and Star are compiled into similar-looking opcodes
  *   Easiest to handle MEMO_LOOP_DEST during emit().
+ * 
+ *   Call after determineSimpleLanguageLengths.
  */ 
 static void
 emit(Regexp *r, int memoMode)
@@ -165,10 +346,12 @@ emit(Regexp *r, int memoMode)
 
 	case Alt:
 		pc->opcode = Split;
+		pc->runLength = lli_chooseRunLength(&r->lli);
 		p1 = pc++;
 		p1->x = pc;
 		emit(r->left, memoMode);
 		pc->opcode = Jmp;
+		pc->runLength = 1; /* ? */
 		p2 = pc++;
 		p1->y = pc;
 		emit(r->right, memoMode);
@@ -176,18 +359,21 @@ emit(Regexp *r, int memoMode)
 		break;
 
 	case Cat:
+		/* Need to do anything for pc->runLength? */
 		emit(r->left, memoMode);
 		emit(r->right, memoMode);
 		break;
 	
 	case Lit:
 		pc->opcode = Char;
+		pc->runLength = 1;
 		pc->c = r->ch;
 		pc++;
 		break;
 
 	case CharEscape:
 		pc->c = r->ch;
+		pc->runLength = 1;
 		switch (r->ch) {
 		case 's':
 		case 'S':
@@ -238,6 +424,7 @@ emit(Regexp *r, int memoMode)
 	
 	case Dot:
 		pc++->opcode = Any;
+		pc->runLength = 1;
 		break;
 
 	case Paren:
@@ -252,6 +439,7 @@ emit(Regexp *r, int memoMode)
 	
 	case Quest:
 		pc->opcode = Split;
+		pc->runLength = lli_chooseRunLength(&r->lli);
 		p1 = pc++;
 		p1->x = pc;
 		emit(r->left, memoMode);
@@ -265,11 +453,13 @@ emit(Regexp *r, int memoMode)
 
 	case Star:
 		pc->opcode = Split;
+		pc->runLength = lli_chooseRunLength(&r->lli);
 		p1 = pc++;
 		p1->x = pc;
 		emit(r->left, memoMode);
 		pc->opcode = Jmp;
 		pc->x = p1; /* Back-edge */
+		pc->x->runLength = lli_chooseRunLength(&r->left->lli);
 		if (memoMode == MEMO_LOOP_DEST) {
 			pc->x->shouldMemo = 1;
 		}
@@ -287,6 +477,7 @@ emit(Regexp *r, int memoMode)
 		emit(r->left, memoMode);
 		pc->opcode = Split;
 		pc->x = p1; /* Back-edge */
+		pc->x->runLength = lli_chooseRunLength(&r->left->lli);
 		if (memoMode == MEMO_LOOP_DEST) {
 			pc->x->shouldMemo = 1;
 		}
@@ -315,11 +506,11 @@ printprog(Prog *p)
 		default:
 			fatal("printprog");
 		case Split:
-			printf("%2d. split %d, %d (memo? %d -- state %d)\n", (int)(pc-p->start), (int)(pc->x-p->start), (int)(pc->y-p->start), pc->shouldMemo, pc->memoStateNum);
+			printf("%2d. split %d, %d (memo? %d -- state %d, runLength %d)\n", (int)(pc-p->start), (int)(pc->x-p->start), (int)(pc->y-p->start), pc->shouldMemo, pc->memoStateNum, pc->runLength);
 			//printf("%2d. split %d, %d\n", (int)(pc->stateNum), (int)(pc->x->stateNum), (int)(pc->y->stateNum));
 			break;
 		case Jmp:
-			printf("%2d. jmp %d (memo? %d -- state %d)\n", (int)(pc-p->start), (int)(pc->x-p->start), pc->shouldMemo, pc->memoStateNum);
+			printf("%2d. jmp %d (memo? %d -- state %d, runLength %d)\n", (int)(pc-p->start), (int)(pc->x-p->start), pc->shouldMemo, pc->memoStateNum, pc->runLength);
 			//printf("%2d. jmp %d\n", (int)(pc->stateNum), (int)(pc->x->stateNum));
 			break;
 		case Char:

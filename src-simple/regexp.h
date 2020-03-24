@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+#ifndef REGEXP_H
+#define REGEXP_H
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,6 +22,15 @@ typedef struct Inst Inst;
 typedef struct Memo Memo;
 typedef struct SearchState SearchState;
 typedef struct SearchStateTable SearchStateTable;
+typedef struct LanguageLengthInfo LanguageLengthInfo;
+
+struct LanguageLengthInfo
+{
+	/* Possible lengths of strings in the language of this regex. */
+	int tooManyLengths; /* Flag -- too many possible lengths */
+	int languageLengths[10]; /* Some possible lengths in the regex's SIMPLE language */
+	int nLanguageLengths; /* Bound on languageLengths */
+};
 
 struct Regexp
 {
@@ -29,6 +41,8 @@ struct Regexp
 	Regexp *right;
 	int bolAnchor;
 	int eolAnchor;
+
+	LanguageLengthInfo lli;
 };
 
 enum	/* Regexp.type */
@@ -77,6 +91,14 @@ struct Inst
 	int charClassMaxes[8]; /* Inclusive */
 	int charClassCounts;
 	int invert;
+
+	/* Used to determine RLE lengths if we memoize this Inst
+	 *   0 means accessed at consecutive characters (RLE width 1)
+	 *   1 means every other (RLE width 2)
+	 *   ...
+	 *   -1 means unknown (RLE width 1?)
+	 */
+	int runLength;
 };
 
 enum	/* Inst.opcode */
@@ -166,3 +188,5 @@ int pikevm(Prog*, char*, char**, int);
 int recursiveloopprog(Prog*, char*, char**, int);
 int recursiveprog(Prog*, char*, char**, int);
 int thompsonvm(Prog*, char*, char**, int);
+
+#endif /* REGEXP_H */

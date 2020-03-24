@@ -137,6 +137,7 @@ initMemoTable(Prog *prog, int nChars, int memoMode, int memoEncoding)
 		printf("%s: %d RLE-encoded visit vectors\n", prefix, nStatesToTrack);
 		for (i = 0; i < nStatesToTrack; i++) {
 			memo.rleVectors[i] = RLEVector_create();
+			/* TODO Incorporate runLength. */
 		}
 	} else {
 		printf("%s: Unexpected encoding %d", prefix, memo.encoding);
@@ -220,7 +221,7 @@ now(void)
 static void
 printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime)
 {
-	int i, j, k, n, count;
+	int i, j, n, count;
 
 	uint64_t endTime = now();
 	uint64_t elapsed_US = endTime - startTime;
