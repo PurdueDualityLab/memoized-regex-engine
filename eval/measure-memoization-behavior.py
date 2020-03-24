@@ -31,7 +31,7 @@ GROWTH_RATE_INF = "INF"
 
 SAVE_TMP_FILES = True
 
-EXPAND_EVIL_INPUT = True
+EXPAND_EVIL_INPUT = True # Get more SL regexes, corrects some common errors
 
 ##########
 
@@ -92,6 +92,9 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
       except BaseException:
         libLF.log("Error, a timeout should not have occurred with memoization in place")
         raise
+
+    if not SAVE_TMP_FILES:
+      os.unlink(queryFile)
 
     indivTimeCosts = [ meas.si_simTimeUS for meas in measures ]
     indivSpaceCosts = [
