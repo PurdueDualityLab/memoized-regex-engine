@@ -27,8 +27,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "rle.h"
 #include "vendor/avl_tree.h"
 
-#define BIT_ISSET(x, i) ( ( (x) & ( (1) << i ) ) != 0 )
-#define BIT_SET(x, i) ( (x) | ( (1) << i ) ) /* Returns with bit set */
+#define BIT_ISSET(x, i) ( ( (x) & ( (1) << (i) ) ) != 0 )
+#define BIT_SET(x, i) ( (x) | ( (1) << (i) ) ) /* Returns with bit set */
+/* Offset within a k-bit run. [0, bitsPerRun). */
+#define RUN_OFFSET(ix, bitsPerRun) ( (ix) % (bitsPerRun) ) 
+#define MASK_FOR(ix, bitsPerRun) ( BIT_SET(0, RUN_OFFSET(ix, bitsPerRun)) )
+/* Run number within a repeating sequence of k-bit runs. [0, nRuns). */
+#define RUN_NUMBER(ix, rleStart, bitsPerRun) ( ((ix) / (bitsPerRun)) - (rleStart) )
 
 static int TEST = 1;
 static int RUN_TIME_CHECKS = 1;
@@ -37,14 +42,15 @@ enum {
   VERBOSE_LVL_SOME,
   VERBOSE_LVL_ALL,
 };
-static int VERBOSE_LVL = VERBOSE_LVL_ALL;
+static int VERBOSE_LVL = VERBOSE_LVL_NONE;
 
 /* Internal API: RLENode */
 typedef struct RLENode RLENode;
 
 static void _RLEVector_validate(RLEVector *vec);
 
-/* For counting high water mark */
+/* For counting high water mark. Call in conjunction with avl insert/remove. */
+/* TODO These should wrap avl insert/remove */
 static void _RLEVector_addRun(RLEVector *vec);
 static void _RLEVector_subtractRun(RLEVector *vec);
 
@@ -81,6 +87,13 @@ RLENode_contains(RLENode *node, int ix)
   return node->offset <= ix && ix < RLENode_end(node);
 }
 
+static int
+RLENode_canMerge(RLENode *l, RLENode *r)
+{
+  return (l->run == r->run) && \
+    RLENode_end(l) == r->offset;
+}
+
 /* Returns 0 if target's offset lies within curr. */
 int
 RLENode_avl_tree_cmp(const struct avl_tree_node *target, const struct avl_tree_node *curr)
@@ -94,7 +107,7 @@ RLENode_avl_tree_cmp(const struct avl_tree_node *target, const struct avl_tree_n
   if (_target->offset < _curr->offset) {
     /* _target is smaller than _curr */
     return -1;
-  } else if (_target->offset < RLENode_end(_curr)) {
+  } else if (RLENode_contains(_curr, _target->offset)) {
     /* _target falls within _curr */
     return 0;
   } else {
@@ -226,71 +239,159 @@ _RLEVector_validate(RLEVector *vec)
   assert(vec->currNEntries == nNodes);
 }
 
+typedef struct RLENodeNeighbors RLENodeNeighbors;
+struct RLENodeNeighbors
+{
+  RLENode *a; /* Predecessor -- first before */
+  RLENode *b; /* Current, if it exists */
+  RLENode *c; /* Successor -- first after */
+};
+
+static RLENodeNeighbors
+RLEVector_getNeighbors(RLEVector *vec, int ix)
+{
+  RLENode target, *node;
+  RLENodeNeighbors rnn;
+  rnn.a = NULL;
+  rnn.b = NULL;
+  rnn.c = NULL;
+
+  target.offset = ix;
+  target.nRuns = -1;
+
+  /* Find a */
+  rnn.a = avl_tree_entry(
+    avl_tree_lookup_node_pred(vec->root, &target.node, RLENode_avl_tree_cmp),
+    RLENode, node);
+  
+  /* Find b or c */
+  if (rnn.a == NULL) {
+    node = avl_tree_entry(avl_tree_first_in_order(vec->root), RLENode, node);
+  } else {
+    node = avl_tree_entry(avl_tree_next_in_order(&rnn.a->node), RLENode, node);
+  }
+
+  if (RLENode_contains(node, ix)) {
+    /* We have b, let's add c */
+    rnn.b = node;
+    rnn.c = avl_tree_entry(avl_tree_next_in_order(&rnn.b->node), RLENode, node);
+  } else {
+    /* We have c */
+    rnn.b = NULL;
+    rnn.c = node;
+  }
+
+  return rnn;
+}
+
+static void
+RLEVector_mergeNeighbors(RLEVector *vec, RLENodeNeighbors rnn)
+{
+  int nBefore = vec->currNEntries;
+
+  /* Because rnn are adjacent, we can directly manipulate offsets without
+   * breaking the BST property. */
+  if (RLENode_canMerge(rnn.a, rnn.b)) {
+    avl_tree_remove(&vec->root, &rnn.b->node);
+    _RLEVector_subtractRun(vec);
+
+    rnn.a->nRuns += rnn.b->nRuns;
+
+    free(rnn.b);
+
+    /* Set b to a, so that the next logic will work. */
+    rnn.b = rnn.a;
+  }
+  if (RLENode_canMerge(rnn.b, rnn.c)) {
+    avl_tree_remove(&vec->root, &rnn.c->node);
+    _RLEVector_subtractRun(vec);
+
+    rnn.b->nRuns += rnn.c->nRuns;
+
+    free(rnn.c);
+  }
+
+  if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
+    printf("mergeNeighbors: before %d after %d\n", nBefore, vec->currNEntries);
+}
+
 void
 RLEVector_set(RLEVector *vec, int ix)
 {
-  RLENode target;
-  RLENode *pred = NULL, *succ = NULL;
-  int abutsPred = 0, abutsSucc = 0;
+  RLENodeNeighbors rnn;
+  RLENode *newRun = NULL;
+  int oldRunKernel = 0, newRunKernel = 0;
 
   if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
     printf("RLEVector_set: %d\n", ix);
 
   _RLEVector_validate(vec);
   assert(RLEVector_get(vec, ix) == 0); /* Shouldn't be set already */
-  
-  /* Find predecessor and successor. */
-  target.offset = ix;
-  target.nRuns = -1;
-  pred = avl_tree_entry(avl_tree_lookup_node_pred(vec->root, &target.node, RLENode_avl_tree_cmp), RLENode, node);
-  if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
-    printf("pred: %p\n", pred);
 
-  if (pred == NULL) {
-    succ = avl_tree_entry(avl_tree_first_in_order(vec->root), RLENode, node);
-  } else {
-    succ = avl_tree_entry(avl_tree_next_in_order(&pred->node), RLENode, node);
-  }
-  if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
-    printf("succ: %p\n", succ);
+  rnn = RLEVector_getNeighbors(vec, ix);
 
-  /* Relevant position */
-  if (pred != NULL && RLENode_end(pred) == ix) {
-    abutsPred = 1;
-  }
-  if (succ != NULL && ix == succ->offset - succ->nBitsInRun) {
-    abutsSucc = 1;
-  }
+  /* Handle the "new" and "split" cases.
+   * Update rnn.{a,b,c} as we go. */
+  if (rnn.b == NULL) {
+    /* Case: creates a run */
+    if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
+      printf("%d: Creating a run\n", ix);
 
-  if (abutsPred) {
-    /* Extend pred */
-    if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
-      printf("%d: Extending pred\n", ix);
-    RLENode_extendRight(pred);
-    if (succ != NULL && abutsSucc) {
-      /* Merge. */
-      if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
-        printf("%d: Merging succ\n", ix);
-      avl_tree_remove(&vec->root, &succ->node);
-      _RLEVector_subtractRun(vec);
-      pred->nRuns += succ->nRuns;
-    }
-  } else if (abutsSucc) {
-    /* Extend succ.
-     * Since pred was not adjacent, this does not violate the binary search property. */
-    if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
-      printf("%d: Extending succ\n", ix);
-    RLENode_extendLeft(succ);
-  } else {
-    /* New run, not adjacent to existing runs */
-    if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
-      printf("%d: New run\n", ix);
-    printf("RLENode_create: vec %p nBitsInRun %d\n", vec, vec->nBitsInRun);
-    RLENode *newNode = RLENode_create(ix, 1, BIT_SET(0, ix % vec->nBitsInRun), vec->nBitsInRun);
-    assert(avl_tree_insert(&vec->root, &newNode->node, RLENode_avl_tree_cmp) == NULL);
+    newRunKernel = MASK_FOR(ix, vec->nBitsInRun);
+    newRun = RLENode_create(ix, 1, newRunKernel, vec->nBitsInRun);
+
+    assert(avl_tree_insert(&vec->root, &newRun->node, RLENode_avl_tree_cmp) == NULL);
     _RLEVector_addRun(vec);
+    rnn.b = newRun;
+  } else {
+    /* Case: splits a run */
+    RLENode *prefixRun = NULL, *oldRun = NULL, *suffixRun = NULL;
+    int ixRunNumber = 0, nRunsInPrefix = 0, nRunsInSuffix = 0;
+
+    if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
+      printf("%d: Splitting a run\n", ix);
+
+    /* Calculate the run kernels */
+    oldRun = rnn.b;
+    oldRunKernel = oldRun->run;
+    newRunKernel = oldRunKernel | MASK_FOR(ix, vec->nBitsInRun);
+
+    /* Remove the affected run */
+    avl_tree_remove(&vec->root, &oldRun->node);
+    _RLEVector_subtractRun(vec);
+
+    /* Insert the new run */
+    newRun = RLENode_create(ix, 1, newRunKernel, vec->nBitsInRun);
+    _RLEVector_addRun(vec);
+    rnn.b = newRun;
+    
+    /* Insert prefix and suffix */
+    ixRunNumber = RUN_NUMBER(ix, oldRun->offset, oldRun->nBitsInRun);
+    nRunsInPrefix = ixRunNumber;
+    nRunsInSuffix = oldRun->nRuns - (ixRunNumber + 1);
+
+    if (nRunsInPrefix > 0) {
+      prefixRun = RLENode_create(oldRun->offset, nRunsInPrefix, oldRunKernel, vec->nBitsInRun);
+      assert(avl_tree_insert(&vec->root, &prefixRun->node, RLENode_avl_tree_cmp) == NULL);
+      _RLEVector_addRun(vec);
+
+      rnn.a = prefixRun;
+    }
+    if (nRunsInSuffix > 0) {
+      suffixRun = RLENode_create(ix, nRunsInSuffix, oldRunKernel, vec->nBitsInRun);
+      assert(avl_tree_insert(&vec->root, &suffixRun->node, RLENode_avl_tree_cmp) == NULL);
+      _RLEVector_addRun(vec);
+
+      rnn.c = suffixRun;
+    }
+
+    /* Clean up */
+    free(oldRun);
   }
 
+  RLEVector_mergeNeighbors(vec, rnn);
+  /* After merging, rnn.{a,b,c} is untrustworthy. */
+  
   _RLEVector_validate(vec);
   return;
 }
