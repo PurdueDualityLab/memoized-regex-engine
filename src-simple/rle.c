@@ -27,6 +27,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "rle.h"
 #include "vendor/avl_tree.h"
 
+#define BIT_ISSET(x, i) ( ( (x) & ( (1) << i ) ) != 0 )
+#define BIT_SET(x, i) ( (x) |= ( (1) << i ) )
+
 static int TEST = 0;
 enum {
   VERBOSE_LVL_NONE,
@@ -39,6 +42,8 @@ static int VERBOSE_LVL = VERBOSE_LVL_NONE;
 typedef struct RLENode RLENode;
 
 static void _RLEVector_validate(RLEVector *vec);
+
+/* For counting high water mark */
 static void _RLEVector_addRun(RLEVector *vec);
 static void _RLEVector_subtractRun(RLEVector *vec);
 
@@ -46,7 +51,16 @@ static void _RLEVector_subtractRun(RLEVector *vec);
 struct RLENode
 {
   int offset; /* Key */
-  int length;
+ 
+  /* Number of times the repeatedSequence is contained in this run.
+   * The run describes (length * nBitsInSequence) indices. */
+  int length;  
+
+  /* A bit representation of the run sequence.
+   * We look at bits 0, 1, 2, 3, ... (right-to-left).  */
+  int repeatedSequence; 
+  int nBitsInSequence; /* How many bits to look at */
+
   struct avl_tree_node node;
 };
 
@@ -63,7 +77,7 @@ RLENode_avl_tree_cmp(const struct avl_tree_node *target, const struct avl_tree_n
   if (_target->offset < _curr->offset) {
     /* _target is smaller than _curr */
     return -1;
-  } else if (_target->offset < _curr->offset + _curr->length) {
+  } else if (_target->offset < _curr->offset + (_curr->length * _curr->nBitsInSequence)) {
     /* _target falls within _curr */
     return 0;
   } else {
@@ -73,11 +87,13 @@ RLENode_avl_tree_cmp(const struct avl_tree_node *target, const struct avl_tree_n
 }
 
 static RLENode *
-RLENode_create(int offset, int length)
+RLENode_create(int offset, int length, int repeatedSequence, int nBitsInSequence)
 {
   RLENode *node = malloc(sizeof *node);
   node->offset = offset;
   node->length = length;
+  node->repeatedSequence = repeatedSequence;
+  node->nBitsInSequence = nBitsInSequence;
 
   return node;
 }
@@ -91,7 +107,7 @@ RLENode_extendRight(RLENode *node)
 void
 RLENode_extendLeft(RLENode *node)
 {
-  node->offset--;
+  node->offset -= node->nBitsInSequence;
   node->length++;
 }
 
@@ -101,11 +117,12 @@ struct RLEVector
 {
   struct avl_tree_node *root;
   int currNEntries;
-  int mostNEntries;
+  int mostNEntries; /* High water mark */
+  int nBitsInSequence; /* Length of the runs we can encode */
 };
 
 RLEVector *
-RLEVector_create()
+RLEVector_create(int runLength)
 {
   RLEVector *vec = malloc(sizeof *vec);
   vec->root = NULL;
@@ -172,7 +189,7 @@ _RLEVector_validate(RLEVector *vec)
 
     while (prev != NULL && curr != NULL) {
       assert(prev->offset < curr->offset); /* In-order */
-      assert(prev->offset + prev->length < curr->offset); /* Adjacent are merged */
+      assert(prev->offset + (prev->length * prev->nBitsInSequence) < curr->offset); /* Adjacent are merged */
       prev = curr;
       curr = avl_tree_entry(avl_tree_next_in_order(&curr->node), RLENode, node);
       nNodes++;
@@ -244,7 +261,7 @@ RLEVector_set(RLEVector *vec, int ix)
     /* New run, not adjacent to existing runs */
     if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
       printf("%d: New run\n", ix);
-    RLENode *newNode = RLENode_create(ix, 1);
+    RLENode *newNode = RLENode_create(ix, 1, 1, 1);
     assert(avl_tree_insert(&vec->root, &newNode->node, RLENode_avl_tree_cmp) == NULL);
     _RLEVector_addRun(vec);
   }
@@ -272,9 +289,10 @@ RLEVector_get(RLEVector *vec, int ix)
   if (match == NULL) {
     return 0;
   }
+
   if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
     printf("match: %p\n", match);
-  return 1;
+  return BIT_ISSET(match->repeatedSequence, ix % match->nBitsInSequence);
 }
 
 int

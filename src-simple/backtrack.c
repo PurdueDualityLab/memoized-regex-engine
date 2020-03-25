@@ -136,7 +136,7 @@ initMemoTable(Prog *prog, int nChars, int memoMode, int memoEncoding)
 
 		printf("%s: %d RLE-encoded visit vectors\n", prefix, nStatesToTrack);
 		for (i = 0; i < nStatesToTrack; i++) {
-			memo.rleVectors[i] = RLEVector_create();
+			memo.rleVectors[i] = RLEVector_create(/* TODO */ 1);
 			/* TODO Incorporate runLength. */
 		}
 	} else {

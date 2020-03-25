@@ -28,7 +28,7 @@ typedef struct RLEVector RLEVector;
 
 /* Starts all zeros */
 RLEVector *
-RLEVector_create();
+RLEVector_create(int runLength);
 
 void
 RLEVector_set(RLEVector *vec, int ix);
