@@ -31,6 +31,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BIT_SET(x, i) ( (x) | ( (1) << i ) ) /* Returns with bit set */
 
 static int TEST = 1;
+static int RUN_TIME_CHECKS = 1;
 enum {
   VERBOSE_LVL_NONE,
   VERBOSE_LVL_SOME,
@@ -74,6 +75,11 @@ RLENode_end(RLENode *node)
   return node->offset + RLENode_nBits(node);
 }
 
+static int
+RLENode_contains(RLENode *node, int ix)
+{
+  return node->offset <= ix && ix < RLENode_end(node);
+}
 
 /* Returns 0 if target's offset lies within curr. */
 int
@@ -178,11 +184,15 @@ RLEVector_create(int runLength)
   return vec;
 }
 
+/* Performs a full walk of the tree looking for fishy business. */
 static void
 _RLEVector_validate(RLEVector *vec)
 {
   RLENode *prev = NULL, *curr = NULL;
   int nNodes = 0;
+
+  if (!RUN_TIME_CHECKS)
+    return;
 
   if (VERBOSE_LVL >= VERBOSE_LVL_ALL) {
     printf("  _RLEVector_validate: Validating vec %p (size %d, runs of length %d)\n", vec, vec->currNEntries, vec->nBitsInRun);
