@@ -121,7 +121,7 @@ compile(Regexp *r, int memoMode)
 	p->start = (Inst*)(p+1);
 	pc = p->start;
 	for (i = 0; i < n; i++) {
-		pc[i].runLength = -1; /* A good default */
+		pc[i].runLength = 1; /* A good default */
 	}
 	emit(r, memoMode);
 	pc->opcode = Match;
@@ -514,23 +514,23 @@ printprog(Prog *p)
 			//printf("%2d. jmp %d\n", (int)(pc->stateNum), (int)(pc->x->stateNum));
 			break;
 		case Char:
-			printf("%2d. char %c (memo? %d -- state %d)\n", (int)(pc-p->start), pc->c, pc->shouldMemo, pc->memoStateNum);
+			printf("%2d. char %c (memo? %d -- state %d, runLength %d)\n", (int)(pc-p->start), pc->c, pc->shouldMemo, pc->memoStateNum, pc->runLength);
 			//printf("%2d. char %c\n", (int)(pc->stateNum), pc->c);
 			break;
 		case Any:
-			printf("%2d. any (memo? %d -- state %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum);
+			printf("%2d. any (memo? %d -- state %d, runLength %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum, pc->runLength);
 			//printf("%2d. any\n", (int)(pc->stateNum));
 			break;
 		case CharClass:
-			printf("%2d. charClass (memo? %d -- state %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum);
+			printf("%2d. charClass (memo? %d -- state %d, runLength %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum, pc->runLength);
 			//printf("%2d. any\n", (int)(pc->stateNum));
 			break;
 		case Match:
-			printf("%2d. match (memo? %d -- state %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum);
+			printf("%2d. match (memo? %d -- state %d, runLength %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum, pc->runLength);
 			//printf("%2d. match\n", (int)(pc->stateNum));
 			break;
 		case Save:
-			printf("%2d. save %d (memo? %d -- state %d)\n", (int)(pc-p->start), pc->n, pc->shouldMemo, pc->memoStateNum);
+			printf("%2d. save %d (memo? %d -- state %d, runLength %d)\n", (int)(pc-p->start), pc->n, pc->shouldMemo, pc->memoStateNum, pc->runLength);
 			//printf("%2d. save %d\n", (int)(pc->stateNum), pc->n);
 		}
 	}
