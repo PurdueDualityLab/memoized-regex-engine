@@ -351,7 +351,6 @@ emit(Regexp *r, int memoMode)
 		p1->x = pc;
 		emit(r->left, memoMode);
 		pc->opcode = Jmp;
-		pc->runLength = 1; /* ? */
 		p2 = pc++;
 		p1->y = pc;
 		emit(r->right, memoMode);
@@ -459,7 +458,7 @@ emit(Regexp *r, int memoMode)
 		emit(r->left, memoMode);
 		pc->opcode = Jmp;
 		pc->x = p1; /* Back-edge */
-		pc->x->runLength = lli_chooseRunLength(&r->left->lli);
+		pc->runLength = lli_chooseRunLength(&r->lli);
 		if (memoMode == MEMO_LOOP_DEST) {
 			pc->x->shouldMemo = 1;
 		}

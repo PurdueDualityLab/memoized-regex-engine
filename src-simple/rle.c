@@ -59,7 +59,7 @@ struct RLENode
 
   /* A bit representation of the run sequence.
    * We look at bits 0, 1, 2, 3, ... (right-to-left).  */
-  unsigned long long run; /* TODO Should be longer. */
+  unsigned long long run; /* 64 bits -- does this need to be longer? */
   int nBitsInRun; /* How many bits to look at */
 
   struct avl_tree_node node;
@@ -119,22 +119,7 @@ RLENode_create(int offset, int nRuns, unsigned long long run, int nBitsInRun)
   node->run = run;
   node->nBitsInRun = nBitsInRun;
 
-	assert(node->nBitsInRun <= 8*sizeof(node->run));
-
   return node;
-}
-
-void
-RLENode_extendRight(RLENode *node)
-{
-  node->nRuns++;
-}
-
-void
-RLENode_extendLeft(RLENode *node)
-{
-  node->offset -= node->nBitsInRun;
-  node->nRuns++;
 }
 
 /* External API: RLEVector */
@@ -150,11 +135,20 @@ struct RLEVector
 RLEVector *
 RLEVector_create(int runLength)
 {
+  RLENode node;
   RLEVector *vec = malloc(sizeof *vec);
   vec->root = NULL;
   vec->currNEntries = 0;
   vec->mostNEntries = 0;
   vec->nBitsInRun = runLength;
+
+  if (runLength > 8 * sizeof(node.run)) {
+    fprintf(stdout, "Need %d bits, only have %llu\n", runLength, 8 * sizeof(node.run));
+    fprintf(stderr, "Need %d bits, only have %llu\n", runLength, 8 * sizeof(node.run));
+    vec->nBitsInRun = 1;
+  }
+
+
   printf("RLEVector_create: vec %p nBitsInRun %d\n", vec, vec->nBitsInRun);
 
   if (TEST) {
@@ -225,7 +219,8 @@ _RLEVector_validate(RLEVector *vec)
     }
 
     while (prev != NULL && curr != NULL) {
-			printf("prev (%d,%d,%llu) curr (%d,%d,%llu)\n", prev->offset, prev->nRuns, prev->run, curr->offset, curr->nRuns, curr->run);
+      if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
+        printf("prev (%d,%d,%llu) curr (%d,%d,%llu)\n", prev->offset, prev->nRuns, prev->run, curr->offset, curr->nRuns, curr->run);
       assert(prev->offset < curr->offset); /* In-order */
 			if (RLENode_end(prev) == curr->offset) {
 				assert(prev->run != curr->run); /* Adjacent are merged */
@@ -319,6 +314,7 @@ RLEVector_getNeighbors(RLEVector *vec, int ix)
   return rnn;
 }
 
+/* Given a populated RNN, merge a-b and b-c if possible. */
 static void
 RLEVector_mergeNeighbors(RLEVector *vec, RLENodeNeighbors rnn)
 {
@@ -331,7 +327,8 @@ RLEVector_mergeNeighbors(RLEVector *vec, RLENodeNeighbors rnn)
 
     rnn.a->nRuns += rnn.b->nRuns;
 
-		printf("merge: Removed (%d,%d), merged with now-(%d,%d,%llu)\n", rnn.b->offset, rnn.b->nRuns, rnn.a->offset, rnn.a->nRuns, rnn.a->run);
+    if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
+      printf("merge: Removed (%d,%d), merged with now-(%d,%d,%llu)\n", rnn.b->offset, rnn.b->nRuns, rnn.a->offset, rnn.a->nRuns, rnn.a->run);
     free(rnn.b);
 
     /* Set b to a, so that the next logic will work. */
@@ -341,7 +338,8 @@ RLEVector_mergeNeighbors(RLEVector *vec, RLENodeNeighbors rnn)
     _RLEVector_removeRun(vec, rnn.c);
 
     rnn.b->nRuns += rnn.c->nRuns;
-		printf("merge: Removed (%d,%d), merged with now-(%d,%d,%llu)\n", rnn.c->offset, rnn.c->nRuns, rnn.b->offset, rnn.b->nRuns, rnn.b->run);
+    if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
+      printf("merge: Removed (%d,%d), merged with now-(%d,%d,%llu)\n", rnn.c->offset, rnn.c->nRuns, rnn.b->offset, rnn.b->nRuns, rnn.b->run);
 
     free(rnn.c);
   }
@@ -350,6 +348,15 @@ RLEVector_mergeNeighbors(RLEVector *vec, RLENodeNeighbors rnn)
     printf("mergeNeighbors: before %d after %d\n", nBefore, vec->currNEntries);
 }
 
+int
+RLEVector_runSize(RLEVector *vec)
+{
+  return vec->nBitsInRun;
+}
+
+/* Set the bit at ix.
+ * Invariant: always returns with vec fully merged; validate() should pass.
+ */
 void
 RLEVector_set(RLEVector *vec, int ix)
 {
@@ -427,7 +434,7 @@ RLEVector_set(RLEVector *vec, int ix)
     free(oldRun);
   }
 
-	if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
+	if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
 		printf("Before merge: run is (%d,%d,%llu)\n", rnn.b->offset, rnn.b->nRuns, rnn.b->run);
 
   RLEVector_mergeNeighbors(vec, rnn);

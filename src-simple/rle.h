@@ -30,6 +30,9 @@ typedef struct RLEVector RLEVector;
 RLEVector *
 RLEVector_create(int runLength);
 
+int
+RLEVector_runSize(RLEVector *vec);
+
 void
 RLEVector_set(RLEVector *vec, int ix);
 

@@ -371,8 +371,8 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime)
     break;
   case ENCODING_RLE:
     for (i = 0; i < memo->nStates; i++) {
-      printf("%s: vector %d has %d runs (max observed during execution: %d, max possible: %d)\n",
-        prefix, i,
+      printf("%s: memo vector %d (RL %d) has %d runs (max observed during execution: %d, max possible: %d)\n",
+        prefix, i, RLEVector_runSize(memo->rleVectors[i]),
         RLEVector_currSize(memo->rleVectors[i]),
         RLEVector_maxObservedSize(memo->rleVectors[i]),
         (memo->nChars / 2) + 1
