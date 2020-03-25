@@ -36,7 +36,7 @@ enum {
   VERBOSE_LVL_SOME,
   VERBOSE_LVL_ALL,
 };
-static int VERBOSE_LVL = VERBOSE_LVL_NONE;
+static int VERBOSE_LVL = VERBOSE_LVL_ALL;
 
 /* Internal API: RLENode */
 typedef struct RLENode RLENode;
@@ -140,6 +140,7 @@ RLEVector_create(int runLength)
   vec->currNEntries = 0;
   vec->mostNEntries = 0;
   vec->nBitsInRun = runLength;
+  printf("RLEVector_create: vec %p nBitsInRun %d\n", vec, vec->nBitsInRun);
 
   if (TEST) {
     RLEVector *vec2 = malloc(sizeof *vec);
@@ -148,6 +149,7 @@ RLEVector_create(int runLength)
     vec2->root = NULL;
     vec2->currNEntries = 0;
     vec2->mostNEntries = 0;
+    vec2->nBitsInRun = runLength;
     _RLEVector_validate(vec2);
 
     printf("get from empty\n");
@@ -183,7 +185,7 @@ _RLEVector_validate(RLEVector *vec)
   int nNodes = 0;
 
   if (VERBOSE_LVL >= VERBOSE_LVL_ALL) {
-    printf("  _RLEVector_validate: Validating vec %p (size %d)\n", vec, vec->currNEntries);
+    printf("  _RLEVector_validate: Validating vec %p (size %d, runs of length %d)\n", vec, vec->currNEntries, vec->nBitsInRun);
   }
 
 
@@ -273,6 +275,7 @@ RLEVector_set(RLEVector *vec, int ix)
     /* New run, not adjacent to existing runs */
     if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
       printf("%d: New run\n", ix);
+    printf("RLENode_create: vec %p nBitsInRun %d\n", vec, vec->nBitsInRun);
     RLENode *newNode = RLENode_create(ix, 1, BIT_SET(0, ix % vec->nBitsInRun), vec->nBitsInRun);
     assert(avl_tree_insert(&vec->root, &newNode->node, RLENode_avl_tree_cmp) == NULL);
     _RLEVector_addRun(vec);
