@@ -28,7 +28,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "vendor/avl_tree.h"
 
 #define BIT_ISSET(x, i) ( ( (x) & ( (1) << i ) ) != 0 )
-#define BIT_SET(x, i) ( (x) |= ( (1) << i ) )
+#define BIT_SET(x, i) ( (x) | ( (1) << i ) ) /* Returns with bit set */
 
 static int TEST = 1;
 enum {
@@ -129,7 +129,7 @@ struct RLEVector
   struct avl_tree_node *root;
   int currNEntries;
   int mostNEntries; /* High water mark */
-  int nBitsInRun; /* Length of the runs we can encode */
+  int nBitsInRun; /* Length of the runs we encode */
 };
 
 RLEVector *
@@ -139,6 +139,7 @@ RLEVector_create(int runLength)
   vec->root = NULL;
   vec->currNEntries = 0;
   vec->mostNEntries = 0;
+  vec->nBitsInRun = runLength;
 
   if (TEST) {
     RLEVector *vec2 = malloc(sizeof *vec);
@@ -272,7 +273,7 @@ RLEVector_set(RLEVector *vec, int ix)
     /* New run, not adjacent to existing runs */
     if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
       printf("%d: New run\n", ix);
-    RLENode *newNode = RLENode_create(ix, 1, 1, 1);
+    RLENode *newNode = RLENode_create(ix, 1, BIT_SET(0, ix % vec->nBitsInRun), vec->nBitsInRun);
     assert(avl_tree_insert(&vec->root, &newNode->node, RLENode_avl_tree_cmp) == NULL);
     _RLEVector_addRun(vec);
   }
