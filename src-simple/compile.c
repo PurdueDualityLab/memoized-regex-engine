@@ -62,53 +62,54 @@ lli_print(LanguageLengthInfo *lli)
 	return;
 }
 
+/* Computes the LCM of the integers >= 1 in arr. */
+static int
+leastCommonMultiple(int arr[], int n)
+{
+	int i, smallest = -1, product = 1, possibleLCM = -1;
+
+	/* Compute an overall product -- this is the maximum possible LCM.
+	 * Also obtain the smallest entry > 1. */
+	for (i = 0; i < n; i++) {
+		if (1 < arr[i]) {
+			product *= arr[i];
+		}
+
+		if (smallest == -1 || (1 < arr[i] && arr[i] < smallest))
+			smallest = arr[i];
+	}
+	if (smallest == -1)
+		smallest = 1;
+	
+	/* The LCM contains all of the factors of smallest.
+	 * Look at its multiples until we find the LCM. */
+	possibleLCM = smallest;
+	while (possibleLCM < product) {
+		int nDivisible = 0;
+		for (i = 0; i < n; i++) {
+			if (arr[i] <= 0 || possibleLCM % arr[i] == 0)
+				nDivisible++;
+		}
+
+		if (nDivisible == n)
+			return possibleLCM;
+
+		possibleLCM += smallest;
+	}
+
+	return product;
+}
+
 static int
 lli_chooseRunLength(LanguageLengthInfo *lli)
 {
-	int i, product = 1, largest = -1, possibleLCM;
 	if (lli->tooManyLengths) {
 		printf("Run length overflow\n");
 		return 2; /* A good default -- no worse than 1, and maybe better */
 	}
 
 	/* Find the LCM of the language lengths */
-
-	/* Compute upper bound on LCM, and get largest length. */
-	// printf("LCM: Values: ");
-	for (i = 0; i < lli->nLanguageLengths; i++) {
-		if (lli->languageLengths[i] > 0) {
-			product *= lli->languageLengths[i];
-			if (lli->languageLengths[i] > largest) {
-				largest = lli->languageLengths[i];
-			}
-		}
-	}
-	// printf("\nLCM: largest %d, product: %d\n", largest, product);
-
-	if (largest < 1)
-		return 1;
-
-	/* Consider all values from largest to product. */
-	/* NB: It would be faster to look by multiples of smallest>1. */
-	possibleLCM = largest;
-	while (possibleLCM < product) {
-		int isLCM = 1;
-		for (i = 0; i < lli->nLanguageLengths; i++) {
-			if (lli->languageLengths[i] > 1 && possibleLCM % lli->languageLengths[i] != 0) {
-				isLCM = 0;
-				break;
-			}
-		}
-		if (isLCM) {
-			// printf("LCM: %d\n", possibleLCM);
-			return possibleLCM;
-		}
-
-		possibleLCM++;
-	}
-
-	// printf("LCM: %d\n", product);
-	return product;
+	return leastCommonMultiple(lli->languageLengths, lli->nLanguageLengths);
 }
 
 void
