@@ -29,6 +29,8 @@ shellDeps = [ libMemo.ProtoRegexEngine.CLI ]
 MATCH_TIMEOUT = 2 # Seconds
 GROWTH_RATE_INF = "INF"
 
+CHECK_TIME_COEFFICIENT_OF_VARIANCE = False
+
 SAVE_TMP_FILES = True
 
 EXPAND_EVIL_INPUT = True # Get more SL regexes, corrects some common errors
@@ -51,6 +53,14 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
     self.nTrialsPerCondition = nTrialsPerCondition
   
   def run(self):
+    """Run task
+    
+    Returns:
+      If SL: a pd.DataFrame with the data when run under PERF_PUMPS_TO_TRY[-1]
+      Else: MyTask.NOT_SL
+      Captures and returns non-KeyboardInterrupt exceptions raised during execution
+    Raises: KeyboardInterrupt
+    """
     try:
       libLF.log('Working on regex: /{}/'.format(self.regex.pattern))
 
@@ -65,11 +75,9 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
       libLF.log("  2. Running analysis on SL regex")
       self.pump_to_mdas = self._runSLDynamicAnalysis(self.regex, ei, self.nTrialsPerCondition)
 
-      # TODO Also need something for non-SL regexes
-
       # Return
       libLF.log('Completed regex /{}/'.format(self.regex.pattern))
-      return self.pump_to_mdas[MyTask.PERF_PUMPS_TO_TRY[-1]] # Just return the biggest one for now
+      return self.pump_to_mdas[MyTask.PERF_PUMPS_TO_TRY[-1]].toDataFrame() # Just return the biggest one for now
     except KeyboardInterrupt:
       raise
     except BaseException as err:
@@ -105,11 +113,12 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
     # Space costs should be constant
     assert min(indivSpaceCosts) == max(indivSpaceCosts), "Space costs are not constant"
 
-    # Let's check that time costs do not vary too much, warn if it's too high
-    time_coefficientOfVariance = statistics.stdev(indivTimeCosts) / statistics.mean(indivTimeCosts)
-    libLF.log("Time coefficient of variance: {}".format(round(time_coefficientOfVariance, 2)))
-    if 0.5 < time_coefficientOfVariance:
-      libLF.log("Warning, time CV {} was >= 0.5".format(time_coefficientOfVariance))
+    if CHECK_TIME_COEFFICIENT_OF_VARIANCE:
+      # Let's check that time costs do not vary too much, warn if it's too high
+      time_coefficientOfVariance = statistics.stdev(indivTimeCosts) / statistics.mean(indivTimeCosts)
+      libLF.log("Time coefficient of variance: {}".format(round(time_coefficientOfVariance, 2)))
+      if 0.5 < time_coefficientOfVariance:
+        libLF.log("Warning, time CV {} was >= 0.5".format(time_coefficientOfVariance))
 
     # Condense
     automatonSize = measures[0].ii_nStates
@@ -285,7 +294,7 @@ def loadRegexFile(regexFile):
 
 ################
 
-def main(regexFile, nTrialsPerCondition, outFile):
+def main(regexFile, nTrialsPerCondition, timeSensitive, outFile):
   libLF.log('regexFile {} nTrialsPerCondition {} outFile {}' \
     .format(regexFile, nTrialsPerCondition, outFile))
 
@@ -303,27 +312,24 @@ def main(regexFile, nTrialsPerCondition, outFile):
   nNonSL = 0
   nExceptions = 0
 
-  for i, t in enumerate(tasks):
-    libLF.log("Working on task %d/%d" % (i+1, len(tasks)))
-    try:
-      res = t.run()
-      if type(res) is libMemo.MemoizationDynamicAnalysis:
-        nSL += 1
+  nWorkers = 1 if timeSensitive else libLF.parallel.CPUCount.CPU_BOUND
+  libLF.log("timeSensitive {}, so using {} workers".format(timeSensitive, nWorkers))
+  results = libLF.parallel.map(tasks, nWorkers,
+    libLF.parallel.RateLimitEnums.NO_RATE_LIMIT, libLF.parallel.RateLimitEnums.NO_RATE_LIMIT,
+    jitter=False)
+  
+  for t, res in zip(tasks, results):
+    if type(res) is pd.DataFrame:
+      nSL += 1
 
-        resDF = res.toDataFrame()
-        if df is None:
-          df = resDF
-        else:
-          df = df.append(resDF)
-      elif type(res) is type(MyTask.NOT_SL) and res == MyTask.NOT_SL:
-        nNonSL += 1
+      if df is None:
+        df = res
       else:
-        libLF.log("Exception on /{}/: {}".format(t.regex.pattern, res))
-        nExceptions += 1
-
-    except BaseException as err:
-      libLF.log("Exception on /{}/: {}".format(t.regex.pattern, err))
-      traceback.print_exc()
+        df = df.append(res)
+    elif type(res) is type(MyTask.NOT_SL) and res == MyTask.NOT_SL:
+      nNonSL += 1
+    else:
+      libLF.log("Exception on /{}/: {}".format(t.regex.pattern, res))
       nExceptions += 1
   
   libLF.log("{} regexes were SL, {} non-SL, {} exceptions".format(nSL, nNonSL, nExceptions))
@@ -341,6 +347,8 @@ parser.add_argument('--regex-file', type=str, help='In: NDJSON file of objects c
   dest='regexFile')
 parser.add_argument('--trials', type=int, help='In: Number of trials per experimental condition (only affects time complexity)', required=False, default=20,
   dest='nTrialsPerCondition')
+parser.add_argument('--time-sensitive', help='In: Is this a time-sensitive analysis? If not, run in parallel', required=False, action='store_true', default=False,
+  dest='timeSensitive')
 parser.add_argument('--out-file', type=str, help='Out: A pickled dataframe converted from libMemo.MemoizationDynamicAnalysis objects. For best performance, the name should end in .pkl.bz2', required=True,
   dest='outFile')
 
@@ -348,4 +356,4 @@ parser.add_argument('--out-file', type=str, help='Out: A pickled dataframe conve
 args = parser.parse_args()
 
 # Here we go!
-main(args.regexFile, args.nTrialsPerCondition, args.outFile)
+main(args.regexFile, args.nTrialsPerCondition, args.timeSensitive, args.outFile)
