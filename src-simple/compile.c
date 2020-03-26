@@ -187,26 +187,30 @@ compile(Regexp *r, int memoMode)
 	}
 
 	/* Determine which nodes to memoize based on memo mode. */
-	if (memoMode == MEMO_FULL) {
+	switch (memoMode) {
+	case MEMO_FULL:
 		for (i = 0; i < p->len; i++){
 			p->start[i].shouldMemo = 1;
 		}
-	}
-	else if (memoMode == MEMO_IN_DEGREE_GT1) {
+		break;
+	case MEMO_IN_DEGREE_GT1:
 		compute_in_degrees(p);
 		for (i = 0; i < p->len; i++) {
 			if (p->start[i].inDegree > 1) {
 				p->start[i].shouldMemo = 1;
 			}
 		}
-	}
-	else if (memoMode == MEMO_LOOP_DEST) {
+		break;
+	case MEMO_LOOP_DEST:
 		/* This is done in emit(). */
-	}
-	else if (memoMode == MEMO_NONE) {
+		break;
+	case MEMO_NONE:
 		for (i = 0; i < p->len; i++) {
 			p->start[i].shouldMemo = 0;
 		}
+		break;
+	default:
+		assert(!"Unknown memoMode\n");
 	}
 
 	/* Assign memoStateNum to the shouldMemo nodes */
