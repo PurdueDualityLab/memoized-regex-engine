@@ -9,6 +9,7 @@ import libLF
 
 # Other imports
 import json
+import re
 import tempfile
 import pandas as pd
 
@@ -90,6 +91,11 @@ class ProtoRegexEngine:
                 raise SyntaxError("Engine raised syntax error\n  rc: {}\nstdout:\n{}\n\nstderr:\n{}".format(rc, stdout, stderr))
             else:
                 raise BaseException('Invocation failed; rc {} stdout\n  {}\n\nstderr\n  {}'.format(rc, stdout, stderr))
+
+        res = re.search(r"Need (\d+) bits", stdout)
+        if res:
+          libLF.log("Wished for {} bits".format(res.group(1)))
+
         return ProtoRegexEngine.EngineMeasurements(stderr)
     
     class EngineMeasurements:
