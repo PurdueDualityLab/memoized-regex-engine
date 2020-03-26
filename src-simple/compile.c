@@ -108,6 +108,55 @@ lli_chooseRunLength(LanguageLengthInfo *lli)
 	return product;
 }
 
+void
+compute_in_degrees(Prog *p)
+{
+	int i;
+
+	/* Initialize */
+	for (i = 0; i < p->len; i++) {
+		p->start[i].inDegree = 0;
+	}
+	/* q0 has an in-edge */
+	p->start[0].inDegree = 1;
+
+	/* Increment */
+	for (i = 0; i < p->len; i++) {
+		switch(p->start[i].opcode) {
+		default:
+			fatal("bad count");
+		case Char:
+			/* Always goes to next instr */
+			p->start[i+1].inDegree++;
+			break;
+		case Match:
+			/* Terminates search */
+			break;
+		case Jmp:
+			/* Goes to X */
+			p->start[i].x->inDegree++;
+			break;
+		case Split:
+			/* Goes to X or Y */
+			p->start[i].x->inDegree++;
+			p->start[i].y->inDegree++;
+			break;
+		case Any:
+			/* Always goes to next instr */
+			p->start[i+1].inDegree++;
+			break;
+		case CharClass:
+			/* Always goes to next instr */
+			p->start[i+1].inDegree++;
+			break;
+		case Save:
+			/* Always goes to next instr */
+			p->start[i+1].inDegree++;
+			break;
+		}
+	}
+}
+
 
 Prog*
 compile(Regexp *r, int memoMode)
@@ -144,45 +193,7 @@ compile(Regexp *r, int memoMode)
 		}
 	}
 	else if (memoMode == MEMO_IN_DEGREE_GT1) {
-		/* Compute in-degrees */
-
-		/* q0 has an in-edge */
-		p->start[0].inDegree = 1;
-		for (i = 0; i < p->len; i++) {
-			switch(p->start[i].opcode) {
-			default:
-				fatal("bad count");
-			case Char:
-				/* Always goes to next instr */
-				p->start[i+1].inDegree++;
-				break;
-			case Match:
-				/* Terminates search */
-				break;
-			case Jmp:
-				/* Goes to X */
-				p->start[i].x->inDegree++;
-				break;
-			case Split:
-				/* Goes to X or Y */
-				p->start[i].x->inDegree++;
-				p->start[i].y->inDegree++;
-				break;
-			case Any:
-				/* Always goes to next instr */
-				p->start[i+1].inDegree++;
-				break;
-			case CharClass:
-				/* Always goes to next instr */
-				p->start[i+1].inDegree++;
-				break;
-			case Save:
-				/* Always goes to next instr */
-				p->start[i+1].inDegree++;
-				break;
-			}
-		}
-
+		compute_in_degrees(p);
 		for (i = 0; i < p->len; i++) {
 			if (p->start[i].inDegree > 1) {
 				p->start[i].shouldMemo = 1;
