@@ -110,7 +110,7 @@ leastCommonMultiple2(int a, int b)
 
 /* LCM */
 static int
-lli_smallestPeriod(LanguageLengthInfo *lli)
+lli_smallestUniversalPeriod(LanguageLengthInfo *lli)
 {
 	if (lli->tooManyLengths) {
 		printf("Run length overflow\n");
@@ -400,8 +400,8 @@ Regexp_calcVisitInterval(Regexp *r)
 			r->right->visitInterval);
 		*/
 		r->visitInterval = leastCommonMultiple2(
-			lli_smallestPeriod(&r->left->lli),
-			lli_smallestPeriod(&r->right->lli)
+			lli_smallestUniversalPeriod(&r->left->lli),
+			lli_smallestUniversalPeriod(&r->right->lli)
 		);
 
 		if (LOG_LLI)
@@ -411,13 +411,31 @@ Regexp_calcVisitInterval(Regexp *r)
 		Regexp_calcVisitInterval(r->left);
 		Regexp_calcVisitInterval(r->right);
 
-		r->visitInterval = leastCommonMultiple2(r->left->visitInterval, \
-			lli_smallestPeriod(&r->right->lli));
+#if 0
+		/* This helps dotStar-1 */
+		r->visitInterval = leastCommonMultiple2(
+			lli_smallestUniversalPeriod(&r->left->lli), // <-- This
+			lli_smallestUniversalPeriod(&r->right->lli)
+		);
+
+		/* This helps concat-1 */
+		r->visitInterval = leastCommonMultiple2(
+			r->left->visitInterval,
+			lli_smallestUniversalPeriod(&r->right->lli)
+		);
+#endif
+
+		/* Experimental. TODO This is a hack, there's some more subtle error here. */
+		r->visitInterval = leastCommonMultiple2(
+			leastCommonMultiple2(r->left->visitInterval, lli_smallestUniversalPeriod(&r->left->lli)),
+			leastCommonMultiple2(r->right->visitInterval, lli_smallestUniversalPeriod(&r->right->lli))
+		);
+
 		/* Right incurs intervals from left. */
 		r->right->visitInterval = r->visitInterval;
 
 		if (LOG_LLI)
-			printf("Cat: VI self, R have %d\n", r->visitInterval);
+			printf("Cat: VI self %d, L %d, R %d\n", r->visitInterval, r->left->visitInterval, r->right->visitInterval);
 		break;
 	case Lit:
 	case Dot:
@@ -435,7 +453,7 @@ Regexp_calcVisitInterval(Regexp *r)
 	case Star:
 	case Plus:
 		Regexp_calcVisitInterval(r->left);
-		r->visitInterval = lli_smallestPeriod(&r->left->lli);
+		r->visitInterval = lli_smallestUniversalPeriod(&r->left->lli);
 		if (LOG_LLI)
 			printf("Quest|Star|Plus: VI %d\n", r->visitInterval);
 		break;
@@ -487,25 +505,14 @@ emit(Regexp *r, int memoMode)
 		break;
 
 	case Cat:
-		/* Need to do anything for pc->visitInterval? */
-		if (LOG_LLI) {
-			printf("\n  CAT\n  \n");
-			printf("Cat: lli self\n");
-			lli_print(&r->lli);
-			printf("Cat: lli left\n");
-			lli_print(&r->left->lli);
-			printf("Cat: lli right\n");
-			lli_print(&r->right->lli);
-			printf("\n\n");
-		}
-
 		p1 = pc;
 		emit(r->left, memoMode);
 		p2 = pc;
 		emit(r->right, memoMode);
 
-		//p2->visitInterval = leastCommonMultiple(nums, n);
+		printf("cat: vi %d l->vi %d l->LCM %d r->vi %d r->LCM %d\n", r->visitInterval, r->left->visitInterval, lli_smallestUniversalPeriod(&r->left->lli), r->right->visitInterval, lli_smallestUniversalPeriod(&r->right->lli));
 		p2->visitInterval = r->right->visitInterval;
+		p2->visitInterval = r->visitInterval;
 		break;
 	
 	case Lit:
@@ -574,16 +581,16 @@ emit(Regexp *r, int memoMode)
 	case Paren:
 		pc->opcode = Save;
 		pc->n = 2*r->n;
-		printf("Save: r->VI %d r->left->VI %d r->left->smallestPeriod %d\n", r->visitInterval, r->left->visitInterval, lli_smallestPeriod(&r->left->lli));
-		//pc->visitInterval = lli_smallestPeriod(&r->left->lli);
+		printf("Save: r->VI %d r->left->VI %d r->left->smallestUniversalPeriod %d\n", r->visitInterval, r->left->visitInterval, lli_smallestUniversalPeriod(&r->left->lli));
+		//pc->visitInterval = lli_smallestUniversalPeriod(&r->left->lli);
 		pc->visitInterval = r->visitInterval;
 		pc++;
 		emit(r->left, memoMode);
 		pc->opcode = Save;
 		pc->n = 2*r->n + 1;
-		// pc->visitInterval = lli_smallestPeriod(&r->left->lli);
-		// pc->visitInterval = lli_smallestPeriod(&r->left->lli);
-		//pc->visitInterval = lli_smallestPeriod(&r->left->lli);
+		// pc->visitInterval = lli_smallestUniversalPeriod(&r->left->lli);
+		// pc->visitInterval = lli_smallestUniversalPeriod(&r->left->lli);
+		//pc->visitInterval = lli_smallestUniversalPeriod(&r->left->lli);
 		pc->visitInterval = r->visitInterval;
 		pc++;
 		break;
@@ -605,14 +612,14 @@ emit(Regexp *r, int memoMode)
 	case Star:
 		pc->opcode = Split;
 		pc->visitInterval = r->visitInterval;
-		// pc->visitInterval = lli_smallestPeriod(&r->lli);
+		// pc->visitInterval = lli_smallestUniversalPeriod(&r->lli);
 		p1 = pc++;
 		p1->x = pc;
 		emit(r->left, memoMode);
 		pc->opcode = Jmp;
 		pc->x = p1; /* Back-edge */
 		pc->visitInterval = r->visitInterval;
-		// pc->visitInterval = lli_smallestPeriod(&r->lli);
+		// pc->visitInterval = lli_smallestUniversalPeriod(&r->lli);
 		if (memoMode == MEMO_LOOP_DEST) {
 			pc->x->shouldMemo = 1;
 		}
@@ -632,7 +639,7 @@ emit(Regexp *r, int memoMode)
 		pc->x = p1; /* Back-edge */
 		p1->visitInterval = r->visitInterval;
 		pc->visitInterval = r->visitInterval;
-		// pc->visitInterval = lli_smallestPeriod(&r->left->lli);
+		// pc->visitInterval = lli_smallestUniversalPeriod(&r->left->lli);
 		if (memoMode == MEMO_LOOP_DEST) {
 			pc->x->shouldMemo = 1;
 		}
