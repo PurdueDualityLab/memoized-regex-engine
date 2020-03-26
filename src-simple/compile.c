@@ -425,17 +425,52 @@ Regexp_calcVisitInterval(Regexp *r)
 		);
 #endif
 
-		/* Experimental. TODO This is a hack, there's some more subtle error here. */
+		/* Experimental.
+		 * TODO This is a hack. Concatenation SUPs get longer and longer,
+		 * but we only need to care when we reach a vertex with its own VI? */
 		r->visitInterval = leastCommonMultiple2(
 			leastCommonMultiple2(r->left->visitInterval, lli_smallestUniversalPeriod(&r->left->lli)),
 			leastCommonMultiple2(r->right->visitInterval, lli_smallestUniversalPeriod(&r->right->lli))
 		);
 
+		// TODO Experimenting.
+
+#if 0
+		if (r->right->visitInterval > 1) {
+		} else{
+
+		}
+#endif
+		r->visitInterval = leastCommonMultiple2(
+			//leastCommonMultiple2(r->left->visitInterval, lli_smallestUniversalPeriod(&r->left->lli)),
+			//lli_smallestUniversalPeriod(&r->left->lli),
+			r->left->visitInterval,
+			//leastCommonMultiple2(r->right->visitInterval, lli_smallestUniversalPeriod(&r->right->lli))
+			//r->right->visitInterval
+			lli_smallestUniversalPeriod(&r->right->lli)
+		);
+
 		/* Right incurs intervals from left. */
-		r->right->visitInterval = r->visitInterval;
+		r->right->visitInterval = leastCommonMultiple2(
+			r->left->visitInterval,
+			lli_smallestUniversalPeriod(&r->right->lli)
+		);
+
+		/* Whole takes on only left. */
+		r->visitInterval = r->right->visitInterval;
+
+		////
+		r->right->visitInterval = leastCommonMultiple2(
+			lli_smallestUniversalPeriod(&r->left->lli),
+			lli_smallestUniversalPeriod(&r->right->lli)
+		);
+		r->visitInterval = leastCommonMultiple2(
+			r->left->visitInterval,
+			r->right->visitInterval
+		);
 
 		if (LOG_LLI)
-			printf("Cat: VI self %d, L %d, R %d\n", r->visitInterval, r->left->visitInterval, r->right->visitInterval);
+			printf("Cat: VI self %d l->vi %d l->SUP %d r->vi %d r->SUP %d\n", r->visitInterval, r->left->visitInterval, lli_smallestUniversalPeriod(&r->left->lli), r->right->visitInterval, lli_smallestUniversalPeriod(&r->right->lli));
 		break;
 	case Lit:
 	case Dot:
@@ -510,7 +545,7 @@ emit(Regexp *r, int memoMode)
 		p2 = pc;
 		emit(r->right, memoMode);
 
-		printf("cat: vi %d l->vi %d l->LCM %d r->vi %d r->LCM %d\n", r->visitInterval, r->left->visitInterval, lli_smallestUniversalPeriod(&r->left->lli), r->right->visitInterval, lli_smallestUniversalPeriod(&r->right->lli));
+		printf("cat: vi %d l->vi %d l->SUP %d r->vi %d r->SUP %d\n", r->visitInterval, r->left->visitInterval, lli_smallestUniversalPeriod(&r->left->lli), r->right->visitInterval, lli_smallestUniversalPeriod(&r->right->lli));
 		p2->visitInterval = r->right->visitInterval;
 		p2->visitInterval = r->visitInterval;
 		break;
