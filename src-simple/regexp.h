@@ -164,7 +164,7 @@ struct Memo
 	/* ENCODING_NEGATIVE */
 	SearchStateTable *searchStateTable; /* < q, i > */
 
-	/* ENCODING_RLE */
+	/* ENCODING_RLE, ENCODING_RLE_TUNED */
 	RLEVector **rleVectors;
 };
 
@@ -179,8 +179,9 @@ enum /* Memo.mode */
 enum /* Memo.encoding */
 {
 	ENCODING_NONE,
-	ENCODING_NEGATIVE, /* Hash table */
-	ENCODING_RLE,      /* Run-length encoding */
+	ENCODING_NEGATIVE,  /* Hash table */
+	ENCODING_RLE,       /* Run-length encoding */
+	ENCODING_RLE_TUNED, /* RLE, tuned for language lengths */
 };
 
 int backtrack(Prog*, char*, char**, int);

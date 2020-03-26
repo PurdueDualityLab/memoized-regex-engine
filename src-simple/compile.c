@@ -5,6 +5,8 @@
 #include "regexp.h"
 #include <ctype.h>
 
+static int LOG_LLI = 0;
+
 static Inst *pc; /* VM array */
 static int count(Regexp*);
 static void determineSimpleLanguageLengths(Regexp *r);
@@ -49,11 +51,13 @@ lli_print(LanguageLengthInfo *lli)
 		printf("LLI: Over-full\n");
 
 	/* Check if it's present already */
-	printf("LLI: %d lengths: ", lli->nLanguageLengths);
-	for (i = 0; i < lli->nLanguageLengths; i++) {
-		printf("%d,", lli->languageLengths[i]);
+	if (LOG_LLI) {
+		printf("LLI: %d lengths: ", lli->nLanguageLengths);
+		for (i = 0; i < lli->nLanguageLengths; i++) {
+			printf("%d,", lli->languageLengths[i]);
+		}
+		printf("\n");
 	}
-	printf("\n");
 
 	return;
 }
@@ -68,17 +72,16 @@ lli_chooseRunLength(LanguageLengthInfo *lli)
 	/* Find the LCM of the language lengths */
 
 	/* Compute upper bound on LCM, and get largest length. */
-	printf("LCM: Values: ");
+	// printf("LCM: Values: ");
 	for (i = 0; i < lli->nLanguageLengths; i++) {
 		if (lli->languageLengths[i] > 0) {
-			printf("%d,", lli->languageLengths[i]);
 			product *= lli->languageLengths[i];
 			if (lli->languageLengths[i] > largest) {
 				largest = lli->languageLengths[i];
 			}
 		}
 	}
-	printf("\nLCM: largest %d, product: %d\n", largest, product);
+	// printf("\nLCM: largest %d, product: %d\n", largest, product);
 
 	if (largest < 1)
 		return 1;
@@ -94,14 +97,14 @@ lli_chooseRunLength(LanguageLengthInfo *lli)
 			}
 		}
 		if (isLCM) {
-			printf("LCM: %d\n", possibleLCM);
+			// printf("LCM: %d\n", possibleLCM);
 			return possibleLCM;
 		}
 
 		possibleLCM++;
 	}
 
-	printf("LCM: %d\n", product);
+	// printf("LCM: %d\n", product);
 	return product;
 }
 
@@ -258,8 +261,10 @@ determineSimpleLanguageLengths(Regexp *r)
 			lli_addEntry(&r->lli, r->right->lli.languageLengths[i]);
 		}
 
-		printf("LLI: Alt\n");
-		lli_print(&r->lli);
+		if (LOG_LLI) {
+			printf("LLI: Alt\n");
+			lli_print(&r->lli);
+		}
 		break;
 	case Cat:
 		determineSimpleLanguageLengths(r->left);
@@ -273,42 +278,59 @@ determineSimpleLanguageLengths(Regexp *r)
 			}
 		}
 
-		printf("LLI: Cat\n");
-		lli_print(&r->lli);
+		if (LOG_LLI) {
+			printf("LLI: Cat\n");
+			lli_print(&r->lli);
+		}
 		break;
 	case Lit:
 	case Dot:
 	case CharEscape:
 		r->lli.nLanguageLengths = 1;
 		r->lli.languageLengths[0] = 1;
-		printf("LLI: Lit,Dot,CharEscape\n");
-		lli_print(&r->lli);
+
+		if (LOG_LLI) {
+			printf("LLI: Lit,Dot,CharEscape\n");
+			lli_print(&r->lli);
+		}
 		break;
 	case Paren:
 		determineSimpleLanguageLengths(r->left);
 		r->lli = r->left->lli;
-		printf("LLI: Paren\n");
-		lli_print(&r->lli);
+
+		if (LOG_LLI) {
+			printf("LLI: Paren\n");
+			lli_print(&r->lli);
+		}
 		break;
 	case Quest:
 		determineSimpleLanguageLengths(r->left);
 		r->lli = r->left->lli;
 		lli_addEntry(&r->lli, 0);
-		printf("LLI: Quest:\n");
-		lli_print(&r->lli);
+
+		if (LOG_LLI) {
+			printf("LLI: Quest:\n");
+			lli_print(&r->lli);
+		}
 		break;
 	case Star:
 		determineSimpleLanguageLengths(r->left);
 		r->lli = r->left->lli;
 		lli_addEntry(&r->lli, 0);
-		printf("LLI: Star\n");
-		lli_print(&r->lli);
+
+		if (LOG_LLI) {
+			printf("LLI: Star\n");
+			lli_print(&r->lli);
+		}
 		break;
 	case Plus:
 		determineSimpleLanguageLengths(r->left);
 		r->lli = r->left->lli;
-		printf("LLI: Plus\n");
-		lli_print(&r->lli);
+
+		if (LOG_LLI) {
+			printf("LLI: Plus\n");
+			lli_print(&r->lli);
+		}
 		break;
 	}
 }

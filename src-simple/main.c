@@ -20,18 +20,17 @@ struct {
 	char *name;
 	int (*fn)(Prog*, char*, char**, int);
 } tab[] = {
-	"recursive", recursiveprog,
-	"recursiveloop", recursiveloopprog,
-	"backtrack", backtrack,
-	"thompson", thompsonvm,
-	"pike", pikevm,
+	{"recursive", recursiveprog},
+	{"recursiveloop", recursiveloopprog},
+	{"backtrack", backtrack},
+	{"thompson", thompsonvm},
+	{"pike", pikevm},
 };
 
 void
 usage(void)
 {
-	/* TODO Support rle-tuned */
-	/* rle-tuned: should we feed-down after we feed-up? */
+	/* TODO: Diagnose cases where rle-tuned doesn't help */
 	fprintf(stderr, "usage: re {none|full|indeg|loop} {none|neg|rle|rle-tuned} { regexp string | -f patternAndStr.json }\n");
 	fprintf(stderr, "  The first argument is the memoization strategy\n");
 	fprintf(stderr, "  The second argument is the memo table encoding scheme\n");
@@ -118,6 +117,8 @@ getEncoding(char *arg)
 		return ENCODING_NEGATIVE;
 	else if (strcmp(arg, "rle") == 0)
 		return ENCODING_RLE;
+	else if (strcmp(arg, "rle-tuned") == 0)
+		return ENCODING_RLE_TUNED;
     else {
 		fprintf(stderr, "Error, unknown encoding %s\n", arg);
 		usage();

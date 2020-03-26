@@ -8,8 +8,6 @@
 #include <sys/time.h>
 #include <assert.h>
 
-static int USE_TUNED_RLE = 1;
-
 void
 vec_strcat(char **dest, int *dAlloc, char *src)
 {
@@ -116,7 +114,8 @@ initMemoTable(Prog *prog, int nChars, int memoMode, int memoEncoding)
   memo.nStates = nStatesToTrack;
   memo.nChars = nChars;
   
-  if (memo.encoding == ENCODING_NONE) {
+  switch(memo.encoding){
+  case ENCODING_NONE:
     printf("%s: Initializing with encoding NONE\n", prefix);
     printf("%s: cardQ = %d, Phi_memo = %d\n", prefix, cardQ, nStatesToTrack);
     /* Visit vectors */
@@ -129,11 +128,18 @@ initMemoTable(Prog *prog, int nChars, int memoMode, int memoEncoding)
         memo.visitVectors[i][j] = 0;
       }
     }
-  } else if (memo.encoding == ENCODING_NEGATIVE) {
+    break;
+  case ENCODING_NEGATIVE:
     printf("%s: Initializing with encoding NEGATIVE\n", prefix);
     memo.searchStateTable = NULL;
-  } else if (memo.encoding == ENCODING_RLE) {
-    printf("%s: Initializing with encoding RLE\n", prefix);
+    break;
+  case ENCODING_RLE:
+  case ENCODING_RLE_TUNED:
+    if (memo.encoding == ENCODING_RLE_TUNED)
+      printf("%s: Initializing with encoding RLE_TUNED\n", prefix);
+    else
+      printf("%s: Initializing with encoding RLE\n", prefix);
+
     memo.rleVectors = mal(sizeof(*memo.rleVectors) * nStatesToTrack);
 
     printf("%s: %d RLE-encoded visit vectors\n", prefix, nStatesToTrack);
@@ -143,14 +149,16 @@ initMemoTable(Prog *prog, int nChars, int memoMode, int memoEncoding)
       while (j < prog->len) {
         j++;
         if (prog->start[j].shouldMemo) {
-          printf("%s: state %d (memo state %d) will use runLength %d\n", prefix, j, i, prog->start[j].runLength);
-          memo.rleVectors[i] = RLEVector_create(USE_TUNED_RLE ? prog->start[j].runLength : 1);
+          int runLength = (memo.encoding == ENCODING_RLE_TUNED) ? prog->start[j].runLength : 1;
+          printf("%s: state %d (memo state %d) will use runLength %d\n", prefix, j, i, runLength);
+          memo.rleVectors[i] = RLEVector_create(runLength);
           break;
         }
       }
     }
-  } else {
-    printf("%s: Unexpected encoding %d", prefix, memo.encoding);
+    break;
+  default:
+    printf("%s: Unexpected encoding %d\n", prefix, memo.encoding);
     assert(0);
   }
 
@@ -187,6 +195,7 @@ isMarked(Memo *memo, int statenum /* PC's memoStateNum */, int woffset)
     return p != NULL;
   }
   case ENCODING_RLE:
+  case ENCODING_RLE_TUNED:
     return RLEVector_get(memo->rleVectors[statenum], woffset) != 0;
   }
 
@@ -205,18 +214,27 @@ markMemo(Memo *memo, int statenum, int woffset)
     }
   }
 
-  if (memo->encoding == ENCODING_NONE) {
+  switch(memo->encoding) {
+  case ENCODING_NONE:
     assert(statenum < memo->nStates);
     assert(woffset < memo->nChars);
     memo->visitVectors[statenum][woffset] = 1;
-  } else if (memo->encoding == ENCODING_NEGATIVE) {
+    break;
+  case ENCODING_NEGATIVE:
+  {
     SearchStateTable *entry = mal(sizeof(*entry));
     memset(entry, 0, sizeof(*entry));
     entry->key.stateNum = statenum;
     entry->key.stringIndex = woffset;
     HASH_ADD(hh, memo->searchStateTable, key, sizeof(SearchState), entry);
-  } else if (memo->encoding == ENCODING_RLE) {
+    break;
+  }
+  case ENCODING_RLE:
+  case ENCODING_RLE_TUNED:
     RLEVector_set(memo->rleVectors[statenum], woffset);
+    break;
+  default:
+    assert(!"Unknown encoding\n");
   }
 }
 
@@ -284,6 +302,11 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime)
   case ENCODING_RLE:
     strcpy(memoConfig_encoding, "\"RLE\"");
     break;
+  case ENCODING_RLE_TUNED:
+    strcpy(memoConfig_encoding, "\"RLE_TUNED\"");
+    break;
+  default:
+    assert(!"Unknown encoding\n");
   }
 
   fprintf(stderr, "{");
@@ -323,8 +346,10 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime)
     nTotalVisits, visitTable->nStates * visitTable->nChars, maxVisitsPerSearchState, maxVisitsPerVertex, elapsed_US);
 
   if (memo->mode == MEMO_FULL || memo->mode == MEMO_IN_DEGREE_GT1) {
-    /* I have proved this is impossible. */
-    assert(maxVisitsPerSearchState <= 1);
+    if (maxVisitsPerSearchState > 1) {
+      /* I have proved this is impossible. */
+      assert(!"Error, too many visits per search state\n");
+    }
   }
 
   switch(memo->encoding) {
@@ -370,12 +395,14 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime)
 
     break;
   case ENCODING_RLE:
+  case ENCODING_RLE_TUNED:
+    printf("%s: |w| = %d\n", prefix, memo->nChars);
     for (i = 0; i < memo->nStates; i++) {
       printf("%s: memo vector %d (RL %d) has %d runs (max observed during execution: %d, max possible: %d)\n",
         prefix, i, RLEVector_runSize(memo->rleVectors[i]),
         RLEVector_currSize(memo->rleVectors[i]),
         RLEVector_maxObservedSize(memo->rleVectors[i]),
-        (memo->nChars / 2) + 1
+        (memo->nChars / RLEVector_runSize(memo->rleVectors[i])) + 1
         );
 
       sprintf(numBufForSprintf, "%d", RLEVector_maxObservedSize(memo->rleVectors[i]));
@@ -385,7 +412,8 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime)
       }
     }
     break;
-    default: assert(0);
+    default:
+      assert(!"Unexpected encoding\n");
   }
   fprintf(stderr, ", \"memoizationInfo\": { \"config\": { \"vertexSelection\": %s, \"encoding\": %s }, \"results\": { \"nSelectedVertices\": %d, \"lenW\": %d, \"maxObservedCostPerMemoizedVertex\": [%s]}}",
     memoConfig_vertexSelection, memoConfig_encoding,

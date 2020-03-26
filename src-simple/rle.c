@@ -143,10 +143,12 @@ RLEVector_create(int runLength)
   vec->nBitsInRun = runLength;
 
   if (runLength > 8 * sizeof(node.run)) {
-    printf("Need %d bits, only have %llu\n", runLength, 8 * sizeof(node.run));
+    printf("Need %d bits, only have %llu\n", runLength, 8llu * sizeof(node.run));
     vec->nBitsInRun = 1;
   }
-  printf("RLEVector_create: vec %p nBitsInRun %d\n", vec, vec->nBitsInRun);
+
+  if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
+    printf("RLEVector_create: vec %p nBitsInRun %d\n", vec, vec->nBitsInRun);
 
   if (TEST) {
     RLEVector *vec2 = malloc(sizeof *vec);

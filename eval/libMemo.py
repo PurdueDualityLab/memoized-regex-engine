@@ -41,11 +41,13 @@ class ProtoRegexEngine:
         ES_None = "no encoding"
         ES_Negative = "negative encoding"
         ES_RLE = "RLE"
+        ES_RLE_TUNED = "RLE-tuned"
 
         scheme2cox = {
             ES_None: "none",
             ES_Negative: "neg",
             ES_RLE: "rle",
+            ES_RLE_TUNED: "rle-tuned",
         }
 
     @staticmethod
