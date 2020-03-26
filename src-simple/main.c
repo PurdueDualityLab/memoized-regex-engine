@@ -30,7 +30,9 @@ struct {
 void
 usage(void)
 {
-	fprintf(stderr, "usage: re {none|full|indeg|loop} {none|neg|rle} { regexp string | -f patternAndStr.json }\n");
+	/* TODO Support rle-tuned */
+	/* rle-tuned: should we feed-down after we feed-up? */
+	fprintf(stderr, "usage: re {none|full|indeg|loop} {none|neg|rle|rle-tuned} { regexp string | -f patternAndStr.json }\n");
 	fprintf(stderr, "  The first argument is the memoization strategy\n");
 	fprintf(stderr, "  The second argument is the memo table encoding scheme\n");
 	exit(2);
