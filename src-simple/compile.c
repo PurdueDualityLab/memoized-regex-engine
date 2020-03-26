@@ -66,8 +66,10 @@ static int
 lli_chooseRunLength(LanguageLengthInfo *lli)
 {
 	int i, product = 1, largest = -1, possibleLCM;
-	if (lli->tooManyLengths)
+	if (lli->tooManyLengths) {
+		printf("Run length overflow\n");
 		return 2; /* A good default -- no worse than 1, and maybe better */
+	}
 
 	/* Find the LCM of the language lengths */
 
@@ -87,6 +89,7 @@ lli_chooseRunLength(LanguageLengthInfo *lli)
 		return 1;
 
 	/* Consider all values from largest to product. */
+	/* NB: It would be faster to look by multiples of smallest>1. */
 	possibleLCM = largest;
 	while (possibleLCM < product) {
 		int isLCM = 1;
@@ -470,6 +473,7 @@ emit(Regexp *r, int memoMode)
 		emit(r->left, memoMode);
 		pc->opcode = Save;
 		pc->n = 2*r->n + 1;
+		pc->runLength = lli_chooseRunLength(&r->left->lli);
 		pc++;
 		break;
 	
@@ -513,7 +517,7 @@ emit(Regexp *r, int memoMode)
 		emit(r->left, memoMode);
 		pc->opcode = Split;
 		pc->x = p1; /* Back-edge */
-		pc->x->runLength = lli_chooseRunLength(&r->left->lli);
+		pc->runLength = lli_chooseRunLength(&r->left->lli);
 		if (memoMode == MEMO_LOOP_DEST) {
 			pc->x->shouldMemo = 1;
 		}
