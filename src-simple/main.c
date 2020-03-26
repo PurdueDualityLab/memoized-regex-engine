@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 typedef struct Query Query;
 
@@ -63,6 +64,10 @@ loadQuery(char *inFile)
 	Query q;
 	char *rawJson;
 	cJSON *parsedJson, *key;
+
+	if (access(inFile, F_OK) != 0) {
+		assert(!"No such file\n");
+	}
 
 	// Read file
 	printf("Reading %s\n", inFile);

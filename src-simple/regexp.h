@@ -24,12 +24,13 @@ typedef struct SearchState SearchState;
 typedef struct SearchStateTable SearchStateTable;
 typedef struct LanguageLengthInfo LanguageLengthInfo;
 
+/* Possible lengths of "simple" strings in the language of this regex.
+ * "simple" strings correspond to simple paths in the corresponding automaton. */
 struct LanguageLengthInfo
 {
-	/* Possible lengths of strings in the language of this regex. */
-	int tooManyLengths; /* Flag -- too many possible lengths */
-	int languageLengths[10]; /* Some possible lengths in the regex's SIMPLE language */
+	int languageLengths[16]; /* Lengths in the regex's SIMPLE language */
 	int nLanguageLengths; /* Bound on languageLengths */
+	int tooManyLengths; /* Flag -- too many possible lengths to trackj0f */
 };
 
 struct Regexp
@@ -43,6 +44,7 @@ struct Regexp
 	int eolAnchor;
 
 	LanguageLengthInfo lli;
+	int visitInterval;
 };
 
 enum	/* Regexp.type */

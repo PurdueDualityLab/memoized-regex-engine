@@ -9,7 +9,8 @@ static int LOG_LLI = 1;
 
 static Inst *pc; /* VM array */
 static int count(Regexp*);
-static void determineSimpleLanguageLengths(Regexp *r);
+static void Regexp_calcLLI(Regexp *r);
+static void Regexp_calcVisitInterval(Regexp *r);
 static void emit(Regexp*, int);
 
 static void
@@ -101,7 +102,15 @@ leastCommonMultiple(int arr[], int n)
 }
 
 static int
-lli_chooseRunLength(LanguageLengthInfo *lli)
+leastCommonMultiple2(int a, int b)
+{
+	int nums[2] = { a, b };
+	return leastCommonMultiple(nums, 2);
+}
+
+/* LCM */
+static int
+lli_smallestPeriod(LanguageLengthInfo *lli)
 {
 	if (lli->tooManyLengths) {
 		printf("Run length overflow\n");
@@ -113,7 +122,7 @@ lli_chooseRunLength(LanguageLengthInfo *lli)
 }
 
 void
-compute_in_degrees(Prog *p)
+Prog_compute_in_degrees(Prog *p)
 {
 	int i;
 
@@ -183,7 +192,7 @@ Prog_determineMemoNodes(Prog *p, int memoMode)
 		}
 		break;
 	case MEMO_IN_DEGREE_GT1:
-		compute_in_degrees(p);
+		Prog_compute_in_degrees(p);
 		for (i = 0; i < p->len; i++) {
 			if (p->start[i].inDegree > 1) {
 				p->start[i].shouldMemo = 1;
@@ -223,19 +232,26 @@ compile(Regexp *r, int memoMode)
 	Prog *p;
 
 	n = count(r) + 1;
-	determineSimpleLanguageLengths(r);
+	Regexp_calcLLI(r);
+	Regexp_calcVisitInterval(r);
 
 	p = mal(sizeof *p + n*sizeof p->start[0]);
 	p->start = (Inst*)(p+1);
 	pc = p->start;
 	for (i = 0; i < n; i++) {
-		pc[i].visitInterval = 1; /* A good default */
+		p->start[i].visitInterval = 1; /* A good default */
 	}
 	emit(r, memoMode);
 	pc->opcode = Match;
 	pc++;
 	p->len = pc - p->start;
 	p->eolAnchor = r->eolAnchor;
+
+	/*
+	for (i = 0; i < n; i++) {
+		if (p->start[i] == 
+	}
+	*/
 
 	Prog_assignStateNumbers(p);
 	Prog_determineMemoNodes(p, memoMode);
@@ -273,15 +289,15 @@ count(Regexp *r)
 // Determine size of simple languages for r
 // Recursively populates sub-patterns
 static void
-determineSimpleLanguageLengths(Regexp *r)
+Regexp_calcLLI(Regexp *r)
 {
 	int i, j;
 	switch(r->type) {
 	default:
 		fatal("bad count");
 	case Alt:
-		determineSimpleLanguageLengths(r->left);
-		determineSimpleLanguageLengths(r->right);
+		Regexp_calcLLI(r->left);
+		Regexp_calcLLI(r->right);
 		
 		/* Combine: A giant OR */
 		r->lli.nLanguageLengths = 0;
@@ -298,8 +314,8 @@ determineSimpleLanguageLengths(Regexp *r)
 		}
 		break;
 	case Cat:
-		determineSimpleLanguageLengths(r->left);
-		determineSimpleLanguageLengths(r->right);
+		Regexp_calcLLI(r->left);
+		Regexp_calcLLI(r->right);
 
 		/* Combine: Cartesian product */
 		r->lli.nLanguageLengths = 0;
@@ -326,7 +342,7 @@ determineSimpleLanguageLengths(Regexp *r)
 		}
 		break;
 	case Paren:
-		determineSimpleLanguageLengths(r->left);
+		Regexp_calcLLI(r->left);
 		r->lli = r->left->lli;
 
 		if (LOG_LLI) {
@@ -335,7 +351,7 @@ determineSimpleLanguageLengths(Regexp *r)
 		}
 		break;
 	case Quest:
-		determineSimpleLanguageLengths(r->left);
+		Regexp_calcLLI(r->left);
 		r->lli = r->left->lli;
 		lli_addEntry(&r->lli, 0);
 
@@ -345,7 +361,7 @@ determineSimpleLanguageLengths(Regexp *r)
 		}
 		break;
 	case Star:
-		determineSimpleLanguageLengths(r->left);
+		Regexp_calcLLI(r->left);
 		r->lli = r->left->lli;
 		lli_addEntry(&r->lli, 0);
 
@@ -355,13 +371,73 @@ determineSimpleLanguageLengths(Regexp *r)
 		}
 		break;
 	case Plus:
-		determineSimpleLanguageLengths(r->left);
+		Regexp_calcLLI(r->left);
 		r->lli = r->left->lli;
 
 		if (LOG_LLI) {
 			printf("LLI: Plus\n");
 			lli_print(&r->lli);
 		}
+		break;
+	}
+}
+
+// Determine visit intervals for r
+// Call after all LLI are known
+// Recursively populates sub-patterns
+static void
+Regexp_calcVisitInterval(Regexp *r)
+{
+	switch(r->type) {
+	default:
+		fatal("bad count");
+	case Alt:
+		Regexp_calcVisitInterval(r->left);
+		Regexp_calcVisitInterval(r->right);
+
+		/*
+		r->visitInterval = leastCommonMultiple2(r->left->visitInterval, \
+			r->right->visitInterval);
+		*/
+		r->visitInterval = leastCommonMultiple2(
+			lli_smallestPeriod(&r->left->lli),
+			lli_smallestPeriod(&r->right->lli)
+		);
+
+		if (LOG_LLI)
+			printf("Alt: VI %d\n", r->visitInterval);
+		break;
+	case Cat:
+		Regexp_calcVisitInterval(r->left);
+		Regexp_calcVisitInterval(r->right);
+
+		r->visitInterval = leastCommonMultiple2(r->left->visitInterval, \
+			lli_smallestPeriod(&r->right->lli));
+		/* Right incurs intervals from left. */
+		r->right->visitInterval = r->visitInterval;
+
+		if (LOG_LLI)
+			printf("Cat: VI self, R have %d\n", r->visitInterval);
+		break;
+	case Lit:
+	case Dot:
+	case CharEscape:
+		r->visitInterval = 1;
+		break;
+	case Paren:
+		Regexp_calcVisitInterval(r->left);
+		r->visitInterval = r->left->visitInterval;
+
+		if (LOG_LLI)
+			printf("Paren: VI %d\n", r->visitInterval);
+		break;
+	case Quest:
+	case Star:
+	case Plus:
+		Regexp_calcVisitInterval(r->left);
+		r->visitInterval = lli_smallestPeriod(&r->left->lli);
+		if (LOG_LLI)
+			printf("Quest|Star|Plus: VI %d\n", r->visitInterval);
 		break;
 	}
 }
@@ -380,13 +456,13 @@ determineSimpleLanguageLengths(Regexp *r)
  * 	 Each call to emit() starts at the largest unused pc
  *   
  *   During simulation,
- *     some pc's induce jumps (Jmp, Split)
- *     The rest just advance the pc to the next (adjacent) instruction
+ *     - some pc's can skip around (Jmp, Split)
+ *     - others just advance the pc to the next (adjacent) instruction
  * 
  *   We use memoMode here because Alt and Star are compiled into similar-looking opcodes
  *   Easiest to handle MEMO_LOOP_DEST during emit().
  * 
- *   Call after determineSimpleLanguageLengths.
+ *   Call after Regexp_calcLLI.
  */ 
 static void
 emit(Regexp *r, int memoMode)
@@ -399,7 +475,7 @@ emit(Regexp *r, int memoMode)
 
 	case Alt:
 		pc->opcode = Split;
-		pc->visitInterval = lli_chooseRunLength(&r->lli);
+		pc->visitInterval = r->visitInterval;
 		p1 = pc++;
 		p1->x = pc;
 		emit(r->left, memoMode);
@@ -427,18 +503,21 @@ emit(Regexp *r, int memoMode)
 		emit(r->left, memoMode);
 		p2 = pc;
 		emit(r->right, memoMode);
+
+		//p2->visitInterval = leastCommonMultiple(nums, n);
+		p2->visitInterval = r->right->visitInterval;
 		break;
 	
 	case Lit:
 		pc->opcode = Char;
-		pc->visitInterval = 1;
+		pc->visitInterval = 0;
 		pc->c = r->ch;
 		pc++;
 		break;
 
 	case CharEscape:
 		pc->c = r->ch;
-		pc->visitInterval = 1;
+		pc->visitInterval = 0;
 		switch (r->ch) {
 		case 's':
 		case 'S':
@@ -489,23 +568,29 @@ emit(Regexp *r, int memoMode)
 	
 	case Dot:
 		pc++->opcode = Any;
-		pc->visitInterval = 1;
+		pc->visitInterval = 0;
 		break;
 
 	case Paren:
 		pc->opcode = Save;
 		pc->n = 2*r->n;
+		printf("Save: r->VI %d r->left->VI %d r->left->smallestPeriod %d\n", r->visitInterval, r->left->visitInterval, lli_smallestPeriod(&r->left->lli));
+		//pc->visitInterval = lli_smallestPeriod(&r->left->lli);
+		pc->visitInterval = r->visitInterval;
 		pc++;
 		emit(r->left, memoMode);
 		pc->opcode = Save;
 		pc->n = 2*r->n + 1;
-		pc->visitInterval = lli_chooseRunLength(&r->left->lli);
+		// pc->visitInterval = lli_smallestPeriod(&r->left->lli);
+		// pc->visitInterval = lli_smallestPeriod(&r->left->lli);
+		//pc->visitInterval = lli_smallestPeriod(&r->left->lli);
+		pc->visitInterval = r->visitInterval;
 		pc++;
 		break;
 	
 	case Quest:
 		pc->opcode = Split;
-		pc->visitInterval = lli_chooseRunLength(&r->lli);
+		pc->visitInterval = r->visitInterval;
 		p1 = pc++;
 		p1->x = pc;
 		emit(r->left, memoMode);
@@ -519,13 +604,15 @@ emit(Regexp *r, int memoMode)
 
 	case Star:
 		pc->opcode = Split;
-		pc->visitInterval = lli_chooseRunLength(&r->lli);
+		pc->visitInterval = r->visitInterval;
+		// pc->visitInterval = lli_smallestPeriod(&r->lli);
 		p1 = pc++;
 		p1->x = pc;
 		emit(r->left, memoMode);
 		pc->opcode = Jmp;
 		pc->x = p1; /* Back-edge */
-		pc->visitInterval = lli_chooseRunLength(&r->lli);
+		pc->visitInterval = r->visitInterval;
+		// pc->visitInterval = lli_smallestPeriod(&r->lli);
 		if (memoMode == MEMO_LOOP_DEST) {
 			pc->x->shouldMemo = 1;
 		}
@@ -543,7 +630,9 @@ emit(Regexp *r, int memoMode)
 		emit(r->left, memoMode);
 		pc->opcode = Split;
 		pc->x = p1; /* Back-edge */
-		pc->visitInterval = lli_chooseRunLength(&r->left->lli);
+		p1->visitInterval = r->visitInterval;
+		pc->visitInterval = r->visitInterval;
+		// pc->visitInterval = lli_smallestPeriod(&r->left->lli);
 		if (memoMode == MEMO_LOOP_DEST) {
 			pc->x->shouldMemo = 1;
 		}
