@@ -149,9 +149,10 @@ initMemoTable(Prog *prog, int nChars, int memoMode, int memoEncoding)
       while (j < prog->len) {
         j++;
         if (prog->start[j].shouldMemo) {
-          int runLength = (memo.encoding == ENCODING_RLE_TUNED) ? prog->start[j].runLength : 1;
-          printf("%s: state %d (memo state %d) will use runLength %d\n", prefix, j, i, runLength);
-          memo.rleVectors[i] = RLEVector_create(runLength);
+          int visitInterval = (memo.encoding == ENCODING_RLE_TUNED) ? prog->start[j].visitInterval : 1;
+          //visitInterval = 2;
+          printf("%s: state %d (memo state %d) will use visitInterval %d\n", prefix, j, i, visitInterval);
+          memo.rleVectors[i] = RLEVector_create(visitInterval);
           break;
         }
       }

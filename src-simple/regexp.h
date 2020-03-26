@@ -92,13 +92,11 @@ struct Inst
 	int charClassCounts;
 	int invert;
 
-	/* Used to determine RLE lengths if we memoize this Inst
-	 *   0 means accessed at consecutive characters (RLE width 1)
-	 *   1 means every other (RLE width 2)
-	 *   ...
-	 *   -1 means unknown (RLE width 1?)
+	/*  These are the intervals at which this vertex may be visited
+	 *    during the automaton simulation.
+	 *  Use to determine RLE lengths if we memoize this Inst.
 	 */
-	int runLength;
+	int visitInterval;
 };
 
 enum	/* Inst.opcode */

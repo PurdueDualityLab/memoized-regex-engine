@@ -5,7 +5,7 @@
 #include "regexp.h"
 #include <ctype.h>
 
-static int LOG_LLI = 0;
+static int LOG_LLI = 1;
 
 static Inst *pc; /* VM array */
 static int count(Regexp*);
@@ -161,34 +161,19 @@ compute_in_degrees(Prog *p)
 	}
 }
 
-
-Prog*
-compile(Regexp *r, int memoMode)
+static void
+Prog_assignStateNumbers(Prog *p)
 {
 	int i;
-	int n;
-	int nextStateNum = 0;
-	Prog *p;
-
-	n = count(r) + 1;
-	determineSimpleLanguageLengths(r);
-
-	p = mal(sizeof *p + n*sizeof p->start[0]);
-	p->start = (Inst*)(p+1);
-	pc = p->start;
-	for (i = 0; i < n; i++) {
-		pc[i].runLength = 1; /* A good default */
-	}
-	emit(r, memoMode);
-	pc->opcode = Match;
-	pc++;
-	p->len = pc - p->start;
-	p->eolAnchor = r->eolAnchor;
-
-	/* Assign state numbers */
 	for (i = 0; i < p->len; i++) {
 		p->start[i].stateNum = i;
 	}
+}
+
+static void
+Prog_determineMemoNodes(Prog *p, int memoMode)
+{
+	int i, nextStateNum;
 
 	/* Determine which nodes to memoize based on memo mode. */
 	switch (memoMode) {
@@ -218,6 +203,7 @@ compile(Regexp *r, int memoMode)
 	}
 
 	/* Assign memoStateNum to the shouldMemo nodes */
+	nextStateNum = 0;
 	for (i = 0; i < p->len; i++) {
 		if (p->start[i].shouldMemo) {
 			p->start[i].memoStateNum = nextStateNum;
@@ -227,6 +213,32 @@ compile(Regexp *r, int memoMode)
 		}
 	}
 	p->nMemoizedStates = nextStateNum;
+}
+
+
+Prog*
+compile(Regexp *r, int memoMode)
+{
+	int i, n;
+	Prog *p;
+
+	n = count(r) + 1;
+	determineSimpleLanguageLengths(r);
+
+	p = mal(sizeof *p + n*sizeof p->start[0]);
+	p->start = (Inst*)(p+1);
+	pc = p->start;
+	for (i = 0; i < n; i++) {
+		pc[i].visitInterval = 1; /* A good default */
+	}
+	emit(r, memoMode);
+	pc->opcode = Match;
+	pc++;
+	p->len = pc - p->start;
+	p->eolAnchor = r->eolAnchor;
+
+	Prog_assignStateNumbers(p);
+	Prog_determineMemoNodes(p, memoMode);
 	printf("Will memoize %d states\n", p->nMemoizedStates);
 
 	return p;
@@ -387,7 +399,7 @@ emit(Regexp *r, int memoMode)
 
 	case Alt:
 		pc->opcode = Split;
-		pc->runLength = lli_chooseRunLength(&r->lli);
+		pc->visitInterval = lli_chooseRunLength(&r->lli);
 		p1 = pc++;
 		p1->x = pc;
 		emit(r->left, memoMode);
@@ -399,21 +411,34 @@ emit(Regexp *r, int memoMode)
 		break;
 
 	case Cat:
-		/* Need to do anything for pc->runLength? */
+		/* Need to do anything for pc->visitInterval? */
+		if (LOG_LLI) {
+			printf("\n  CAT\n  \n");
+			printf("Cat: lli self\n");
+			lli_print(&r->lli);
+			printf("Cat: lli left\n");
+			lli_print(&r->left->lli);
+			printf("Cat: lli right\n");
+			lli_print(&r->right->lli);
+			printf("\n\n");
+		}
+
+		p1 = pc;
 		emit(r->left, memoMode);
+		p2 = pc;
 		emit(r->right, memoMode);
 		break;
 	
 	case Lit:
 		pc->opcode = Char;
-		pc->runLength = 1;
+		pc->visitInterval = 1;
 		pc->c = r->ch;
 		pc++;
 		break;
 
 	case CharEscape:
 		pc->c = r->ch;
-		pc->runLength = 1;
+		pc->visitInterval = 1;
 		switch (r->ch) {
 		case 's':
 		case 'S':
@@ -464,7 +489,7 @@ emit(Regexp *r, int memoMode)
 	
 	case Dot:
 		pc++->opcode = Any;
-		pc->runLength = 1;
+		pc->visitInterval = 1;
 		break;
 
 	case Paren:
@@ -474,13 +499,13 @@ emit(Regexp *r, int memoMode)
 		emit(r->left, memoMode);
 		pc->opcode = Save;
 		pc->n = 2*r->n + 1;
-		pc->runLength = lli_chooseRunLength(&r->left->lli);
+		pc->visitInterval = lli_chooseRunLength(&r->left->lli);
 		pc++;
 		break;
 	
 	case Quest:
 		pc->opcode = Split;
-		pc->runLength = lli_chooseRunLength(&r->lli);
+		pc->visitInterval = lli_chooseRunLength(&r->lli);
 		p1 = pc++;
 		p1->x = pc;
 		emit(r->left, memoMode);
@@ -494,13 +519,13 @@ emit(Regexp *r, int memoMode)
 
 	case Star:
 		pc->opcode = Split;
-		pc->runLength = lli_chooseRunLength(&r->lli);
+		pc->visitInterval = lli_chooseRunLength(&r->lli);
 		p1 = pc++;
 		p1->x = pc;
 		emit(r->left, memoMode);
 		pc->opcode = Jmp;
 		pc->x = p1; /* Back-edge */
-		pc->runLength = lli_chooseRunLength(&r->lli);
+		pc->visitInterval = lli_chooseRunLength(&r->lli);
 		if (memoMode == MEMO_LOOP_DEST) {
 			pc->x->shouldMemo = 1;
 		}
@@ -518,7 +543,7 @@ emit(Regexp *r, int memoMode)
 		emit(r->left, memoMode);
 		pc->opcode = Split;
 		pc->x = p1; /* Back-edge */
-		pc->runLength = lli_chooseRunLength(&r->left->lli);
+		pc->visitInterval = lli_chooseRunLength(&r->left->lli);
 		if (memoMode == MEMO_LOOP_DEST) {
 			pc->x->shouldMemo = 1;
 		}
@@ -547,31 +572,31 @@ printprog(Prog *p)
 		default:
 			fatal("printprog");
 		case Split:
-			printf("%2d. split %d, %d (memo? %d -- state %d, runLength %d)\n", (int)(pc-p->start), (int)(pc->x-p->start), (int)(pc->y-p->start), pc->shouldMemo, pc->memoStateNum, pc->runLength);
+			printf("%2d. split %d, %d (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), (int)(pc->x-p->start), (int)(pc->y-p->start), pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
 			//printf("%2d. split %d, %d\n", (int)(pc->stateNum), (int)(pc->x->stateNum), (int)(pc->y->stateNum));
 			break;
 		case Jmp:
-			printf("%2d. jmp %d (memo? %d -- state %d, runLength %d)\n", (int)(pc-p->start), (int)(pc->x-p->start), pc->shouldMemo, pc->memoStateNum, pc->runLength);
+			printf("%2d. jmp %d (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), (int)(pc->x-p->start), pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
 			//printf("%2d. jmp %d\n", (int)(pc->stateNum), (int)(pc->x->stateNum));
 			break;
 		case Char:
-			printf("%2d. char %c (memo? %d -- state %d, runLength %d)\n", (int)(pc-p->start), pc->c, pc->shouldMemo, pc->memoStateNum, pc->runLength);
+			printf("%2d. char %c (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->c, pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
 			//printf("%2d. char %c\n", (int)(pc->stateNum), pc->c);
 			break;
 		case Any:
-			printf("%2d. any (memo? %d -- state %d, runLength %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum, pc->runLength);
+			printf("%2d. any (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
 			//printf("%2d. any\n", (int)(pc->stateNum));
 			break;
 		case CharClass:
-			printf("%2d. charClass (memo? %d -- state %d, runLength %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum, pc->runLength);
+			printf("%2d. charClass (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
 			//printf("%2d. any\n", (int)(pc->stateNum));
 			break;
 		case Match:
-			printf("%2d. match (memo? %d -- state %d, runLength %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum, pc->runLength);
+			printf("%2d. match (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
 			//printf("%2d. match\n", (int)(pc->stateNum));
 			break;
 		case Save:
-			printf("%2d. save %d (memo? %d -- state %d, runLength %d)\n", (int)(pc-p->start), pc->n, pc->shouldMemo, pc->memoStateNum, pc->runLength);
+			printf("%2d. save %d (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->n, pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
 			//printf("%2d. save %d\n", (int)(pc->stateNum), pc->n);
 		}
 	}
