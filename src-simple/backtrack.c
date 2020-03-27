@@ -309,6 +309,7 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime)
     strcpy(memoConfig_encoding, "\"RLE_TUNED\"");
     break;
   default:
+    printf("Encoding %d\n", memo->encoding);
     assert(!"Unknown encoding\n");
   }
 
@@ -428,15 +429,75 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime)
 }
 
 /* NFA simulation */
+typedef struct ThreadVec ThreadVec;
+struct ThreadVec
+{
+  Thread *threads;
+  int maxThreads;
+
+  int nThreads;
+};
+
+static ThreadVec
+ThreadVec_alloc()
+{
+  ThreadVec tv;
+  tv.nThreads = 0;
+  tv.maxThreads = 1000;
+  tv.threads = mal(tv.maxThreads * sizeof(*tv.threads));
+  return tv;
+}
+
+static void
+ThreadVec_realloc(ThreadVec *tv)
+{
+  int newMaxThreads = 2 * tv->maxThreads;
+  Thread *newThreads = mal(newMaxThreads * sizeof(*newThreads));
+
+  memcpy(newThreads, tv->threads, tv->nThreads * sizeof(*newThreads));
+  tv->maxThreads = newMaxThreads;
+
+  free(tv->threads);
+  tv->threads = newThreads;
+}
+
+static void
+ThreadVec_free(ThreadVec *tv)
+{
+  free(tv->threads);
+}
+
+static Thread
+ThreadVec_pop(ThreadVec *tv)
+{
+  Thread next;
+  assert(tv->nThreads > 0);
+
+  next = tv->threads[tv->nThreads-1];
+
+  tv->nThreads--;
+  assert(tv->nThreads >= 0);
+  return next;
+}
+
+static void
+ThreadVec_push(ThreadVec *tv, Thread t)
+{
+  if (tv->nThreads == tv->maxThreads)
+    ThreadVec_realloc(tv);
+
+  tv->threads[ tv->nThreads ] = t;
+  tv->nThreads++;
+  assert(tv->nThreads <= tv->maxThreads);
+}
 
 int
 backtrack(Prog *prog, char *input, char **subp, int nsubp)
 {
   Memo memo;
   VisitTable visitTable;
-  enum { MAX = 100000 };
-  Thread ready[MAX];
-  int i, j, inCharClass, nready;
+  ThreadVec ready = ThreadVec_alloc();
+  int i, j, inCharClass;
   Inst *pc; /* Current position in VM (pc) */
   char *sp; /* Current position in input */
   Sub *sub; /* submatch (capture group) */
@@ -465,15 +526,14 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
   for(i=0; i<nsubp; i++)
     sub->sub[i] = nil;
   /* Initial thread state is < q0, w[0], current capture group > */
-  ready[0] = thread(prog->start, input, sub);
-  nready = 1;
+  ThreadVec_push(&ready, thread(prog->start, input, sub));
 
   /* run threads in stack order */
-  while(nready > 0) {
-    --nready;  /* pop state for next thread to run */
-    pc = ready[nready].pc;
-    sp = ready[nready].sp;
-    sub = ready[nready].sub;
+  while(ready.nThreads > 0) {
+    Thread next = ThreadVec_pop(&ready);
+    pc = next.pc;
+    sp = next.sp;
+    sub = next.sub;
     assert(sub->ref > 0);
     for(;;) { /* Run thread to completion */
       if (VERBOSE)
@@ -550,7 +610,9 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
           for(i=0; i<nsubp; i++)
             subp[i] = sub->sub[i];
           decref(sub);
+
           printStats(prog, &memo, &visitTable, startTime);
+          ThreadVec_free(&ready);
           return 1;
         }
         goto Dead;
@@ -558,9 +620,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
         pc = pc->x;
         continue;
       case Split: /* Non-deterministic choice */
-        if(nready >= MAX)
-          fatal("backtrack overflow");
-        ready[nready++] = thread(pc->y, sp, incref(sub));
+        ThreadVec_push(&ready, thread(pc->y, sp, incref(sub)));
         pc = pc->x;  /* continue current thread */
         continue;
       case Save:
@@ -574,6 +634,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
   }
 
   printStats(prog, &memo, &visitTable, startTime);
+  ThreadVec_free(&ready);
   return 0;
 }
 
