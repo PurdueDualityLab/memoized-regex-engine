@@ -207,6 +207,10 @@ class MemoizationDynamicAnalysis:
     self.evilInput = None # If an SL regex
     self.nPumps = -1 # If an SL regex
 
+    # Set these if you run a Perl analysis
+    self.perlTimedOut = False
+    self.perlPumps = -1
+
     self.selectionPolicy_to_enc2space = {} # Numeric space cost
     self.selectionPolicy_to_enc2time = {} # Numeric time cost
 
@@ -247,6 +251,9 @@ class MemoizationDynamicAnalysis:
 
     self.nPumps = obj['nPumps']
 
+    self.perlTimedOut = obj['perlTimedOut']
+    self.perlPumps = obj['perlPumps']
+
     self.selectionPolicy_to_enc2space = obj['selectionPolicy_to_enc2space']
     self.selectionPolicy_to_enc2time = obj['selectionPolicy_to_enc2time']
     return self
@@ -260,6 +267,8 @@ class MemoizationDynamicAnalysis:
       'inputLength': self.inputLength,
       'evilInput': self.evilInput.toNDJSON() if self.evilInput else None,
       'nPumps': self.nPumps,
+      'perlTimedOut': self.perlTimedOut,
+      'perlPumps': self.perlPumps,
       'selectionPolicy_to_enc2space': self.selectionPolicy_to_enc2space,
       'selectionPolicy_to_enc2time': self.selectionPolicy_to_enc2time,
     }
@@ -306,6 +315,8 @@ class MemoizationDynamicAnalysis:
           "|w|": self.inputLength + 1, # Count the null byte
           "SL": True,
           "nPumps": self.nPumps,
+          "perlTimedOut": self.perlTimedOut,
+          "perlPumps": self.perlPumps,
           "selectionPolicy": selectionPolicy,
           "encodingPolicy": encodingPolicy,
           "spaceCost": space,

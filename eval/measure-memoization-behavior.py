@@ -23,15 +23,17 @@ import statistics
 import pandas as pd
 
 # Shell dependencies
-shellDeps = [ libMemo.ProtoRegexEngine.CLI ]
+
+perlCLI = os.path.join(os.environ['MEMOIZATION_PROJECT_ROOT'], 'eval', 'query-perl.pl')
+shellDeps = [ libMemo.ProtoRegexEngine.CLI, perlCLI ]
 
 # Other globals
-MATCH_TIMEOUT = 2 # Seconds
+PROTOTYPE_MATCH_TIMEOUT = 2 # Seconds before timing out queries to our prototype
 GROWTH_RATE_INF = "INF"
 
 CHECK_TIME_COEFFICIENT_OF_VARIANCE = False
 
-SAVE_TMP_FILES = True
+SAVE_TMP_FILES = False
 
 EXPAND_EVIL_INPUT = True # Get more SL regexes, corrects some common errors
 
@@ -47,6 +49,11 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
 
   # Can be much longer because memoization prevents geometric growth of the backtracking stack
   PERF_PUMPS_TO_TRY = [ 1000 ] # i*500 for i in range(1,5) ]
+
+  #PERL_PUMPS = 500 * 1000
+  PERL_PUMPS = 100 * 1000
+  #PERL_PUMPS = 1 * 1000
+  #PERL_PUMPS = 900
 
   def __init__(self, regex, nTrialsPerCondition):
     self.regex = regex
@@ -69,21 +76,65 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
       ei, growthRate = self._findMostSLInput(self.regex)
       if ei is None:
         return MyTask.NOT_SL
-      
+
       # Run the analysis
       # Use this EI to obtain per-pump SL MDAs
       libLF.log("  2. Running analysis on SL regex")
       self.pump_to_mdas = self._runSLDynamicAnalysis(self.regex, ei, self.nTrialsPerCondition)
 
+      libLF.log("  3. Comparing behavior to Perl")
+      perlTimedOut = self._doesPerlTimeOut(self.regex, ei)
+      if perlTimedOut:
+        libLF.log("Perl timed out on the regex /{}/".format(self.regex.pattern))
+      else:
+        libLF.log("Perl did not time out on the regex /{}/".format(self.regex.pattern))
+
       # Return
       libLF.log('Completed regex /{}/'.format(self.regex.pattern))
-      return self.pump_to_mdas[MyTask.PERF_PUMPS_TO_TRY[-1]].toDataFrame() # Just return the biggest one for now
+      # Just return the biggest one for now
+      lastMDA = self.pump_to_mdas[MyTask.PERF_PUMPS_TO_TRY[-1]]
+      lastMDA.perlTimedOut = perlTimedOut
+      lastMDA.perlPumps = MyTask.PERL_PUMPS
+      return lastMDA.toDataFrame()
     except KeyboardInterrupt:
       raise
     except BaseException as err:
       libLF.log('Exception while testing regex /{}/: {}'.format(self.regex.pattern, err))
       traceback.print_exc()
       return err
+
+  def _doesPerlTimeOut(self, regex, mostEI):
+    """Returns True if Perl times out on this EI, else False"""
+
+    # Globals
+    matchTimeout = 5 # Seconds of regex engine evaluation
+    matchStartString = "start your timer" # Printed by perlCLI just before regex match
+
+    # Query file
+    queryFile = libMemo.ProtoRegexEngine.buildQueryFile(regex.pattern, mostEI.build(MyTask.PERL_PUMPS))
+
+    args = [perlCLI, queryFile]
+    libLF.log("Launching query-perl.pl: {}".format(" ".join(args)))
+    child = subprocess.Popen(args, stdout=None, stderr=subprocess.PIPE, bufsize=0, close_fds=1, text='utf-8')
+    for line in child.stderr:
+      if matchStartString in line:
+        libLF.log("Starting a timer")
+        timedOut = False
+        try:
+          child.communicate(timeout=matchTimeout)
+        except subprocess.TimeoutExpired:
+          timedOut = True
+        break
+    
+    if not SAVE_TMP_FILES:
+      os.unlink(queryFile)
+    try:
+      child.terminate()
+      child.kill()
+    except:
+      pass
+    
+    return timedOut
   
   def _measureCondition(self, regex, mostEI, nPumps, selectionScheme, encodingScheme, nTrialsPerCondition):
     """Obtain the average time and space costs for this condition
@@ -191,7 +242,7 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
     """Of a regex's evil inputs, identify the one that yields the MOST SL behavior.
 
     returns: libLF.EvilInput, itsGrowthRate
-             None, -1 if all are linear-time (e.g. RE1's semantics differ from PCRE)
+             None, -1 if all are linear-time (e.g. PROTOTYPE's semantics differ from PCRE)
     """
     libLF.log('Testing whether this regex exhibits SL behavior: /{}/'.format(regex.pattern))
     assert regex.evilInputs, "regex has no evil inputs"
@@ -219,7 +270,7 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
         try:
           pump2meas[nPumps] = libMemo.ProtoRegexEngine.query(
             libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_None, libMemo.ProtoRegexEngine.ENCODING_SCHEME.ES_None, queryFile,
-            timeout=MATCH_TIMEOUT 
+            timeout=PROTOTYPE_MATCH_TIMEOUT 
           )
         except subprocess.TimeoutExpired:
           # If we timed out, that's about as significant a growth rate as can be expected
