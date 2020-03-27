@@ -8,6 +8,8 @@
 #include <sys/time.h>
 #include <assert.h>
 
+int LOG_THREAD_VEC = 0;
+
 void
 vec_strcat(char **dest, int *dAlloc, char *src)
 {
@@ -273,8 +275,8 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime)
 
   char *prefix = "STATS";
 
-  char memoConfig_vertexSelection[32];
-  char memoConfig_encoding[32];
+  char memoConfig_vertexSelection[64];
+  char memoConfig_encoding[64];
   char numBufForSprintf[128];
   int csv_maxObservedCostsPerMemoizedVertex_len = 2*sizeof(char);
   char *csv_maxObservedCostsPerMemoizedVertex = mal(csv_maxObservedCostsPerMemoizedVertex_len);
@@ -293,6 +295,7 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime)
   case MEMO_LOOP_DEST:
     strcpy(memoConfig_vertexSelection, "\"LOOP\"");
     break;
+	default: assert(!"Unknown memo mode\n");
   }
 
   switch (memo->encoding) {
@@ -346,7 +349,7 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime)
   printf("%s: Most-visited search state: <%d, %d> (%d visits)\n", prefix, vertexWithMostVisitedSearchState, mostVisitedOffset, maxVisitsPerSearchState);
   printf("%s: Most-visited vertex: %d (%d visits over all its search states)\n", prefix, mostVisitedVertex, maxVisitsPerVertex);
   /* Info about simulation */
-  fprintf(stderr, ", \"simulationInfo\": { \"nTotalVisits\": %d, \"nPossibleTotalVisitsWithMemoization\": %d, \"visitsToMostVisitedSearchState\": %d, \"visitsToMostVisitedVertex\": %d, \"simTimeUS\": %llu }",
+  fprintf(stderr, ", \"simulationInfo\": { \"nTotalVisits\": %d, \"nPossibleTotalVisitsWithMemoization\": %d, \"visitsToMostVisitedSearchState\": %d, \"visitsToMostVisitedVertex\": %d, \"simTimeUS\": %lu }",
     nTotalVisits, visitTable->nStates * visitTable->nChars, maxVisitsPerSearchState, maxVisitsPerVertex, elapsed_US);
 
   if (memo->mode == MEMO_FULL || memo->mode == MEMO_IN_DEGREE_GT1) {
@@ -445,6 +448,9 @@ ThreadVec_alloc()
   tv.nThreads = 0;
   tv.maxThreads = 1000;
   tv.threads = mal(tv.maxThreads * sizeof(*tv.threads));
+
+	if (LOG_THREAD_VEC)
+		printf("TV: alloc -- threads %p\n", tv.threads);
   return tv;
 }
 
@@ -455,6 +461,9 @@ ThreadVec_realloc(ThreadVec *tv)
   Thread *newThreads = mal(newMaxThreads * sizeof(*newThreads));
 
   memcpy(newThreads, tv->threads, tv->nThreads * sizeof(*newThreads));
+	if (LOG_THREAD_VEC)
+		printf("TV: realloc from %d to %d threads, %p -> %p\n", tv->maxThreads, newMaxThreads, tv->threads, newThreads);
+
   tv->maxThreads = newMaxThreads;
 
   free(tv->threads);
@@ -470,14 +479,16 @@ ThreadVec_free(ThreadVec *tv)
 static Thread
 ThreadVec_pop(ThreadVec *tv)
 {
-  Thread next;
+  Thread t;
   assert(tv->nThreads > 0);
 
-  next = tv->threads[tv->nThreads-1];
+  t = tv->threads[tv->nThreads-1];
+	if (LOG_THREAD_VEC)
+		printf("TV: Popping t %d (pc %p, sp %p, sub %p)\n", tv->nThreads, t.pc, t.sp, t.sub);
 
   tv->nThreads--;
   assert(tv->nThreads >= 0);
-  return next;
+  return t;
 }
 
 static void
@@ -486,6 +497,8 @@ ThreadVec_push(ThreadVec *tv, Thread t)
   if (tv->nThreads == tv->maxThreads)
     ThreadVec_realloc(tv);
 
+	if (LOG_THREAD_VEC)
+		printf("TV: Pushing t %d (pc %p, sp %p, sub %p)\n", tv->nThreads+1, t.pc, t.sp, t.sub);
   tv->threads[ tv->nThreads ] = t;
   tv->nThreads++;
   assert(tv->nThreads <= tv->maxThreads);
@@ -520,6 +533,9 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 
   printf("\n\n***************\n\n  Backtrack: Simulation begins\n\n************\n\n");
   startTime = now();
+
+	if (prog->memoMode != MEMO_NONE)
+		printStats(prog, &memo, &visitTable, startTime);
 
   /* queue initial thread */
   sub = newsub(nsubp);
@@ -611,7 +627,8 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
             subp[i] = sub->sub[i];
           decref(sub);
 
-          printStats(prog, &memo, &visitTable, startTime);
+					if (prog->memoMode != MEMO_NONE)
+						printStats(prog, &memo, &visitTable, startTime);
           ThreadVec_free(&ready);
           return 1;
         }
@@ -633,7 +650,8 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
     decref(sub);
   }
 
-  printStats(prog, &memo, &visitTable, startTime);
+	if (prog->memoMode != MEMO_NONE)
+		printStats(prog, &memo, &visitTable, startTime);
   ThreadVec_free(&ready);
   return 0;
 }

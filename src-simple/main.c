@@ -51,7 +51,7 @@ char *loadFile(char *fileName)
 	fseek(f, 0, SEEK_SET);
 
 	string = mal(fsize + 1);
-	fread(string, 1, fsize, f);
+	assert(fread(string, 1, fsize, f) == fsize);
 	fclose(f);
 
 	string[fsize] = 0;
