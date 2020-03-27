@@ -1,0 +1,1 @@
+{"pattern": "^ERROR: Can't access file (.*)+$", "input": "ERROR: Can't access file ile ile ile ile ^ERROR: Can't a\rn"}
