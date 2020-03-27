@@ -152,7 +152,7 @@ initMemoTable(Prog *prog, int nChars, int memoMode, int memoEncoding)
           int visitInterval = (memo.encoding == ENCODING_RLE_TUNED) ? prog->start[j].visitInterval : 1;
           if (visitInterval < 1)
             visitInterval = 1;
-          //visitInterval = 2;
+          //visitInterval = 60;
           printf("%s: state %d (memo state %d) will use visitInterval %d\n", prefix, j, i, visitInterval);
           memo.rleVectors[i] = RLEVector_create(visitInterval);
           break;

@@ -5,6 +5,8 @@
 %{
 #include "regexp.h"
 
+#define KEEP_CG 1
+
 static int yylex(void);
 static void yyerror(char*);
 static Regexp *parsed_regexp;
@@ -168,8 +170,12 @@ escape:
 single:
 	'(' count alt ')'
 	{
+	#if KEEP_CG
 		$$ = reg(Paren, $3, nil);
 		$$->n = $2;
+	#else
+		$$ = $3;
+	#endif
 	}
 |	'(' '?' ':' alt ')'
 	{
@@ -253,7 +259,11 @@ parse(char *s)
 	if(parsed_regexp == nil)
 		yyerror("parser nil");
 		
+#if KEEP_CG
 	r = reg(Paren, parsed_regexp, nil);	// $0 parens
+#else
+	r = parsed_regexp;
+#endif
 	bolDotstar = reg(Star, reg(Dot, nil, nil), nil);
 	bolDotstar->n = 1;	// non-greedy
 	eolDotstar = reg(Star, reg(Dot, nil, nil), nil);

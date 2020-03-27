@@ -5,13 +5,14 @@
 #include "regexp.h"
 #include <ctype.h>
 
-static int LOG_LLI = 1;
+static int LOG_VI = 1;
 
 static Inst *pc; /* VM array */
 static int count(Regexp*);
 static void Regexp_calcLLI(Regexp *r);
 static void Regexp_calcVisitInterval(Regexp *r);
 static void emit(Regexp*, int);
+static void printre_VI(Regexp *r);
 
 static void
 lli_addEntry(LanguageLengthInfo *lli, int newLength)
@@ -52,7 +53,7 @@ lli_print(LanguageLengthInfo *lli)
 		printf("LLI: Over-full\n");
 
 	/* Check if it's present already */
-	if (LOG_LLI) {
+	if (LOG_VI) {
 		printf("LLI: %d lengths: ", lli->nLanguageLengths);
 		for (i = 0; i < lli->nLanguageLengths; i++) {
 			printf("%d,", lli->languageLengths[i]);
@@ -65,7 +66,7 @@ lli_print(LanguageLengthInfo *lli)
 
 /* Computes the LCM of the integers >= 1 in arr. */
 static int
-leastCommonMultiple(int arr[], int n)
+leastCommonMultiple(int arr[], int n, int max)
 {
 	int i, smallest = -1, product = 1, possibleLCM = -1;
 
@@ -96,6 +97,9 @@ leastCommonMultiple(int arr[], int n)
 			return possibleLCM;
 
 		possibleLCM += smallest;
+
+		if (possibleLCM > max)
+			return smallest <= max ? smallest : 2;
 	}
 
 	return product;
@@ -105,7 +109,7 @@ static int
 leastCommonMultiple2(int a, int b)
 {
 	int nums[2] = { a, b };
-	return leastCommonMultiple(nums, 2);
+	return leastCommonMultiple(nums, 2, 64);
 }
 
 /* LCM */
@@ -118,7 +122,7 @@ lli_smallestUniversalPeriod(LanguageLengthInfo *lli)
 	}
 
 	/* Find the LCM of the language lengths */
-	return leastCommonMultiple(lli->languageLengths, lli->nLanguageLengths);
+	return leastCommonMultiple(lli->languageLengths, lli->nLanguageLengths, 64);
 }
 
 void
@@ -234,6 +238,8 @@ compile(Regexp *r, int memoMode)
 	n = count(r) + 1;
 	Regexp_calcLLI(r);
 	Regexp_calcVisitInterval(r);
+	printre_VI(r);
+	printf("\n");
 
 	p = mal(sizeof *p + n*sizeof p->start[0]);
 	p->start = (Inst*)(p+1);
@@ -308,7 +314,7 @@ Regexp_calcLLI(Regexp *r)
 			lli_addEntry(&r->lli, r->right->lli.languageLengths[i]);
 		}
 
-		if (LOG_LLI) {
+		if (LOG_VI) {
 			printf("LLI: Alt\n");
 			lli_print(&r->lli);
 		}
@@ -325,7 +331,7 @@ Regexp_calcLLI(Regexp *r)
 			}
 		}
 
-		if (LOG_LLI) {
+		if (LOG_VI) {
 			printf("LLI: Cat\n");
 			lli_print(&r->lli);
 		}
@@ -336,7 +342,7 @@ Regexp_calcLLI(Regexp *r)
 		r->lli.nLanguageLengths = 1;
 		r->lli.languageLengths[0] = 1;
 
-		if (LOG_LLI) {
+		if (LOG_VI) {
 			printf("LLI: Lit,Dot,CharEscape\n");
 			lli_print(&r->lli);
 		}
@@ -345,7 +351,7 @@ Regexp_calcLLI(Regexp *r)
 		Regexp_calcLLI(r->left);
 		r->lli = r->left->lli;
 
-		if (LOG_LLI) {
+		if (LOG_VI) {
 			printf("LLI: Paren\n");
 			lli_print(&r->lli);
 		}
@@ -355,7 +361,7 @@ Regexp_calcLLI(Regexp *r)
 		r->lli = r->left->lli;
 		lli_addEntry(&r->lli, 0);
 
-		if (LOG_LLI) {
+		if (LOG_VI) {
 			printf("LLI: Quest:\n");
 			lli_print(&r->lli);
 		}
@@ -365,7 +371,7 @@ Regexp_calcLLI(Regexp *r)
 		r->lli = r->left->lli;
 		lli_addEntry(&r->lli, 0);
 
-		if (LOG_LLI) {
+		if (LOG_VI) {
 			printf("LLI: Star\n");
 			lli_print(&r->lli);
 		}
@@ -374,10 +380,78 @@ Regexp_calcLLI(Regexp *r)
 		Regexp_calcLLI(r->left);
 		r->lli = r->left->lli;
 
-		if (LOG_LLI) {
+		if (LOG_VI) {
 			printf("LLI: Plus\n");
 			lli_print(&r->lli);
 		}
+		break;
+	}
+}
+
+static void
+printre_VI(Regexp *r)
+{
+	switch(r->type) {
+	default:
+		printf("???");
+		break;
+	
+	case Alt:
+		printf("Alt-%d(", r->visitInterval);
+		printre_VI(r->left);
+		printf(", ");
+		printre_VI(r->right);
+		printf(")");
+		break;
+
+	case Cat:
+		printf("Cat-%d(", r->visitInterval);
+		printre_VI(r->left);
+		printf(", ");
+		printre_VI(r->right);
+		printf(")");
+		break;
+	
+	case Lit:
+		printf("Lit(%c)", r->ch);
+		break;
+	
+	case Dot:
+		printf("Dot");
+		break;
+
+	case CharEscape:
+		printf("Esc(%c)", r->ch);
+		break;
+
+	case Paren:
+		printf("Paren-%d(%d, ", r->visitInterval, r->n);
+		printre_VI(r->left);
+		printf(")");
+		break;
+	
+	case Star:
+		if(r->n)
+			printf("Ng");
+		printf("Star-%d(", r->visitInterval);
+		printre_VI(r->left);
+		printf(")");
+		break;
+	
+	case Plus:
+		if(r->n)
+			printf("Ng");
+		printf("Plus-%d(", r->visitInterval);
+		printre_VI(r->left);
+		printf(")");
+		break;
+	
+	case Quest:
+		if(r->n)
+			printf("Ng");
+		printf("Quest-%d(", r->visitInterval);
+		printre_VI(r->left);
+		printf(")");
 		break;
 	}
 }
@@ -404,7 +478,10 @@ Regexp_calcVisitInterval(Regexp *r)
 			lli_smallestUniversalPeriod(&r->right->lli)
 		);
 
-		if (LOG_LLI)
+		//r->visitInterval = r->left->visitInterval + r->right->visitInterval;
+		//r->visitInterval = lli_smallestUniversalPeriod(&r->left->lli) + lli_smallestUniversalPeriod(&r->right->lli);
+
+		if (LOG_VI)
 			printf("Alt: VI %d\n", r->visitInterval);
 		break;
 	case Cat:
@@ -423,7 +500,6 @@ Regexp_calcVisitInterval(Regexp *r)
 			r->left->visitInterval,
 			lli_smallestUniversalPeriod(&r->right->lli)
 		);
-#endif
 
 		/* Experimental.
 		 * TODO This is a hack. Concatenation SUPs get longer and longer,
@@ -434,21 +510,10 @@ Regexp_calcVisitInterval(Regexp *r)
 		);
 
 		// TODO Experimenting.
-
-#if 0
 		if (r->right->visitInterval > 1) {
 		} else{
 
 		}
-#endif
-		r->visitInterval = leastCommonMultiple2(
-			//leastCommonMultiple2(r->left->visitInterval, lli_smallestUniversalPeriod(&r->left->lli)),
-			//lli_smallestUniversalPeriod(&r->left->lli),
-			r->left->visitInterval,
-			//leastCommonMultiple2(r->right->visitInterval, lli_smallestUniversalPeriod(&r->right->lli))
-			//r->right->visitInterval
-			lli_smallestUniversalPeriod(&r->right->lli)
-		);
 
 		/* Right incurs intervals from left. */
 		r->right->visitInterval = leastCommonMultiple2(
@@ -458,19 +523,58 @@ Regexp_calcVisitInterval(Regexp *r)
 
 		/* Whole takes on only left. */
 		r->visitInterval = r->right->visitInterval;
+		
+		r->visitInterval = leastCommonMultiple2(
+			//leastCommonMultiple2(r->left->visitInterval, lli_smallestUniversalPeriod(&r->left->lli)),
+			//lli_smallestUniversalPeriod(&r->left->lli),
+			r->left->visitInterval,
+			//leastCommonMultiple2(r->right->visitInterval, lli_smallestUniversalPeriod(&r->right->lli))
+			//r->right->visitInterval
+			lli_smallestUniversalPeriod(&r->right->lli)
+		);
+#endif
 
-		////
+		// B will be visited at intervals of left 
+		//   e.g. Cat(A, B)
+		// B may be visited at intervals of itself
+		//   e.g. Cat(A, Star(B))
 		r->right->visitInterval = leastCommonMultiple2(
 			lli_smallestUniversalPeriod(&r->left->lli),
 			lli_smallestUniversalPeriod(&r->right->lli)
 		);
+		// Propagate this down through any Parens to the thing they are wrapping.
+		if (r->right->type == Paren) {
+			Regexp *tmpRight = NULL;
+			int vi = r->right->visitInterval;
+
+			printf("Propagating vi %d past Parens\n", vi);
+			tmpRight = r->right;
+			while (tmpRight->type == Paren) {
+				tmpRight->visitInterval = vi;
+				tmpRight = tmpRight->left;
+			}
+			// We have our target, the first non-paren entity.
+			// This also takes on the VI.
+			tmpRight->visitInterval = vi;
+		}
+
+		// The Cat node takes on both.
+		//  - It can be visited after repetitions of A and B
+		//    (e.g. Star(Cat(A, B)) )
 		r->visitInterval = leastCommonMultiple2(
 			r->left->visitInterval,
 			r->right->visitInterval
 		);
 
-		if (LOG_LLI)
+		if (LOG_VI) {
 			printf("Cat: VI self %d l->vi %d l->SUP %d r->vi %d r->SUP %d\n", r->visitInterval, r->left->visitInterval, lli_smallestUniversalPeriod(&r->left->lli), r->right->visitInterval, lli_smallestUniversalPeriod(&r->right->lli));
+			if (r->left->type == Paren) {
+				printf("Cat: L = Paren\n");
+			}
+			if (r->right->type == Paren) {
+				printf("Cat: R = Paren\n");
+			}
+		}
 		break;
 	case Lit:
 	case Dot:
@@ -481,7 +585,7 @@ Regexp_calcVisitInterval(Regexp *r)
 		Regexp_calcVisitInterval(r->left);
 		r->visitInterval = r->left->visitInterval;
 
-		if (LOG_LLI)
+		if (LOG_VI)
 			printf("Paren: VI %d\n", r->visitInterval);
 		break;
 	case Quest:
@@ -489,7 +593,7 @@ Regexp_calcVisitInterval(Regexp *r)
 	case Plus:
 		Regexp_calcVisitInterval(r->left);
 		r->visitInterval = lli_smallestUniversalPeriod(&r->left->lli);
-		if (LOG_LLI)
+		if (LOG_VI)
 			printf("Quest|Star|Plus: VI %d\n", r->visitInterval);
 		break;
 	}
