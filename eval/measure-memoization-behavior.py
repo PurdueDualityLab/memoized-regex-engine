@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3 -u
 # Test a libLF.SimpleRegex for SL behavior under various memoization schemes.
 # This analysis includes time measurements for performance.
 # Run it alone, or use core pinning (e.g. taskset) to reduce interference
