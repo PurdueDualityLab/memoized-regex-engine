@@ -81,11 +81,11 @@ class ProtoRegexEngine:
         returns: EngineMeasurements
         raises: on rc != 0, or on timeout
         """
-        rc, stdout, stderr = libLF.runcmd_OutAndErr(' '.join(
-            [ProtoRegexEngine.CLI,
-            ProtoRegexEngine.SELECTION_SCHEME.scheme2cox[selectionScheme],
-            ProtoRegexEngine.ENCODING_SCHEME.scheme2cox[encodingScheme],
-            '-f', queryFile]),
+        rc, stdout, stderr = libLF.runcmd_OutAndErr(
+            args= [ ProtoRegexEngine.CLI,
+              ProtoRegexEngine.SELECTION_SCHEME.scheme2cox[selectionScheme],
+              ProtoRegexEngine.ENCODING_SCHEME.scheme2cox[encodingScheme],
+              '-f', queryFile ],
             timeout=timeout
         )
         if rc != 0:

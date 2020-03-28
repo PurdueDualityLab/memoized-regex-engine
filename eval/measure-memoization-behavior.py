@@ -1,4 +1,4 @@
-#!/usr/bin/env python3 -u
+#!/usr/bin/env python3
 # Test a libLF.SimpleRegex for SL behavior under various memoization schemes.
 # This analysis includes time measurements for performance.
 # Run it alone, or use core pinning (e.g. taskset) to reduce interference
@@ -48,7 +48,7 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
   PUMPS_TO_TRY = [ i*3 for i in range(1,5) ]
 
   # Can be much longer because memoization prevents geometric growth of the backtracking stack
-  PERF_PUMPS_TO_TRY = [ 1000 ] # i*500 for i in range(1,5) ]
+  # PERF_PUMPS_TO_TRY = [ 1000 ] # i*500 for i in range(1,5) ]
 
   #PERL_PUMPS = 500 * 1000
   PERL_PUMPS = 100 * 1000
@@ -117,8 +117,9 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
 
     args = [perlCLI, queryFile]
     libLF.log("Launching query-perl.pl: {}".format(" ".join(args)))
-    child = subprocess.Popen(args, stdout=None, stderr=subprocess.PIPE, bufsize=0, close_fds=1, text='utf-8')
+    child = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, bufsize=0, close_fds=1)
     for line in child.stderr:
+      line = line.decode('utf-8')
       if matchStartString in line:
         libLF.log("Starting a timer")
         timedOut = False
@@ -348,9 +349,9 @@ def loadRegexFile(regexFile):
 
 ################
 
-def main(regexFile, nTrialsPerCondition, timeSensitive, outFile):
-  libLF.log('regexFile {} nTrialsPerCondition {} outFile {}' \
-    .format(regexFile, nTrialsPerCondition, outFile))
+def main(regexFile, nTrialsPerCondition, timeSensitive, parallelism, outFile):
+  libLF.log('regexFile {} nTrialsPerCondition {} timeSensitive {} parallelism {} outFile {}' \
+    .format(regexFile, nTrialsPerCondition, timeSensitive, parallelism, outFile))
 
   #### Check dependencies
   libLF.checkShellDependencies(shellDeps)
@@ -366,7 +367,7 @@ def main(regexFile, nTrialsPerCondition, timeSensitive, outFile):
   nNonSL = 0
   nExceptions = 0
 
-  nWorkers = 1 if timeSensitive else libLF.parallel.CPUCount.CPU_BOUND
+  nWorkers = 1 if timeSensitive else parallelism
   libLF.log("timeSensitive {}, so using {} workers".format(timeSensitive, nWorkers))
   results = libLF.parallel.map(tasks, nWorkers,
     libLF.parallel.RateLimitEnums.NO_RATE_LIMIT, libLF.parallel.RateLimitEnums.NO_RATE_LIMIT,
@@ -403,6 +404,8 @@ parser.add_argument('--trials', type=int, help='In: Number of trials per experim
   dest='nTrialsPerCondition')
 parser.add_argument('--time-sensitive', help='In: Is this a time-sensitive analysis? If not, run in parallel', required=False, action='store_true', default=False,
   dest='timeSensitive')
+parser.add_argument('--parallelism', type=int, help='Maximum cores to use', required=False, default=libLF.parallel.CPUCount.CPU_BOUND,
+  dest='parallelism')
 parser.add_argument('--out-file', type=str, help='Out: A pickled dataframe converted from libMemo.MemoizationDynamicAnalysis objects. For best performance, the name should end in .pkl.bz2', required=True,
   dest='outFile')
 
@@ -410,4 +413,4 @@ parser.add_argument('--out-file', type=str, help='Out: A pickled dataframe conve
 args = parser.parse_args()
 
 # Here we go!
-main(args.regexFile, args.nTrialsPerCondition, args.timeSensitive, args.outFile)
+main(args.regexFile, args.nTrialsPerCondition, args.timeSensitive, args.parallelism, args.outFile)
