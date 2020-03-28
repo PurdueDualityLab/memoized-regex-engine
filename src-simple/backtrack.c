@@ -116,55 +116,57 @@ initMemoTable(Prog *prog, int nChars, int memoMode, int memoEncoding)
   memo.nStates = nStatesToTrack;
   memo.nChars = nChars;
   
-  switch(memo.encoding){
-  case ENCODING_NONE:
-    printf("%s: Initializing with encoding NONE\n", prefix);
-    printf("%s: cardQ = %d, Phi_memo = %d\n", prefix, cardQ, nStatesToTrack);
-    /* Visit vectors */
-    memo.visitVectors = mal(sizeof(*memo.visitVectors) * nStatesToTrack);
+  if (memoMode != MEMO_NONE) {
+    switch(memo.encoding){
+    case ENCODING_NONE:
+      printf("%s: Initializing with encoding NONE\n", prefix);
+      printf("%s: cardQ = %d, Phi_memo = %d\n", prefix, cardQ, nStatesToTrack);
+      /* Visit vectors */
+      memo.visitVectors = mal(sizeof(*memo.visitVectors) * nStatesToTrack);
 
-    printf("%s: %d visit vectors x %d chars for each\n", prefix, nStatesToTrack, nChars);
-    for (i = 0; i < nStatesToTrack; i++) {
-      memo.visitVectors[i] = mal(sizeof(int) * nChars);
-      for (j = 0; j < nChars; j++) {
-        memo.visitVectors[i][j] = 0;
-      }
-    }
-    break;
-  case ENCODING_NEGATIVE:
-    printf("%s: Initializing with encoding NEGATIVE\n", prefix);
-    memo.searchStateTable = NULL;
-    break;
-  case ENCODING_RLE:
-  case ENCODING_RLE_TUNED:
-    if (memo.encoding == ENCODING_RLE_TUNED)
-      printf("%s: Initializing with encoding RLE_TUNED\n", prefix);
-    else
-      printf("%s: Initializing with encoding RLE\n", prefix);
-
-    memo.rleVectors = mal(sizeof(*memo.rleVectors) * nStatesToTrack);
-
-    printf("%s: %d RLE-encoded visit vectors\n", prefix, nStatesToTrack);
-    j = -1;
-    for (i = 0; i < nStatesToTrack; i++) {
-      /* Find the corresponding states so we know the run lengths to use */
-      while (j < prog->len) {
-        j++;
-        if (prog->start[j].shouldMemo) {
-          int visitInterval = (memo.encoding == ENCODING_RLE_TUNED) ? prog->start[j].visitInterval : 1;
-          if (visitInterval < 1)
-            visitInterval = 1;
-          //visitInterval = 60;
-          printf("%s: state %d (memo state %d) will use visitInterval %d\n", prefix, j, i, visitInterval);
-          memo.rleVectors[i] = RLEVector_create(visitInterval);
-          break;
+      printf("%s: %d visit vectors x %d chars for each\n", prefix, nStatesToTrack, nChars);
+      for (i = 0; i < nStatesToTrack; i++) {
+        memo.visitVectors[i] = mal(sizeof(int) * nChars);
+        for (j = 0; j < nChars; j++) {
+          memo.visitVectors[i][j] = 0;
         }
       }
+      break;
+    case ENCODING_NEGATIVE:
+      printf("%s: Initializing with encoding NEGATIVE\n", prefix);
+      memo.searchStateTable = NULL;
+      break;
+    case ENCODING_RLE:
+    case ENCODING_RLE_TUNED:
+      if (memo.encoding == ENCODING_RLE_TUNED)
+        printf("%s: Initializing with encoding RLE_TUNED\n", prefix);
+      else
+        printf("%s: Initializing with encoding RLE\n", prefix);
+
+      memo.rleVectors = mal(sizeof(*memo.rleVectors) * nStatesToTrack);
+
+      printf("%s: %d RLE-encoded visit vectors\n", prefix, nStatesToTrack);
+      j = -1;
+      for (i = 0; i < nStatesToTrack; i++) {
+        /* Find the corresponding states so we know the run lengths to use */
+        while (j < prog->len) {
+          j++;
+          if (prog->start[j].shouldMemo) {
+            int visitInterval = (memo.encoding == ENCODING_RLE_TUNED) ? prog->start[j].visitInterval : 1;
+            if (visitInterval < 1)
+              visitInterval = 1;
+            //visitInterval = 60;
+            printf("%s: state %d (memo state %d) will use visitInterval %d\n", prefix, j, i, visitInterval);
+            memo.rleVectors[i] = RLEVector_create(visitInterval);
+            break;
+          }
+        }
+      }
+      break;
+    default:
+      printf("%s: Unexpected encoding %d\n", prefix, memo.encoding);
+      assert(0);
     }
-    break;
-  default:
-    printf("%s: Unexpected encoding %d\n", prefix, memo.encoding);
-    assert(0);
   }
 
   printf("%s: initialized\n", prefix);
@@ -349,7 +351,7 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime)
   printf("%s: Most-visited search state: <%d, %d> (%d visits)\n", prefix, vertexWithMostVisitedSearchState, mostVisitedOffset, maxVisitsPerSearchState);
   printf("%s: Most-visited vertex: %d (%d visits over all its search states)\n", prefix, mostVisitedVertex, maxVisitsPerVertex);
   /* Info about simulation */
-  fprintf(stderr, ", \"simulationInfo\": { \"nTotalVisits\": %d, \"nPossibleTotalVisitsWithMemoization\": %d, \"visitsToMostVisitedSearchState\": %d, \"visitsToMostVisitedVertex\": %d, \"simTimeUS\": %lu }",
+  fprintf(stderr, ", \"simulationInfo\": { \"nTotalVisits\": %d, \"nPossibleTotalVisitsWithMemoization\": %d, \"visitsToMostVisitedSearchState\": %d, \"visitsToMostVisitedVertex\": %d, \"simTimeUS\": %llu }",
     nTotalVisits, visitTable->nStates * visitTable->nChars, maxVisitsPerSearchState, maxVisitsPerVertex, elapsed_US);
 
   if (memo->mode == MEMO_FULL || memo->mode == MEMO_IN_DEGREE_GT1) {
@@ -525,17 +527,12 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
   visitTable = initVisitTable(prog, strlen(input) + 1);
 
   /* Prep memo table */
-  if (prog->memoMode != MEMO_NONE) {
-    if (VERBOSE)
-      printf("Initializing memo table\n");
-    memo = initMemoTable(prog, strlen(input) + 1, prog->memoMode, prog->memoEncoding);
-  }
+  if (VERBOSE)
+    printf("Initializing memo table\n");
+  memo = initMemoTable(prog, strlen(input) + 1, prog->memoMode, prog->memoEncoding);
 
   printf("\n\n***************\n\n  Backtrack: Simulation begins\n\n************\n\n");
   startTime = now();
-
-	if (prog->memoMode != MEMO_NONE)
-		printStats(prog, &memo, &visitTable, startTime);
 
   /* queue initial thread */
   sub = newsub(nsubp);
@@ -627,8 +624,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
             subp[i] = sub->sub[i];
           decref(sub);
 
-					if (prog->memoMode != MEMO_NONE)
-						printStats(prog, &memo, &visitTable, startTime);
+          printStats(prog, &memo, &visitTable, startTime);
           ThreadVec_free(&ready);
           return 1;
         }
@@ -650,8 +646,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
     decref(sub);
   }
 
-	if (prog->memoMode != MEMO_NONE)
-		printStats(prog, &memo, &visitTable, startTime);
+  printStats(prog, &memo, &visitTable, startTime);
   ThreadVec_free(&ready);
   return 0;
 }

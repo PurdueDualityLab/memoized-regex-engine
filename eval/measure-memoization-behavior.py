@@ -33,7 +33,7 @@ GROWTH_RATE_INF = "INF"
 
 CHECK_TIME_COEFFICIENT_OF_VARIANCE = False
 
-SAVE_TMP_FILES = False
+SAVE_TMP_FILES = True
 
 EXPAND_EVIL_INPUT = True # Get more SL regexes, corrects some common errors
 
@@ -54,6 +54,8 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
   PERL_PUMPS = 100 * 1000
   #PERL_PUMPS = 1 * 1000
   #PERL_PUMPS = 900
+
+  PERF_PUMPS_TO_TRY = [ int(PERL_PUMPS/10) ] # Hmm?
 
   def __init__(self, regex, nTrialsPerCondition):
     self.regex = regex
@@ -148,7 +150,8 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
       try:
         meas = libMemo.ProtoRegexEngine.query(selectionScheme, encodingScheme, queryFile, timeout=30)
         measures.append(meas)
-      except BaseException:
+      except BaseException as err:
+        libLF.log(err)
         libLF.log("Error, a timeout should not have occurred with memoization in place")
         raise
 
