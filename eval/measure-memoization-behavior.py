@@ -29,8 +29,7 @@ PRODUCTION_ENGINE_CLI_ROOT = os.path.join(os.environ['MEMOIZATION_PROJECT_ROOT']
 PRODUCTION_ENGINE_TO_CLI = {
   "perl":   os.path.join(PRODUCTION_ENGINE_CLI_ROOT, 'perl', 'query-perl.pl'),
   "php":    os.path.join(PRODUCTION_ENGINE_CLI_ROOT, 'php', 'query-php.php'),
-  # TODO
-#  "csharp": os.path.join(PRODUCTION_ENGINE_CLI_ROOT, 'csharp', 'query-csharp.sh'),
+  "csharp": os.path.join(PRODUCTION_ENGINE_CLI_ROOT, 'csharp', 'query-csharp.sh'),
 }
 
 shellDeps = [ libMemo.ProtoRegexEngine.CLI, *PRODUCTION_ENGINE_TO_CLI.values() ]

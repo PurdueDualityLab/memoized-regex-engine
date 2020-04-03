@@ -61,11 +61,13 @@ def runcmd_OutAndErr(cmd=None, args=None, timeout=None):
   
   Raises: TimeoutExpired
   """
-  log('CMD: {}'.format(cmd))
   if cmd:
     ar = cmd
+    s = cmd
   elif args:
     ar = args
+    s = ' '.join(ar)
+  log('CMD: {}'.format(s))
   completedProcess = subprocess.run(ar, stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=True, timeout=timeout)
   return completedProcess.returncode, completedProcess.stdout.decode('utf-8'), completedProcess.stderr.decode('utf-8')
 

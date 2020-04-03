@@ -47,7 +47,7 @@ class ProtoRegexEngine:
             ES_None: "none",
             ES_Negative: "neg",
             ES_RLE: "rle",
-            ES_RLE_TUNED: "rle-tuned",
+            # ES_RLE_TUNED: "rle-tuned", # TODO Work out the right math here
         }
 
     @staticmethod
@@ -98,7 +98,8 @@ class ProtoRegexEngine:
         if res:
           libLF.log("Wished for {} bits".format(res.group(1)))
 
-        return ProtoRegexEngine.EngineMeasurements(stderr)
+        # libLF.log("stderr: <" + stderr + ">")
+        return ProtoRegexEngine.EngineMeasurements(stderr.strip())
     
     class EngineMeasurements:
         """Engine measurements

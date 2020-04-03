@@ -28,20 +28,35 @@ public class QueryCSharp
 		}
 
 		// Construct queryString
+		Console.Error.WriteLine("Constructing query string");
 		string queryString = "";
 		foreach (dynamic pumpPair in patternObj.evilInput.pumpPairs) {
-			queryString += pumpPair.prefix;
-			for (int i = 0; i < nPumps; i++) {
-				queryString += pumpPair.pump;
+			// Use a doubling strategy -- much faster than iterating
+			string pump = Convert.ToString(pumpPair.pump);
+			int lengthOfExpandedPump = nPumps * pump.Length;
+			string expandedPump = pump;
+			if (lengthOfExpandedPump > 0) {
+				while (expandedPump.Length < lengthOfExpandedPump) {
+					// Console.Error.WriteLine("Doubling -- length " + expandedPump.Length + " < goal " + lengthOfExpandedPump);
+					expandedPump += expandedPump;
+				}
+				expandedPump = expandedPump.Substring(0, lengthOfExpandedPump);
+			} else {
+				expandedPump = Convert.ToString(pumpPair.prefix);
 			}
+
+			queryString += pumpPair.prefix + expandedPump;
 		}
-		queryString += patternObj.evilInput.suffix;
+		queryString += Convert.ToString(patternObj.evilInput.suffix);
+
+		Console.Error.WriteLine("Issuing match request. Start your engines!");
 
 		bool validPattern = true;
 		try {
 			// Construct regexp -- might throw
 			// Isolate this so we're sure it's the pattern and not something else (e.g. TimeSpan)
 			new Regex(pattern);
+			Console.Error.WriteLine("Valid pattern");
 		} catch (ArgumentException) {
 			patternObj.exceptionString = "INVALID_INPUT";
 			validPattern = false;
@@ -51,7 +66,8 @@ public class QueryCSharp
 			patternObj.inputLength = queryString.Length;
 			try {
 				// Attempt match
-				Console.Error.WriteLine("Attempting match: /" + pattern + "/, input " + queryString);
+				//Console.Error.WriteLine("Attempting match: /" + pattern + "/, input " + queryString);
+				Console.Error.WriteLine("Attempting match");
 				int matched = 0;
 				RegexOptions opts = RegexOptions.None;
 				if (Regex.IsMatch(queryString, pattern, opts, matchTimeout)) {
