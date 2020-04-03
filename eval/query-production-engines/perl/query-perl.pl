@@ -20,16 +20,11 @@ if (not defined($queryFile)) {
 
 # Load query from file.
 &log("Loading query from $queryFile");
-# NB This is a possible source of false positives.
-# For very long input files (e.g. 10MB), just parsing the input file can take O(seconds).
-# Your wrapper should watch our stdout to see when the match time actually begins
-# before imposing a timeout.
-# Alternatively, a timeout of ~10 seconds should suffice.
 my $query = decode_json(&readFile("file"=>$queryFile));
 
 # Check query is valid.
 my $validQuery = 1;
-my @requiredQueryKeys = ('pattern', 'input');
+my @requiredQueryKeys = ('pattern', 'evilInput', 'nPumps');
 for my $k (@requiredQueryKeys) {
   if (not defined($query->{$k})) {
     $validQuery = 0;
@@ -40,10 +35,19 @@ if (not $validQuery) {
   exit 1;
 }
 
+# Compose evil input
+my $inputString = "";
+for my $pumpPair (@{$query->{evilInput}->{pumpPairs}}) {
+  $inputString .= $pumpPair->{prefix};
+  $inputString .= $pumpPair->{pump} x int($query->{nPumps});
+}
+$inputString .= $query->{evilInput}->{suffix};
+
+#print("<$inputString>\n");
 &log("Query is valid. Gentlemen, start your timers!");
 
 # Try to match string against pattern.
-my $len = length($query->{input});
+my $len = length($inputString);
 &log("matching: pattern /$query->{pattern}/ inputStr: len $len");
 
 my $NO_REDOS_EXCEPT = "NO_REDOS_EXCEPT";
@@ -72,12 +76,12 @@ eval {
   };
 
   # Perform the match
-  if ($query->{input} =~ m/$query->{pattern}/) {
+  if ($inputString =~ /$query->{pattern}/) { # NB: with m//, ^ and $ are interpreted on a per-line basis
     $matched = 1;
     $matchContents->{matchedString} = $&; # I love perl
 
     if (defined $1) { # Were there any capture groups?
-      my @matches = ($query->{input} =~ m/$query->{pattern}/);
+      my @matches = ($inputString =~ m/$query->{pattern}/);
       @matches = map { if (defined $_) { $_ } else { ""; } } @matches;
       $matchContents->{captureGroups} = \@matches;
     } else {
@@ -107,7 +111,7 @@ if ($@) {
 delete $result->{input}; # Might take a long time to print
 $result->{inputLength} = $len;
 $result->{matched} = $matched ? 1 : 0;
-$result->{matchContents} = $matchContents;
+#$result->{matchContents} = $matchContents; # Don't need this in timing experiments
 $result->{exceptionString} = $except;
 
 print encode_json($result) . "\n";

@@ -87,9 +87,11 @@ class EvilInput:
       ei1 = copy.deepcopy(ei)
       ei2 = copy.deepcopy(ei)
       ei3 = copy.deepcopy(ei)
+      ei4 = copy.deepcopy(ei)
       ei2.suffix += "\n" # For regexes that end in '.+$'
-      ei3.suffix = "\n" + ei3.suffix # For regexes that end in '.+P'
-      eis += [ei1, ei2, ei3]
+      ei3.suffix = "\n" + "a" # For regexes that end in '.+$' where $ matches \n at end of line, too
+      ei4.suffix = "\n" + ei4.suffix # For regexes that end in '.+P'
+      eis += [ei1, ei2, ei3, ei4]
     return eis
   
   def build(self, nPumps):
