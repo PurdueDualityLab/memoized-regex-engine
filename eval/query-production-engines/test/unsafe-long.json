@@ -1,0 +1,1 @@
+{"pattern": "^a*a*a*$", "evilInput": {"pumpPairs": [{"prefix": "a", "pump": "a"}], "suffix": "\n"}, "nPumps": 10}

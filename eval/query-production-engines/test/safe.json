@@ -1,0 +1,1 @@
+{"pattern": "a", "evilInput": {"pumpPairs": [{"prefix": "a", "pump": "a"}], "suffix": "!"}, "nPumps": 50}

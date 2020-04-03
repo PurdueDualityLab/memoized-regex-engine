@@ -47,7 +47,7 @@ class ProtoRegexEngine:
             ES_None: "none",
             ES_Negative: "neg",
             ES_RLE: "rle",
-            ES_RLE_TUNED: "rle-tuned",
+            # ES_RLE_TUNED: "rle-tuned", # TODO Work out the right math here
         }
 
     @staticmethod
@@ -98,7 +98,8 @@ class ProtoRegexEngine:
         if res:
           libLF.log("Wished for {} bits".format(res.group(1)))
 
-        return ProtoRegexEngine.EngineMeasurements(stderr)
+        # libLF.log("stderr: <" + stderr + ">")
+        return ProtoRegexEngine.EngineMeasurements(stderr.strip())
     
     class EngineMeasurements:
         """Engine measurements
@@ -207,9 +208,11 @@ class MemoizationDynamicAnalysis:
     self.evilInput = None # If an SL regex
     self.nPumps = -1 # If an SL regex
 
-    # Set these if you run a Perl analysis
-    self.perlTimedOut = False
-    self.perlPumps = -1
+    # Set these if you run a production regex analysis
+    self.productionEnginePumps = -1
+    self.perlBehavior = ""
+    self.phpBehavior = ""
+    self.csharpBehavior = ""
 
     self.selectionPolicy_to_enc2space = {} # Numeric space cost
     self.selectionPolicy_to_enc2time = {} # Numeric time cost
@@ -251,8 +254,10 @@ class MemoizationDynamicAnalysis:
 
     self.nPumps = obj['nPumps']
 
-    self.perlTimedOut = obj['perlTimedOut']
-    self.perlPumps = obj['perlPumps']
+    self.productionEnginePumps = obj['productionEnginePumps']
+    self.perlBehavior = obj['perlBehavior']
+    self.phpBehavior = obj['phpBehavior']
+    self.csharpBehavior = obj['csharpBehavior']
 
     self.selectionPolicy_to_enc2space = obj['selectionPolicy_to_enc2space']
     self.selectionPolicy_to_enc2time = obj['selectionPolicy_to_enc2time']
@@ -267,8 +272,8 @@ class MemoizationDynamicAnalysis:
       'inputLength': self.inputLength,
       'evilInput': self.evilInput.toNDJSON() if self.evilInput else None,
       'nPumps': self.nPumps,
-      'perlTimedOut': self.perlTimedOut,
-      'perlPumps': self.perlPumps,
+      'perlBehavior': self.perlBehavior,
+      'productionEnginePumps': self.productionEnginePumps,
       'selectionPolicy_to_enc2space': self.selectionPolicy_to_enc2space,
       'selectionPolicy_to_enc2time': self.selectionPolicy_to_enc2time,
     }
@@ -315,8 +320,10 @@ class MemoizationDynamicAnalysis:
           "|w|": self.inputLength + 1, # Count the null byte
           "SL": True,
           "nPumps": self.nPumps,
-          "perlTimedOut": self.perlTimedOut,
-          "perlPumps": self.perlPumps,
+          "perlBehavior": self.perlBehavior,
+          "phpBehavior": self.phpBehavior,
+          "csharpBehavior": self.csharpBehavior,
+          "productionEnginePumps": self.productionEnginePumps,
           "selectionPolicy": selectionPolicy,
           "encodingPolicy": encodingPolicy,
           "spaceCost": space,

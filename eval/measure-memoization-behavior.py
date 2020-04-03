@@ -24,8 +24,15 @@ import pandas as pd
 
 # Shell dependencies
 
-perlCLI = os.path.join(os.environ['MEMOIZATION_PROJECT_ROOT'], 'eval', 'query-perl.pl')
-shellDeps = [ libMemo.ProtoRegexEngine.CLI, perlCLI ]
+PRODUCTION_ENGINE_CLI_ROOT = os.path.join(os.environ['MEMOIZATION_PROJECT_ROOT'], 'eval', 'query-production-engines')
+
+PRODUCTION_ENGINE_TO_CLI = {
+  "perl":   os.path.join(PRODUCTION_ENGINE_CLI_ROOT, 'perl', 'query-perl.pl'),
+  "php":    os.path.join(PRODUCTION_ENGINE_CLI_ROOT, 'php', 'query-php.php'),
+  "csharp": os.path.join(PRODUCTION_ENGINE_CLI_ROOT, 'csharp', 'query-csharp.sh'),
+}
+
+shellDeps = [ libMemo.ProtoRegexEngine.CLI, *PRODUCTION_ENGINE_TO_CLI.values() ]
 
 # Other globals
 PROTOTYPE_SL_MATCH_TIMEOUT = 2 # Seconds before timing out SL queries to our prototype
@@ -41,6 +48,36 @@ EXPAND_EVIL_INPUT = True # Get more SL regexes, corrects some common errors
 
 ##########
 
+class EngineBehavior:
+  """Characterize behavior of production regex engines"""
+  InvalidRegex = "InvalidRegex"
+
+  MatchCompleted = "MatchCompleted" # (Presumably in linear time, e.g. because of optimizations)
+  RuntimeException = "Runtime exception" # e.g. resource measurement
+  TimeoutException = "Timeout exception" # C#
+
+  SuperLinear = "Super-linear behavior" # We terminated the match ourselves
+
+class TaskConfig:
+  """Describes which tasks we should perform"""
+  QueryPrototype = "Query prototype"
+  QueryProductionEngines = "Query production engines"
+
+  def __init__(self, queryPrototype, queryProductionEngines):
+    self.tasks = []
+
+    if queryPrototype:
+      self.tasks.append(TaskConfig.QueryPrototype)
+    
+    if queryProductionEngines:
+      self.tasks.append(TaskConfig.QueryProductionEngines)
+  
+  def queryPrototype(self):
+    return TaskConfig.QueryPrototype in self.tasks
+
+  def queryProductionEngines(self):
+    return TaskConfig.QueryProductionEngines in self.tasks
+
 class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the API
   NOT_SL = "NOT_SL"
 
@@ -52,16 +89,17 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
   # Can be much longer because memoization prevents geometric growth of the backtracking stack
   # PERF_PUMPS_TO_TRY = [ 1000 ] # i*500 for i in range(1,5) ]
 
-  #PERL_PUMPS = 500 * 1000
-  PERL_PUMPS = 100 * 1000
-  #PERL_PUMPS = 1 * 1000
-  #PERL_PUMPS = 900
+  #PROD_ENGINE_PUMPS = 500 * 1000
+  PROD_ENGINE_PUMPS = 100 * 1000
+  #PROD_ENGINE_PUMPS = 1 * 1000
+  #PROD_ENGINE_PUMPS = 900
 
-  PERF_PUMPS_TO_TRY = [ int(PERL_PUMPS/10) ] # Hmm?
+  PERF_PUMPS_TO_TRY = [ int(PROD_ENGINE_PUMPS/10) ] # Hmm?
 
-  def __init__(self, regex, nTrialsPerCondition):
+  def __init__(self, regex, nTrialsPerCondition, taskConfig):
     self.regex = regex
     self.nTrialsPerCondition = nTrialsPerCondition
+    self.taskConfig = taskConfig
   
   def run(self):
     """Run task
@@ -76,29 +114,36 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
       libLF.log('Working on regex: /{}/'.format(self.regex.pattern))
 
       # Filter out non-SL regexes
-      libLF.log("  1. Confirming that regex is SL")
+      libLF.log("  TASK: Confirming that regex is SL")
       ei, growthRate = self._findMostSLInput(self.regex)
       if ei is None:
         return MyTask.NOT_SL
 
-      # Run the analysis
-      # Use this EI to obtain per-pump SL MDAs
-      libLF.log("  2. Running analysis on SL regex")
-      self.pump_to_mdas = self._runSLDynamicAnalysis(self.regex, ei, self.nTrialsPerCondition)
+      if self.taskConfig.queryPrototype():
+        libLF.log("  TASK: Running analysis on SL regex")
+        self.pump_to_mdas = self._runSLDynamicAnalysis(self.regex, ei, self.nTrialsPerCondition)
 
-      libLF.log("  3. Comparing behavior to Perl")
-      perlTimedOut = self._doesPerlTimeOut(self.regex, ei)
-      if perlTimedOut:
-        libLF.log("Perl timed out on the regex /{}/".format(self.regex.pattern))
-      else:
-        libLF.log("Perl did not time out on the regex /{}/".format(self.regex.pattern))
+      if self.taskConfig.queryProductionEngines():
+        libLF.log("  TASK: Querying production regex engines")
+        productionEngine_to_behavior = self._measureProductionEngineBehavior(self.regex, ei)
+        libLF.log("Findings: {}".format(productionEngine_to_behavior))
 
       # Return
       libLF.log('Completed regex /{}/'.format(self.regex.pattern))
       # Just return the biggest one for now
       lastMDA = self.pump_to_mdas[MyTask.PERF_PUMPS_TO_TRY[-1]]
-      lastMDA.perlTimedOut = perlTimedOut
-      lastMDA.perlPumps = MyTask.PERL_PUMPS
+
+      # Collect pump data for the engines we tested
+      lastMDA.productionEnginePumps = MyTask.PROD_ENGINE_PUMPS
+      if 'perl' in PRODUCTION_ENGINE_TO_CLI:
+        libLF.log("perl behavior: {}".format(productionEngine_to_behavior["perl"]))
+        lastMDA.perlBehavior = productionEngine_to_behavior["perl"]
+      if 'php' in PRODUCTION_ENGINE_TO_CLI:
+        libLF.log("php behavior: {}".format(productionEngine_to_behavior["php"]))
+        lastMDA.phpBehavior = productionEngine_to_behavior["php"]
+      if 'csharp' in PRODUCTION_ENGINE_TO_CLI:
+        libLF.log("csharp behavior: {}".format(productionEngine_to_behavior["csharp"]))
+        lastMDA.csharpBehavior = productionEngine_to_behavior["csharp"]
       return lastMDA.toDataFrame()
     except KeyboardInterrupt:
       raise
@@ -106,40 +151,91 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
       libLF.log('Exception while testing regex /{}/: {}'.format(self.regex.pattern, err))
       traceback.print_exc()
       return err
+  
+  def _measureProductionEngineBehavior(self, regex, evilInput):
+    """Returns { "perl": EngineBehavior, "php": eb, "csharp": eb }"""
+    maxQuerySec = 5 # Seconds of regex engine evaluation before we kill the wrapper
 
-  def _doesPerlTimeOut(self, regex, mostEI):
-    """Returns True if Perl times out on this EI, else False"""
+    engine_to_behavior = {}
+    for engine in PRODUCTION_ENGINE_TO_CLI.keys():
+      engine_to_behavior[engine] = self._queryProductionEngine(regex, evilInput, maxQuerySec, engine, 10)
 
-    # Globals
-    matchTimeout = 5 # Seconds of regex engine evaluation
-    matchStartString = "start your timer" # Printed by perlCLI just before regex match
+    return engine_to_behavior
+  
+  def _engineOutputToBehavior(self, engineWrapperStdout):
+    INVALID_INPUT = "INVALID_INPUT"
+    PHP_EXC_SNIPPET = "PREG"
+    PERL_EXC_SNIPPET = "recursion limit"
+    CSHARP_TIMEOUT_SNIPPET = "timed out"
 
-    # Query file
-    queryFile = libMemo.ProtoRegexEngine.buildQueryFile(regex.pattern, mostEI.build(MyTask.PERL_PUMPS))
-
-    args = [perlCLI, queryFile]
-    libLF.log("Launching query-perl.pl: {}".format(" ".join(args)))
-    child = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, bufsize=0, close_fds=1)
-    for line in child.stderr:
-      line = line.decode('utf-8')
-      if matchStartString in line:
-        libLF.log("Starting a timer")
-        timedOut = False
-        try:
-          child.communicate(timeout=matchTimeout)
-        except subprocess.TimeoutExpired:
-          timedOut = True
-        break
+    obj = json.loads(engineWrapperStdout)
+    if obj['exceptionString'] == INVALID_INPUT:
+      return EngineBehavior.InvalidRegex
+    elif PHP_EXC_SNIPPET in obj['exceptionString'] \
+      or PERL_EXC_SNIPPET in obj['exceptionString']:
+      return EngineBehavior.RuntimeException
+    elif CSHARP_TIMEOUT_SNIPPET in obj['exceptionString']:
+      return EngineBehavior.TimeoutException
     
-    if not SAVE_TMP_FILES:
-      os.unlink(queryFile)
+    return EngineBehavior.MatchCompleted
+  
+  def _buildQueryFileForProductionRegexEngine(self, regex, mostEI, nPumps, timeoutMS=-1):
+    """Return the path to a query file
+    
+    Unlike libMemo.ProtoRegexEngine.buildQueryFile, the production regex engine query tools
+       take evilInput and nPumps instead of the raw string
+    """
+    fd, name = tempfile.mkstemp(suffix=".json", prefix="measure-memoization-behavior-queryFile-")
+    os.close(fd)
+
+    evilInput = { "pumpPairs": [], "suffix": mostEI.suffix }
+    for pp in mostEI.pumpPairs:
+      evilInput["pumpPairs"].append({
+        "prefix": pp.prefix,
+        "pump": pp.pump
+      })
+
+    with open(name, 'w') as outStream:
+        json.dump({
+            "pattern": regex.pattern,
+            "evilInput": evilInput,
+            "nPumps": nPumps,
+            "timeoutMS": timeoutMS
+        }, outStream)
+    return name
+
+  def _queryProductionEngine(self, regex, mostEI, maxQuerySec, engine, timeoutMS):
+    """Returns EngineBehavior for this engine"""
+    # Query file
+    queryFile = self._buildQueryFileForProductionRegexEngine(regex, mostEI, MyTask.PROD_ENGINE_PUMPS, timeoutMS=timeoutMS)
+
+    args = [ PRODUCTION_ENGINE_TO_CLI[engine], queryFile ]
+    libLF.log("Querying {}: {}".format(engine, " ".join(args)))
+    child = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0, close_fds=1)
+    wrapperTimedOut = False
+    try:
+      stdout, stderr = child.communicate(timeout=maxQuerySec)
+      #libLF.log("stdout: {}".format(stdout))
+      #libLF.log("stderr: {}".format(stderr))
+    except subprocess.TimeoutExpired:
+      wrapperTimedOut = True
+
+    # Paranoid cleanup
     try:
       child.terminate()
       child.kill()
     except:
       pass
     
-    return timedOut
+    # Normal cleanup
+    if not SAVE_TMP_FILES:
+      os.unlink(queryFile)
+
+    # Convert to EngineBehavior
+    if wrapperTimedOut:
+      return EngineBehavior.SuperLinear
+    else:
+      return self._engineOutputToBehavior(stdout.decode('utf-8'))
   
   def _measureCondition(self, regex, mostEI, nPumps, selectionScheme, encodingScheme, nTrialsPerCondition):
     """Obtain the average time and space costs for this condition
@@ -319,9 +415,9 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
 
 ################
 
-def getTasks(regexFile, nTrialsPerCondition):
+def getTasks(regexFile, nTrialsPerCondition, taskConfig):
   regexes = loadRegexFile(regexFile)
-  tasks = [MyTask(regex, nTrialsPerCondition) for regex in regexes]
+  tasks = [MyTask(regex, nTrialsPerCondition, taskConfig) for regex in regexes]
   libLF.log('Prepared {} tasks'.format(len(tasks)))
   return tasks
 
@@ -351,15 +447,16 @@ def loadRegexFile(regexFile):
 
 ################
 
-def main(regexFile, nTrialsPerCondition, timeSensitive, parallelism, outFile):
-  libLF.log('regexFile {} nTrialsPerCondition {} timeSensitive {} parallelism {} outFile {}' \
-    .format(regexFile, nTrialsPerCondition, timeSensitive, parallelism, outFile))
+def main(regexFile, queryPrototype, nTrialsPerCondition, queryProductionEngines, timeSensitive, parallelism, outFile):
+  libLF.log('regexFile {} queryPrototype {} nTrialsPerCondition {} queryProductionEngines {} timeSensitive {} parallelism {} outFile {}' \
+    .format(regexFile, queryPrototype, nTrialsPerCondition, queryProductionEngines, timeSensitive, parallelism, outFile))
 
   #### Check dependencies
   libLF.checkShellDependencies(shellDeps)
 
   #### Load data
-  tasks = getTasks(regexFile, nTrialsPerCondition)
+  taskConfig = TaskConfig(queryPrototype, queryProductionEngines) 
+  tasks = getTasks(regexFile, nTrialsPerCondition, taskConfig)
   nRegexes = len(tasks)
 
   #### Collect data
@@ -402,8 +499,12 @@ def main(regexFile, nTrialsPerCondition, timeSensitive, parallelism, outFile):
 parser = argparse.ArgumentParser(description='Measure the dynamic costs of memoization -- the space and time costs of memoizing this set of regexes, as determined using the prototype engine.')
 parser.add_argument('--regex-file', type=str, help='In: NDJSON file of objects containing libMemo.SimpleRegex objects (at least the key "pattern", and "evilInput" if you want an SL-specific analysis)', required=True,
   dest='regexFile')
-parser.add_argument('--trials', type=int, help='In: Number of trials per experimental condition (only affects time complexity)', required=False, default=20,
+parser.add_argument('--queryPrototype', help='In: Query prototype?', required=False, action='store_true', default=False,
+  dest='queryPrototype')
+parser.add_argument('--trials', type=int, help='In: Number of trials per experimental condition (only for prototype, and only affects time complexity)', required=False, default=20,
   dest='nTrialsPerCondition')
+parser.add_argument('--queryProductionEngines', help='In: Query other engines', required=False, action='store_true', default=False,
+  dest='queryProductionEngines')
 parser.add_argument('--time-sensitive', help='In: Is this a time-sensitive analysis? If not, run in parallel', required=False, action='store_true', default=False,
   dest='timeSensitive')
 parser.add_argument('--parallelism', type=int, help='Maximum cores to use', required=False, default=libLF.parallel.CPUCount.CPU_BOUND,
@@ -415,4 +516,4 @@ parser.add_argument('--out-file', type=str, help='Out: A pickled dataframe conve
 args = parser.parse_args()
 
 # Here we go!
-main(args.regexFile, args.nTrialsPerCondition, args.timeSensitive, args.parallelism, args.outFile)
+main(args.regexFile, args.queryPrototype, args.nTrialsPerCondition, args.queryProductionEngines, args.timeSensitive, args.parallelism, args.outFile)
