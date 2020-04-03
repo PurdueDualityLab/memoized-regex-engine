@@ -28,8 +28,10 @@ perlCLI = os.path.join(os.environ['MEMOIZATION_PROJECT_ROOT'], 'eval', 'query-pe
 shellDeps = [ libMemo.ProtoRegexEngine.CLI, perlCLI ]
 
 # Other globals
-PROTOTYPE_MATCH_TIMEOUT = 2 # Seconds before timing out queries to our prototype
+PROTOTYPE_SL_MATCH_TIMEOUT = 2 # Seconds before timing out SL queries to our prototype
 GROWTH_RATE_INF = "INF"
+
+PROTOTYPE_MEMO_MATCH_TIMEOUT = 180 # Seconds before timing out memoized queries to our prototype
 
 CHECK_TIME_COEFFICIENT_OF_VARIANCE = False
 
@@ -149,7 +151,7 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
     measures = []
     for i in range(0, nTrialsPerCondition):
       try:
-        meas = libMemo.ProtoRegexEngine.query(selectionScheme, encodingScheme, queryFile, timeout=30)
+        meas = libMemo.ProtoRegexEngine.query(selectionScheme, encodingScheme, queryFile, timeout=PROTOTYPE_MEMO_MATCH_TIMEOUT)
         measures.append(meas)
       except BaseException as err:
         libLF.log(err)
@@ -274,7 +276,7 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
         try:
           pump2meas[nPumps] = libMemo.ProtoRegexEngine.query(
             libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_None, libMemo.ProtoRegexEngine.ENCODING_SCHEME.ES_None, queryFile,
-            timeout=PROTOTYPE_MATCH_TIMEOUT 
+            timeout=PROTOTYPE_SL_MATCH_TIMEOUT 
           )
         except subprocess.TimeoutExpired:
           # If we timed out, that's about as significant a growth rate as can be expected
