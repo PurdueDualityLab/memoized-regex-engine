@@ -29,7 +29,7 @@ PRODUCTION_ENGINE_CLI_ROOT = os.path.join(os.environ['MEMOIZATION_PROJECT_ROOT']
 PRODUCTION_ENGINE_TO_CLI = {
   "perl":   os.path.join(PRODUCTION_ENGINE_CLI_ROOT, 'perl', 'query-perl.pl'),
   "php":    os.path.join(PRODUCTION_ENGINE_CLI_ROOT, 'php', 'query-php.php'),
-  "csharp": os.path.join(PRODUCTION_ENGINE_CLI_ROOT, 'csharp', 'query-csharp.sh'),
+  "csharp": os.path.join(PRODUCTION_ENGINE_CLI_ROOT, 'csharp', 'QueryCSharp.exe'),
 }
 
 shellDeps = [ libMemo.ProtoRegexEngine.CLI, *PRODUCTION_ENGINE_TO_CLI.values() ]
@@ -63,8 +63,9 @@ class TaskConfig:
   QueryPrototype = "Query prototype"
   QueryProductionEngines = "Query production engines"
 
-  def __init__(self, queryPrototype, queryProductionEngines):
+  def __init__(self, useCSharpToFindMostEI, queryPrototype, queryProductionEngines):
     self.tasks = []
+    self.useCSharpToFindMostEI = useCSharpToFindMostEI
 
     if queryPrototype:
       self.tasks.append(TaskConfig.QueryPrototype)
@@ -115,13 +116,30 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
 
       # Filter out non-SL regexes
       libLF.log("  TASK: Confirming that regex is SL")
-      ei, growthRate = self._findMostSLInput(self.regex)
+      if self.taskConfig.useCSharpToFindMostEI:
+        ei = self._findAnySLInputUsingCSharp(self.regex)
+      else:
+        ei, _ = self._findMostSLInput(self.regex)
       if ei is None:
         return MyTask.NOT_SL
 
       if self.taskConfig.queryPrototype():
         libLF.log("  TASK: Running analysis on SL regex")
         self.pump_to_mdas = self._runSLDynamicAnalysis(self.regex, ei, self.nTrialsPerCondition)
+      else:
+        fakeMDA = libMemo.MemoizationDynamicAnalysis()
+        fakeMDA.initFromRaw(self.regex.pattern, -1, -1, -1, -1, ei, MyTask.PERF_PUMPS_TO_TRY[-1], {
+          libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_Full: {
+            libMemo.ProtoRegexEngine.ENCODING_SCHEME.ES_None: -1,
+          },
+        }, {
+          libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_Full: {
+            libMemo.ProtoRegexEngine.ENCODING_SCHEME.ES_None: -1,
+          },
+        })
+        self.pump_to_mdas = {
+          MyTask.PERF_PUMPS_TO_TRY[-1]: fakeMDA
+        }
 
       if self.taskConfig.queryProductionEngines():
         libLF.log("  TASK: Querying production regex engines")
@@ -152,23 +170,28 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
       traceback.print_exc()
       return err
   
-  def _measureProductionEngineBehavior(self, regex, evilInput):
+  def _measureProductionEngineBehavior(self, regex, evilInput, maxQuerySec=5, useCSharpTimeout=True, engines=PRODUCTION_ENGINE_TO_CLI.keys()):
     """Returns { "perl": EngineBehavior, "php": eb, "csharp": eb }"""
-    maxQuerySec = 5 # Seconds of regex engine evaluation before we kill the wrapper
+
+    if useCSharpTimeout:
+      csharpTimeoutMS = 10
+    else:
+      csharpTimeoutMS = -1
 
     engine_to_behavior = {}
-    for engine in PRODUCTION_ENGINE_TO_CLI.keys():
-      engine_to_behavior[engine] = self._queryProductionEngine(regex, evilInput, maxQuerySec, engine, 10)
+    for engine in engines:
+      engine_to_behavior[engine] = self._queryProductionEngine(regex, evilInput, maxQuerySec, engine, csharpTimeoutMS)
 
     return engine_to_behavior
   
   def _engineOutputToBehavior(self, engineWrapperStdout):
     INVALID_INPUT = "INVALID_INPUT"
     PHP_EXC_SNIPPET = "PREG"
-    PERL_EXC_SNIPPET = "recursion limit"
+    PERL_EXC_SNIPPET = "RECURSION_LIMIT"
     CSHARP_TIMEOUT_SNIPPET = "timed out"
 
     obj = json.loads(engineWrapperStdout)
+    libLF.log("exceptionString: {}".format(obj['exceptionString']))
     if obj['exceptionString'] == INVALID_INPUT:
       return EngineBehavior.InvalidRegex
     elif PHP_EXC_SNIPPET in obj['exceptionString'] \
@@ -209,7 +232,10 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
     # Query file
     queryFile = self._buildQueryFileForProductionRegexEngine(regex, mostEI, MyTask.PROD_ENGINE_PUMPS, timeoutMS=timeoutMS)
 
-    args = [ PRODUCTION_ENGINE_TO_CLI[engine], queryFile ]
+    if engine == "csharp":
+      args = [ "wine", PRODUCTION_ENGINE_TO_CLI[engine], queryFile ]
+    else:
+      args = [ PRODUCTION_ENGINE_TO_CLI[engine], queryFile ]
     libLF.log("Querying {}: {}".format(engine, " ".join(args)))
     child = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0, close_fds=1)
     wrapperTimedOut = False
@@ -340,6 +366,29 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
       pump_to_mda[nPumps] = mda
     return pump_to_mda
   
+  def _findAnySLInputUsingCSharp(self, regex):
+    libLF.log('Testing whether this regex exhibits SL behavior in C#: /{}/'.format(regex.pattern))
+    assert regex.evilInputs, "regex has no evil inputs"
+
+    if EXPAND_EVIL_INPUT:
+      # Expand the evil inputs.
+      # The longer expansions may have higher growth rates (larger polynomials),
+      #   but may be buggy and not trigger mismatches properly.
+      expandedEIs = []
+      for ei in regex.evilInputs:
+        expandedEIs += ei.expand()
+      libLF.log("Considering {} EvilInput's, expanded from {}".format(len(expandedEIs), len(regex.evilInputs)))
+      evilInputs = expandedEIs
+    else:
+      evilInputs = regex.evilInputs
+
+    eng = 'csharp'
+    for ei in regex.evilInputs:
+      engineBehavior = self._measureProductionEngineBehavior(regex, ei, maxQuerySec=10, useCSharpTimeout=False, engines=[eng])
+      if engineBehavior[eng] == EngineBehavior.SuperLinear:
+        return ei
+    return None
+
   def _findMostSLInput(self, regex):
     """Of a regex's evil inputs, identify the one that yields the MOST SL behavior.
 
@@ -447,15 +496,15 @@ def loadRegexFile(regexFile):
 
 ################
 
-def main(regexFile, queryPrototype, nTrialsPerCondition, queryProductionEngines, timeSensitive, parallelism, outFile):
-  libLF.log('regexFile {} queryPrototype {} nTrialsPerCondition {} queryProductionEngines {} timeSensitive {} parallelism {} outFile {}' \
-    .format(regexFile, queryPrototype, nTrialsPerCondition, queryProductionEngines, timeSensitive, parallelism, outFile))
+def main(regexFile, useCSharpToFindMostEI, queryPrototype, nTrialsPerCondition, queryProductionEngines, timeSensitive, parallelism, outFile):
+  libLF.log('regexFile {} useCSharpToFindMostEI, queryPrototype {} nTrialsPerCondition {} queryProductionEngines {} timeSensitive {} parallelism {} outFile {}' \
+    .format(regexFile, useCSharpToFindMostEI, queryPrototype, nTrialsPerCondition, queryProductionEngines, timeSensitive, parallelism, outFile))
 
   #### Check dependencies
   libLF.checkShellDependencies(shellDeps)
 
   #### Load data
-  taskConfig = TaskConfig(queryPrototype, queryProductionEngines) 
+  taskConfig = TaskConfig(useCSharpToFindMostEI, queryPrototype, queryProductionEngines) 
   tasks = getTasks(regexFile, nTrialsPerCondition, taskConfig)
   nRegexes = len(tasks)
 
@@ -499,6 +548,8 @@ def main(regexFile, queryPrototype, nTrialsPerCondition, queryProductionEngines,
 parser = argparse.ArgumentParser(description='Measure the dynamic costs of memoization -- the space and time costs of memoizing this set of regexes, as determined using the prototype engine.')
 parser.add_argument('--regex-file', type=str, help='In: NDJSON file of objects containing libMemo.SimpleRegex objects (at least the key "pattern", and "evilInput" if you want an SL-specific analysis)', required=True,
   dest='regexFile')
+parser.add_argument('--useCSharpToFindMostEI', help='In: Use CSharp to find the most evil input? Default is to use the prototype engine', action='store_true', default=False,
+  dest='useCSharpToFindMostEI')
 parser.add_argument('--queryPrototype', help='In: Query prototype?', required=False, action='store_true', default=False,
   dest='queryPrototype')
 parser.add_argument('--trials', type=int, help='In: Number of trials per experimental condition (only for prototype, and only affects time complexity)', required=False, default=20,
@@ -516,4 +567,4 @@ parser.add_argument('--out-file', type=str, help='Out: A pickled dataframe conve
 args = parser.parse_args()
 
 # Here we go!
-main(args.regexFile, args.queryPrototype, args.nTrialsPerCondition, args.queryProductionEngines, args.timeSensitive, args.parallelism, args.outFile)
+main(args.regexFile, args.useCSharpToFindMostEI, args.queryPrototype, args.nTrialsPerCondition, args.queryProductionEngines, args.timeSensitive, args.parallelism, args.outFile)
