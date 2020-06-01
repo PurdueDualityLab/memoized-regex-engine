@@ -37,14 +37,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 /* Run number within a repeating sequence of k-bit runs. [0, nRuns). */
 #define RUN_NUMBER(ix, rleStart, bitsPerRun) ( ( (ix) - (rleStart) ) / (bitsPerRun) )
 
-static int TEST = 0;
-enum {
-  VERBOSE_LVL_NONE,
-  VERBOSE_LVL_SOME,
-  VERBOSE_LVL_ALL,
-};
-static int VERBOSE_LVL = VERBOSE_LVL_NONE;
-
 /* Internal API: RLENode */
 typedef struct RLENode RLENode;
 
@@ -152,43 +144,6 @@ RLEVector_create(int runLength, int autoValidate)
 
   logMsg(LOG_VERBOSE, "RLEVector_create: vec %p nBitsInRun %d, autoValidate %d", vec, vec->nBitsInRun, vec->autoValidate);
 
-  if (TEST) {
-    RLEVector *vec2 = malloc(sizeof *vec);
-
-    printf("\n**********\n\n  RLEVector_create: running test\n\n**********\n\n");
-    vec2->root = NULL;
-    vec2->currNEntries = 0;
-    vec2->mostNEntries = 0;
-    vec2->nBitsInRun = 2;
-    vec->autoValidate = 1;
-    _RLEVector_validate(vec2);
-
-    printf("get from empty\n");
-    assert(RLEVector_currSize(vec2) == 0);
-    assert(RLEVector_get(vec2, 5) == 0);
-
-    printf("set 5\n");
-    RLEVector_set(vec2, 5);
-    assert(RLEVector_currSize(vec2) == 1);
-    printf("set 7\n");
-    RLEVector_set(vec2, 7);
-    assert(RLEVector_currSize(vec2) == 1); /* Run-length 2 should accommodate this: 01-01 */
-    printf("set 6\n");
-    RLEVector_set(vec2, 6);
-    assert(RLEVector_currSize(vec2) == 2); /* But not this: 01-11 */
-    printf("set 4\n");
-    RLEVector_set(vec2, 4);
-    assert(RLEVector_currSize(vec2) == 1); /* But now we have 11-11 */
-
-    printf("get 4-8\n");
-    assert(RLEVector_get(vec2, 4) == 1);
-    assert(RLEVector_get(vec2, 5) == 1);
-    assert(RLEVector_get(vec2, 6) == 1);
-    assert(RLEVector_get(vec2, 7) == 1);
-    assert(RLEVector_get(vec2, 8) == 0);
-    printf("\n\n  RLEVector_create: Tests passed\n\n**********\n\n");
-  }
-
   return vec;
 }
 
@@ -218,7 +173,10 @@ _RLEVector_validate(RLEVector *vec)
       logMsg(LOG_DEBUG, "rleVector_validate: prev (%d,%d,%llu) curr (%d,%d,%llu)", prev->offset, prev->nRuns, prev->run, curr->offset, curr->nRuns, curr->run);
       assert(prev->offset < curr->offset); /* In-order */
 			if (RLENode_end(prev) == curr->offset) {
-				assert(prev->run != curr->run); /* Adjacent are merged */
+				if (prev->run == curr->run){ 
+          /* Adjacent identical runs should have been merged */
+          assert(!"rleVector_validate: Adjacent identical runs are not merged");
+        }
 			}
       prev = curr;
       curr = avl_tree_entry(avl_tree_next_in_order(&curr->node), RLENode, node);
@@ -279,6 +237,8 @@ RLEVector_getNeighbors(RLEVector *vec, int ix)
 static void
 _RLEVector_mergeNeighbors(RLEVector *vec, RLENodeNeighbors rnn)
 {
+  logMsg(LOG_DEBUG, "mergeNeighbors: begins");
+
   int nBefore = vec->currNEntries;
 
   /* Because rnn are adjacent, we can directly manipulate offsets without
@@ -339,8 +299,7 @@ RLEVector_set(RLEVector *vec, int ix)
    * Update rnn.{a,b,c} as we go. */
   if (rnn.b == NULL) {
     /* Case: creates a run */
-    if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
-      printf("%d: Creating a run\n", ix);
+    logMsg(LOG_DEBUG, "%d: Creating a run", ix);
 
     newRunKernel = MASK_FOR(ix, vec->nBitsInRun);
     newRun = RLENode_create(roundedIx, 1, newRunKernel, vec->nBitsInRun);
@@ -352,8 +311,7 @@ RLEVector_set(RLEVector *vec, int ix)
     RLENode *prefixRun = NULL, *oldRun = NULL, *suffixRun = NULL;
     int ixRunNumber = 0, nRunsInPrefix = 0, nRunsInSuffix = 0;
 
-    if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
-      printf("%d: Splitting the run (%d,%d,%llu)\n", ix, rnn.b->offset, rnn.b->nRuns, rnn.b->run);
+    logMsg(LOG_DEBUG, "%d: Splitting the run (%d,%d,%llu)", ix, rnn.b->offset, rnn.b->nRuns, rnn.b->run);
 
     /* Calculate the run kernels */
     oldRun = rnn.b;
@@ -364,8 +322,7 @@ RLEVector_set(RLEVector *vec, int ix)
     _RLEVector_removeRun(vec, oldRun);
 
     /* Insert the new run */
-		if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
-			printf("adding intercalary run\n");
+    logMsg(LOG_DEBUG, "adding intercalary run");
     newRun = RLENode_create(roundedIx, 1, newRunKernel, vec->nBitsInRun);
     _RLEVector_addRun(vec, newRun);
     rnn.b = newRun;
@@ -376,16 +333,14 @@ RLEVector_set(RLEVector *vec, int ix)
     nRunsInSuffix = oldRun->nRuns - (ixRunNumber + 1);
 
     if (nRunsInPrefix > 0) {
-			if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
-				printf("adding prefix\n");
+      logMsg(LOG_DEBUG, "adding prefix");
       prefixRun = RLENode_create(oldRun->offset, nRunsInPrefix, oldRunKernel, vec->nBitsInRun);
       _RLEVector_addRun(vec, prefixRun);
 
       rnn.a = prefixRun;
     }
     if (nRunsInSuffix > 0) {
-			if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
-				printf("adding suffix\n");
+      logMsg(LOG_DEBUG, "adding suffix");
       suffixRun = RLENode_create(roundedIx + vec->nBitsInRun, nRunsInSuffix, oldRunKernel, vec->nBitsInRun);
       _RLEVector_addRun(vec, suffixRun);
 
@@ -396,8 +351,7 @@ RLEVector_set(RLEVector *vec, int ix)
     free(oldRun);
   }
 
-	if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
-		printf("Before merge: run is (%d,%d,%llu)\n", rnn.b->offset, rnn.b->nRuns, rnn.b->run);
+  logMsg(LOG_DEBUG, "Before merge: run is (%d,%d,%llu)", rnn.b->offset, rnn.b->nRuns, rnn.b->run);
 
   _RLEVector_mergeNeighbors(vec, rnn);
   /* After merging, rnn.{a,b,c} is untrustworthy. */
@@ -461,9 +415,6 @@ static void _RLEVector_addRun(RLEVector *vec, RLENode *node)
   if (vec->mostNEntries < vec->currNEntries) {
     vec->mostNEntries = vec->currNEntries;
   }
-
-  if (vec->autoValidate)
-    _RLEVector_validate(vec);
 }
 
 static void _RLEVector_removeRun(RLEVector *vec, RLENode *node)

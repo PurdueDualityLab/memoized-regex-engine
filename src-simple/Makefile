@@ -21,6 +21,11 @@ OFILES=\
 	rle.o\
 	log.o\
 
+RLE_TEST_OFILES=\
+	vendor/avl_tree.o\
+	rle.o\
+	log.o\
+
 HFILES=\
 	regexp.h\
 	y.tab.h\
@@ -47,3 +52,8 @@ y.tab.h y.tab.c: parse.y
 clean:
 	rm -f *.o core re y.tab.[ch] y.output
 	cd vendor; make clean; cd -
+
+test: rle-test.c
+	make re;
+	$(CC) -o rle-test rle-test.c $(RLE_TEST_OFILES)
+	MEMOIZATION_LOGLVL=debug ./rle-test && cd ../eval; MEMOIZATION_LOGLVL=debug ./unittest-prototype.py
