@@ -55,3 +55,8 @@ a\da    , a9a             , MATCH
 a\da    , axa             , MISMATCH
 a\Da    , a9a             , MISMATCH
 a\Da    , axa             , MATCH
+
+# Confirm RLE doesn't break things
+.*.*    , aaaaaaaaaaaaaa  , MATCH
+(..)*   , aaaaaaaaaaaaaa  , MATCH
+(..)*   , aaaaaaaaaaaaaaa , MATCH

@@ -29,6 +29,10 @@ shellDeps = [ libMemo.ProtoRegexEngine.CLI ]
 SAVE_TMP_FILES = True
 
 ##########
+class TestResult:
+  def __init__(self, success, description):
+    self.success = success
+    self.description = description
 
 class TestCase:
   """Test case"""
@@ -37,25 +41,37 @@ class TestCase:
     self.shouldMatch = (self.result == "MATCH")
   
   def run(self):
-    """Returns SUCCESS, DESCRIPTION"""
+    """Returns [SUCCESS, DESCRIPTION] for each configuration to try"""
     # Under all configurations
+    testResults = []
+
     for selectionScheme, encodingScheme in itertools.product(
       libMemo.ProtoRegexEngine.SELECTION_SCHEME.scheme2cox.keys(),
       libMemo.ProtoRegexEngine.ENCODING_SCHEME.scheme2cox.keys()
     ):
+      # Skip nonsense requests
+      if libMemo.ProtoRegexEngine.SELECTION_SCHEME.scheme2cox[selectionScheme] == "none" and \
+         libMemo.ProtoRegexEngine.ENCODING_SCHEME.scheme2cox[encodingScheme] != "none":
+         continue
+
+      rawCmd = "{} {} {} {} {}".format(libMemo.ProtoRegexEngine.CLI,
+            libMemo.ProtoRegexEngine.SELECTION_SCHEME.scheme2cox[selectionScheme],
+            libMemo.ProtoRegexEngine.ENCODING_SCHEME.scheme2cox[encodingScheme],
+          self.regex, self.input
+      )
+      libLF.log("  Test case: {}".format(rawCmd))
+
       queryFile = libMemo.ProtoRegexEngine.buildQueryFile(self.regex, self.input)
       em = libMemo.ProtoRegexEngine.query(selectionScheme, encodingScheme, queryFile)
 
       if (em.matched and self.shouldMatch) or (not em.matched and not self.shouldMatch):
-        return True, "Correct, match(/{}/, {})={} under selection '{}' encoding '{}'".format(self.regex, self.input, em.matched, selectionScheme, encodingScheme)
+        tr = TestResult(True, "Correct, match(/{}/, {})={} under selection '{}' encoding '{}'".format(self.regex, self.input, em.matched, selectionScheme, encodingScheme))
       else:
-        return False, "Incorrect, match(/{}/, {})={} under selection {} encoding {} -- try {} {} {} {} {}".format(
-          self.regex, self.input, em.matched, selectionScheme, encodingScheme,
-          libMemo.ProtoRegexEngine.CLI,
-            libMemo.ProtoRegexEngine.SELECTION_SCHEME.scheme2cox[selectionScheme],
-            libMemo.ProtoRegexEngine.ENCODING_SCHEME.scheme2cox[encodingScheme],
-          self.regex, self.input,
-          )
+        tr = False, "Incorrect, match(/{}/, {})={} under selection {} encoding {} -- try {}".format(
+          self.regex, self.input, em.matched, selectionScheme, encodingScheme, rawCmd
+        )
+      testResults.append(tr)
+    return testResults
 
 class TestSuite:
   """Test cases from the test suite"""
@@ -87,22 +103,31 @@ def main(queryFile):
   libLF.checkShellDependencies(shellDeps)
 
   testSuite = TestSuite(queryFile)
+  nTestCases = len(testSuite.getTestCases())
 
   testFailures = []
 
   # Try all test cases
-  for testCase in testSuite.getTestCases():
-    success, descr = testCase.run()
-    if not success:
-      testFailures.append(descr)
+  nFailures = 0
+  for i, testCase in enumerate(testSuite.getTestCases()):
+    libLF.log("Case {}/{}".format(i, nTestCases))
+
+    anyFailures = False
+    for testResult in testCase.run():
+      if not testResult.success:
+        testFailures.append(testResult.descr)
+        anyFailures = True
+
+    if anyFailures:
+      nFailures += 1
   
   #### Emit results
   if testFailures:
-    libLF.log("{}/{} tests failed in some way:".format(len(testFailures), len(testSuite.getTestCases())))
+    libLF.log("{}/{} tests failed in some way:".format(nFailures, nTestCases))
     for failDescr in testFailures:
       libLF.log("  {}".format(failDescr))
   else:
-    libLF.log("All {} tests passed".format(len(testSuite.getTestCases())))
+    libLF.log("All {} tests passed".format(nTestCases))
 
 #####################################################
 
