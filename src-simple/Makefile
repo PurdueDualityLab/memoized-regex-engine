@@ -56,4 +56,4 @@ clean:
 test: rle-test.c
 	make re;
 	$(CC) -o rle-test rle-test.c $(RLE_TEST_OFILES)
-	./rle-test
+	MEMOIZATION_LOGLVL=debug ./rle-test && cd ../eval; MEMOIZATION_LOGLVL=debug ./unittest-prototype.py

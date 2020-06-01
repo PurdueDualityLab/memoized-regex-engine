@@ -32,7 +32,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "rle.h"
 
 void testSetGet() {
-  logMsg(LOG_INFO, "testSetGet");
+  logMsg(LOG_INFO, "Test begins: testSetGet");
 
   RLEVector *vec = RLEVector_create(1, 1);
 
@@ -56,11 +56,11 @@ void testSetGet() {
   assert(RLEVector_get(vec, 6) == 1);
   assert(RLEVector_get(vec, 7) == 1);
   assert(RLEVector_get(vec, 8) == 0);
-  logMsg(LOG_INFO, "  Passed");
+  logMsg(LOG_INFO, "...test passed");
 }
 
 void testRuns() {
-  logMsg(LOG_INFO, "testRuns");
+  logMsg(LOG_INFO, "Test begins: testRuns");
   int i, j;
   RLEVector *vec;
 
@@ -70,10 +70,9 @@ void testRuns() {
   for (i = 0; i < 100; i++) {
     RLEVector_set(vec, i);
     assert(RLEVector_currSize(vec) == 1);
-    assert(RLEVector_currSize(vec) == RLEVector_maxObservedSize(vec));
   }
 
-  /* Runs of length 1 can't compress 0101... */
+  /* Runs of length 1 can't compress 10101010... */
   logMsg(LOG_INFO, "  1-length runs work but fail to compress");
   vec = RLEVector_create(1, 1);
   j = 0;
@@ -83,10 +82,11 @@ void testRuns() {
     assert(RLEVector_currSize(vec) == j);
     assert(RLEVector_currSize(vec) == RLEVector_maxObservedSize(vec));
   }
-  /* But merging works: 0101... -> 1101... -> 1111... */
+  /* But merging works: 10101... -> 11101... -> 1111... */
   logMsg(LOG_INFO, "  ...merging works");
   for (i = 1; i < 100; i += 2) {
     j--;
+    if (j == 0) j++; // Cannot go to 0
     RLEVector_set(vec, i);
     assert(RLEVector_currSize(vec) == j);
     assert(RLEVector_currSize(vec) < RLEVector_maxObservedSize(vec));
@@ -104,7 +104,7 @@ void testRuns() {
     assert(RLEVector_currSize(vec) == 1);
   }
 
-  logMsg(LOG_INFO, "  Passed");
+  logMsg(LOG_INFO, "...test passed");
 }
 
 int main(int argc, char** argv) {

@@ -173,7 +173,10 @@ _RLEVector_validate(RLEVector *vec)
       logMsg(LOG_DEBUG, "rleVector_validate: prev (%d,%d,%llu) curr (%d,%d,%llu)", prev->offset, prev->nRuns, prev->run, curr->offset, curr->nRuns, curr->run);
       assert(prev->offset < curr->offset); /* In-order */
 			if (RLENode_end(prev) == curr->offset) {
-				assert(prev->run != curr->run); /* Adjacent are merged */
+				if (prev->run == curr->run){ 
+          /* Adjacent identical runs should have been merged */
+          assert(!"rleVector_validate: Adjacent identical runs are not merged");
+        }
 			}
       prev = curr;
       curr = avl_tree_entry(avl_tree_next_in_order(&curr->node), RLENode, node);
@@ -234,6 +237,8 @@ RLEVector_getNeighbors(RLEVector *vec, int ix)
 static void
 _RLEVector_mergeNeighbors(RLEVector *vec, RLENodeNeighbors rnn)
 {
+  logMsg(LOG_DEBUG, "mergeNeighbors: begins");
+
   int nBefore = vec->currNEntries;
 
   /* Because rnn are adjacent, we can directly manipulate offsets without
@@ -410,9 +415,6 @@ static void _RLEVector_addRun(RLEVector *vec, RLENode *node)
   if (vec->mostNEntries < vec->currNEntries) {
     vec->mostNEntries = vec->currNEntries;
   }
-
-  if (vec->autoValidate)
-    _RLEVector_validate(vec);
 }
 
 static void _RLEVector_removeRun(RLEVector *vec, RLENode *node)
