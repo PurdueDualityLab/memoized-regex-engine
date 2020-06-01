@@ -181,7 +181,7 @@ enum /* Memo.encoding */
 	ENCODING_NONE,
 	ENCODING_NEGATIVE,  /* Hash table */
 	ENCODING_RLE,       /* Run-length encoding */
-	ENCODING_RLE_TUNED, /* RLE, tuned for language lengths */
+	ENCODING_RLE_TUNED, /* DO NOT USE -- RLE, tuned for language lengths -- DO NOT USE */
 };
 
 int backtrack(Prog*, char*, char**, int);

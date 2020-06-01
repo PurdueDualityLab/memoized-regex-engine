@@ -4,6 +4,7 @@
 
 %{
 #include "regexp.h"
+#include "log.h"
 
 #define KEEP_CG 1
 
@@ -29,7 +30,6 @@ static int nparen;
 line: 
 	BOL_ANCHOR alt EOL_ANCHOR EOL
 	{
-		printf("double anchors\n");
 		parsed_regexp = $2;
 		parsed_regexp->bolAnchor = 1;
 		parsed_regexp->eolAnchor = 1;
@@ -37,7 +37,6 @@ line:
 	}
 |	BOL_ANCHOR alt EOL
 	{
-		printf("bol anchor\n");
 		parsed_regexp = $2;
 		parsed_regexp->bolAnchor = 1;
 		parsed_regexp->eolAnchor = 0;
@@ -45,7 +44,6 @@ line:
 	}
 |	alt EOL_ANCHOR EOL
 	{
-		printf("eol anchor\n");
 		parsed_regexp = $1;
 		parsed_regexp->bolAnchor = 0;
 		parsed_regexp->eolAnchor = 1;
@@ -53,7 +51,6 @@ line:
 	}
 |	alt EOL
 	{
-		printf("no anchors\n");
 		parsed_regexp = $1;
 		parsed_regexp->bolAnchor = 0;
 		parsed_regexp->eolAnchor = 0;
@@ -272,11 +269,11 @@ parse(char *s)
 	/* Tack on the dotstars */
 	combine = r;
 	if (!parsed_regexp->bolAnchor) {
-		printf("No ^, tacking on leading .*\n");
+		logMsg(LOG_INFO, "No ^, tacking on leading .*");
 		combine = reg(Cat, bolDotstar, combine);
 	}
 	if (!parsed_regexp->eolAnchor) {
-		printf("No $, tacking on trailing .*\n");
+		logMsg(LOG_INFO, "No $, tacking on trailing .*");
 		combine = reg(Cat, combine, eolDotstar);
 	}
 	combine->bolAnchor = parsed_regexp->bolAnchor;

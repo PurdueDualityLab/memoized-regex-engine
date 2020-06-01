@@ -19,6 +19,7 @@ OFILES=\
 	vendor/avl_tree.o\
 	vendor/cJSON.o\
 	rle.o\
+	log.o\
 
 HFILES=\
 	regexp.h\
@@ -26,6 +27,7 @@ HFILES=\
 	vendor/avl_tree.h\
 	vendor/cJSON.h\
 	rle.h\
+	log.h\
 
 re: $(OFILES)
 	$(CC) -o re $(OFILES)

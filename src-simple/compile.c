@@ -3,9 +3,9 @@
 // license that can be found in the LICENSE file.
 
 #include "regexp.h"
-#include <ctype.h>
+#include "log.h"
 
-static int LOG_VI = 1;
+#include <ctype.h>
 
 static Inst *pc; /* VM array */
 static int count(Regexp*);
@@ -50,16 +50,14 @@ lli_print(LanguageLengthInfo *lli)
 
 	/* Already too full? */
 	if (lli->tooManyLengths)
-		printf("LLI: Over-full\n");
+		logMsg(LOG_VERBOSE, "LLI: Over-full");
 
 	/* Check if it's present already */
-	if (LOG_VI) {
-		printf("LLI: %d lengths: ", lli->nLanguageLengths);
-		for (i = 0; i < lli->nLanguageLengths; i++) {
-			printf("%d,", lli->languageLengths[i]);
-		}
-		printf("\n");
+	logMsg(LOG_VERBOSE, "LLI: %d lengths: ", lli->nLanguageLengths);
+	for (i = 0; i < lli->nLanguageLengths; i++) {
+		logMsg(LOG_VERBOSE, "%d,", lli->languageLengths[i]);
 	}
+	logMsg(LOG_VERBOSE, "\n");
 
 	return;
 }
@@ -261,7 +259,7 @@ compile(Regexp *r, int memoMode)
 
 	Prog_assignStateNumbers(p);
 	Prog_determineMemoNodes(p, memoMode);
-	printf("Will memoize %d states\n", p->nMemoizedStates);
+	logMsg(LOG_INFO, "Will memoize %d states", p->nMemoizedStates);
 
 	return p;
 }
@@ -294,6 +292,7 @@ count(Regexp *r)
 
 // Determine size of simple languages for r
 // Recursively populates sub-patterns
+// TODO This is a WIP. Do not use this.
 static void
 Regexp_calcLLI(Regexp *r)
 {
@@ -314,10 +313,8 @@ Regexp_calcLLI(Regexp *r)
 			lli_addEntry(&r->lli, r->right->lli.languageLengths[i]);
 		}
 
-		if (LOG_VI) {
-			printf("LLI: Alt\n");
-			lli_print(&r->lli);
-		}
+		logMsg(LOG_VERBOSE, "LLI: Alt");
+		lli_print(&r->lli);
 		break;
 	case Cat:
 		Regexp_calcLLI(r->left);
@@ -331,10 +328,8 @@ Regexp_calcLLI(Regexp *r)
 			}
 		}
 
-		if (LOG_VI) {
-			printf("LLI: Cat\n");
-			lli_print(&r->lli);
-		}
+		logMsg(LOG_VERBOSE, "LLI: Cat");
+		lli_print(&r->lli);
 		break;
 	case Lit:
 	case Dot:
@@ -342,48 +337,38 @@ Regexp_calcLLI(Regexp *r)
 		r->lli.nLanguageLengths = 1;
 		r->lli.languageLengths[0] = 1;
 
-		if (LOG_VI) {
-			printf("LLI: Lit,Dot,CharEscape\n");
-			lli_print(&r->lli);
-		}
+		logMsg(LOG_VERBOSE, "LLI: Lit,Dot,CharEscape");
+		lli_print(&r->lli);
 		break;
 	case Paren:
 		Regexp_calcLLI(r->left);
 		r->lli = r->left->lli;
 
-		if (LOG_VI) {
-			printf("LLI: Paren\n");
-			lli_print(&r->lli);
-		}
+		logMsg(LOG_VERBOSE, "LLI: Paren");
+		lli_print(&r->lli);
 		break;
 	case Quest:
 		Regexp_calcLLI(r->left);
 		r->lli = r->left->lli;
 		lli_addEntry(&r->lli, 0);
 
-		if (LOG_VI) {
-			printf("LLI: Quest:\n");
-			lli_print(&r->lli);
-		}
+		logMsg(LOG_VERBOSE, "LLI: Quest:");
+		lli_print(&r->lli);
 		break;
 	case Star:
 		Regexp_calcLLI(r->left);
 		r->lli = r->left->lli;
 		lli_addEntry(&r->lli, 0);
 
-		if (LOG_VI) {
-			printf("LLI: Star\n");
-			lli_print(&r->lli);
-		}
+		logMsg(LOG_VERBOSE, "LLI: Star");
+		lli_print(&r->lli);
 		break;
 	case Plus:
 		Regexp_calcLLI(r->left);
 		r->lli = r->left->lli;
 
-		if (LOG_VI) {
-			printf("LLI: Plus\n");
-			lli_print(&r->lli);
-		}
+		logMsg(LOG_VERBOSE, "LLI: Plus");
+		lli_print(&r->lli);
 		break;
 	}
 }
@@ -481,8 +466,7 @@ Regexp_calcVisitInterval(Regexp *r)
 		//r->visitInterval = r->left->visitInterval + r->right->visitInterval;
 		//r->visitInterval = lli_smallestUniversalPeriod(&r->left->lli) + lli_smallestUniversalPeriod(&r->right->lli);
 
-		if (LOG_VI)
-			printf("Alt: VI %d\n", r->visitInterval);
+		logMsg(LOG_VERBOSE, "Alt: VI %d", r->visitInterval);
 		break;
 	case Cat:
 		Regexp_calcVisitInterval(r->left);
@@ -547,7 +531,7 @@ Regexp_calcVisitInterval(Regexp *r)
 			Regexp *tmpRight = NULL;
 			int vi = r->right->visitInterval;
 
-			printf("Propagating vi %d past Parens\n", vi);
+			logMsg(LOG_VERBOSE, "Propagating vi %d past Parens", vi);
 			tmpRight = r->right;
 			while (tmpRight->type == Paren) {
 				tmpRight->visitInterval = vi;
@@ -566,14 +550,12 @@ Regexp_calcVisitInterval(Regexp *r)
 			r->right->visitInterval
 		);
 
-		if (LOG_VI) {
-			printf("Cat: VI self %d l->vi %d l->SUP %d r->vi %d r->SUP %d\n", r->visitInterval, r->left->visitInterval, lli_smallestUniversalPeriod(&r->left->lli), r->right->visitInterval, lli_smallestUniversalPeriod(&r->right->lli));
-			if (r->left->type == Paren) {
-				printf("Cat: L = Paren\n");
-			}
-			if (r->right->type == Paren) {
-				printf("Cat: R = Paren\n");
-			}
+		logMsg(LOG_VERBOSE, "Cat: VI self %d l->vi %d l->SUP %d r->vi %d r->SUP %d", r->visitInterval, r->left->visitInterval, lli_smallestUniversalPeriod(&r->left->lli), r->right->visitInterval, lli_smallestUniversalPeriod(&r->right->lli));
+		if (r->left->type == Paren) {
+			logMsg(LOG_VERBOSE, "Cat: L = Paren");
+		}
+		if (r->right->type == Paren) {
+			logMsg(LOG_VERBOSE, "Cat: R = Paren");
 		}
 		break;
 	case Lit:
@@ -585,16 +567,14 @@ Regexp_calcVisitInterval(Regexp *r)
 		Regexp_calcVisitInterval(r->left);
 		r->visitInterval = r->left->visitInterval;
 
-		if (LOG_VI)
-			printf("Paren: VI %d\n", r->visitInterval);
+		logMsg(LOG_VERBOSE, "Paren: VI %d", r->visitInterval);
 		break;
 	case Quest:
 	case Star:
 	case Plus:
 		Regexp_calcVisitInterval(r->left);
 		r->visitInterval = lli_smallestUniversalPeriod(&r->left->lli);
-		if (LOG_VI)
-			printf("Quest|Star|Plus: VI %d\n", r->visitInterval);
+		logMsg(LOG_VERBOSE, "Quest|Star|Plus: VI %d", r->visitInterval);
 		break;
 	}
 }
