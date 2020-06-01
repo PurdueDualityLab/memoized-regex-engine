@@ -1,4 +1,5 @@
 # Copyright 2007-2009 Russ Cox.  All Rights Reserved.
+# Extensions are Copyright 2020 James Davis. All rights Reserved.
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
