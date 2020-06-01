@@ -156,12 +156,24 @@ main(int argc, char **argv)
 		q.input = argv[4];
 	}
 
+	// Parse
 	re = parse(q.regex);
+
+	// Optimize
+	logMsg(LOG_INFO, "Non-optimized re:");
 	printre(re);
 	printf("\n");
 
+	re = optimize(re);
+	logMsg(LOG_INFO, "Optimized re:");
+	printre(re);
+	printf("\n");
+
+	// Compile
 	prog = compile(re, memoMode);
 	printprog(prog);
+
+	// Simulate
 	prog->memoMode = memoMode;
 	prog->memoEncoding = memoEncoding;
 

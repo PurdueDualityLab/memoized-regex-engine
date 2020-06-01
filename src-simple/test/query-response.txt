@@ -60,3 +60,24 @@ a\Da    , axa             , MATCH
 .*.*    , aaaaaaaaaaaaaa  , MATCH
 (..)*   , aaaaaaaaaaaaaa  , MATCH
 (..)*   , aaaaaaaaaaaaaaa , MATCH
+
+# AltList / SplitMany
+a|b , a , MATCH
+a|b , b , MATCH
+a|b , c , MISMATCH
+a|b|c|d|e , a , MATCH
+a|b|c|d|e , b , MATCH
+a|b|c|d|e , c , MATCH
+a|b|c|d|e , d , MATCH
+a|b|c|d|e , e , MATCH
+a|b|c|d|e , f , MISMATCH
+x(a|b|c|d)y , xay, MATCH
+x(a|b|c|d)y , xby, MATCH
+x(a|b|c|d)y , xcy, MATCH
+x(a|b|c|d)y , xdy, MATCH
+x(a|b|c|d)y , xy, MISMATCH
+x(a|b|c|d)y , xey, MISMATCH
+(a|(b|c)|d) , a, MATCH
+(a|(b|c)|d) , b, MATCH
+(a|(b|c)|d) , c, MATCH
+(a|(b|c)|d) , d, MATCH

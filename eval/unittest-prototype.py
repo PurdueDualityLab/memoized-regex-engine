@@ -54,7 +54,7 @@ class TestCase:
          libMemo.ProtoRegexEngine.ENCODING_SCHEME.scheme2cox[encodingScheme] != "none":
          continue
 
-      rawCmd = "{} {} {} {} {}".format(libMemo.ProtoRegexEngine.CLI,
+      rawCmd = "{} {} {} '{}' {}".format(libMemo.ProtoRegexEngine.CLI,
             libMemo.ProtoRegexEngine.SELECTION_SCHEME.scheme2cox[selectionScheme],
             libMemo.ProtoRegexEngine.ENCODING_SCHEME.scheme2cox[encodingScheme],
           self.regex, self.input
@@ -67,9 +67,7 @@ class TestCase:
       if (em.matched and self.shouldMatch) or (not em.matched and not self.shouldMatch):
         tr = TestResult(True, "Correct, match(/{}/, {})={} under selection '{}' encoding '{}'".format(self.regex, self.input, em.matched, selectionScheme, encodingScheme))
       else:
-        tr = False, "Incorrect, match(/{}/, {})={} under selection {} encoding {} -- try {}".format(
-          self.regex, self.input, em.matched, selectionScheme, encodingScheme, rawCmd
-        )
+        tr = TestResult(False, "Incorrect, match(/{}/, {})={} under selection {} encoding {} -- try {}".format(self.regex, self.input, em.matched, selectionScheme, encodingScheme, rawCmd))
       testResults.append(tr)
     return testResults
 
@@ -115,7 +113,7 @@ def main(queryFile):
     anyFailures = False
     for testResult in testCase.run():
       if not testResult.success:
-        testFailures.append(testResult.descr)
+        testFailures.append(testResult.description)
         anyFailures = True
 
     if anyFailures:

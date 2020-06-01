@@ -308,6 +308,8 @@ reg(int type, Regexp *left, Regexp *right)
 void
 printre(Regexp *r)
 {
+	int i;
+
 	switch(r->type) {
 	default:
 		printf("???");
@@ -318,6 +320,17 @@ printre(Regexp *r)
 		printre(r->left);
 		printf(", ");
 		printre(r->right);
+		printf(")");
+		break;
+
+	case AltList:
+		printf("AltList(");
+		for (i = 0; i < r->arity; i++) {
+			printre(r->children[i]);
+			if (i+1 < r->arity) {
+				printf(", ");
+			}
+		}
 		printf(")");
 		break;
 
