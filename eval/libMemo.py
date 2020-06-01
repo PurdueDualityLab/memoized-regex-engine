@@ -99,7 +99,7 @@ class ProtoRegexEngine:
           libLF.log("Wished for {} bits".format(res.group(1)))
 
         # libLF.log("stderr: <" + stderr + ">")
-        return ProtoRegexEngine.EngineMeasurements(stderr.strip())
+        return ProtoRegexEngine.EngineMeasurements(stderr.strip(), "-no match-" in stdout)
     
     class EngineMeasurements:
         """Engine measurements
@@ -108,11 +108,12 @@ class ProtoRegexEngine:
         emitted by the regex engine.
         It offers some assurance of type safety.
         """
-        def __init__(self, measAsJSON):
+        def __init__(self, measAsJSON, misMatched):
             obj = json.loads(measAsJSON)
             self._unpackInputInfo(obj['inputInfo'])
             self._unpackMemoizationInfo(obj['memoizationInfo'])
             self._unpackSimulationInfo(obj['simulationInfo'])
+            self.matched = not misMatched
         
         def _unpackInputInfo(self, dict):
             self.ii_lenW = int(dict['lenW'])
@@ -144,6 +145,8 @@ class SimpleRegex:
      Can be pattern ("all") or pattern+evilInput ("SL")
   """
   def __init__(self):
+    self.pattern = None
+    self.evilInputs = []
     return
   
   def initFromNDJSON(self, line):
