@@ -1,0 +1,57 @@
+### Prototype test suite: Query-response pairs (independent of memoization configuration)
+# Format:
+#   Whitespace is stripped, and "," is a special character
+#   Empty lines are ignored
+#   A # introduces a comment
+
+# REGEX , INPUT , MATCH/MISMATCH
+# -----   -----   ---------------
+
+# R1 . R2
+a       , a               , MATCH
+a       , bab             , MATCH
+.*a.*   , bab             , MATCH
+ab      , ab              , MATCH
+abcde   , xyzabcxyzabcde  , MATCH
+abcde   , xyzabcxyz       , MISMATCH
+
+# R1 | R2
+a|b     , a               , MATCH
+a|b     , b               , MATCH
+x(a|b)y , xay             , MATCH
+x(a|b)y , xby             , MATCH
+x(a|b)y , xcy             , MISMATCH
+
+# R1*
+a*      , a               , MATCH
+xa*y    , xy              , MATCH
+xa*y    , xay             , MATCH
+xa*y    , xaaaay          , MATCH
+a+      , a               , MATCH
+xa+y    , xy              , MISMATCH
+xa+y    , xaaaaaay        , MATCH
+
+# Anchors: ^, $
+^ab     , ab              , MATCH
+^ab     , xab             , MISMATCH
+ab$     , ab              , MATCH
+ab$     , abz             , MISMATCH
+^a+b$   , ab              , MATCH
+^ab$    , xab             , MISMATCH
+
+# Built-in character classes
+\wa     , aa              , MATCH
+\wa     , ba              , MATCH
+\wa     , !a              , MISMATCH
+\Wa     , !a              , MATCH
+\Wa     , ba              , MISMATCH
+
+a\sa    , a a             , MATCH
+a\sa    , axa             , MISMATCH
+a\Sa    , a a             , MISMATCH
+a\Sa    , axa             , MATCH
+
+a\da    , a9a             , MATCH
+a\da    , axa             , MISMATCH
+a\Da    , a9a             , MISMATCH
+a\Da    , axa             , MATCH
