@@ -36,20 +36,29 @@ struct LanguageLengthInfo
 struct Regexp
 {
 	int type;
-	int n;
-	int ch;
-	Regexp *left;
-	Regexp *right;
+
+	int n; /* Quantifiers: Non-greedy? 1 means yes. */
+	int ch; /* Literals, CharEscape's: Character. */
+	Regexp *left; /* Child for unary operators. Left child for binary operators. */
+	Regexp *right; /* Left child for binary operators. */
+
+    /* May be populated in an optimization pass that converts binary operators to *-arity */
+	Regexp **children;
+	int arity;
+
+	/* Anchored search? (applied to the root Regexp) */
 	int bolAnchor;
 	int eolAnchor;
 
+	/* Do not use. */
 	LanguageLengthInfo lli;
 	int visitInterval;
 };
 
 enum	/* Regexp.type */
 {
-	Alt = 1, /* A | B */
+	Alt = 1, /* A | B -- 2-arity */
+	AltList, /* A | B | ... -- *-arity */
 	Cat,     /* AB */
 	Lit,     /* "a" */
 	Dot,     /* any char */
@@ -65,6 +74,8 @@ Regexp *reg(int type, Regexp *left, Regexp *right);
 void printre(Regexp*);
 void fatal(char*, ...);
 void *mal(int);
+
+Regexp *optimize(Regexp *r);
 
 struct Prog
 {
@@ -88,6 +99,9 @@ struct Inst
 	Inst *x; /* Outgoing edge -- destination 1 (default option) */
 	Inst *y; /* Outgoing edge -- destination 2 (backup) */
 	int gen;	// global state, oooh!
+
+	Inst **edges; /* Outgoing edges for case of *-arity */
+	int arity;
 	
 	int charClassMins[8]; 
 	int charClassMaxes[8]; /* Inclusive */
@@ -107,6 +121,7 @@ enum	/* Inst.opcode */
 	Match,
 	Jmp,
 	Split,
+	SplitMany,
 	Any,
 	CharClass,
 	Save,

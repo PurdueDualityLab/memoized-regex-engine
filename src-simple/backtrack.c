@@ -444,7 +444,7 @@ ThreadVec_alloc()
   tv.maxThreads = 1000;
   tv.threads = mal(tv.maxThreads * sizeof(*tv.threads));
 
-  logMsg(LOG_VERBOSE, "TV: alloc -- threads %p", tv.threads);
+  logMsg(LOG_DEBUG, "TV: alloc -- threads %p", tv.threads);
   return tv;
 }
 
@@ -455,7 +455,7 @@ ThreadVec_realloc(ThreadVec *tv)
   Thread *newThreads = mal(newMaxThreads * sizeof(*newThreads));
 
   memcpy(newThreads, tv->threads, tv->nThreads * sizeof(*newThreads));
-  logMsg(LOG_VERBOSE, "TV: realloc from %d to %d threads, %p -> %p", tv->maxThreads, newMaxThreads, tv->threads, newThreads);
+  logMsg(LOG_DEBUG, "TV: realloc from %d to %d threads, %p -> %p", tv->maxThreads, newMaxThreads, tv->threads, newThreads);
 
   tv->maxThreads = newMaxThreads;
 
@@ -501,7 +501,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
   Memo memo;
   VisitTable visitTable;
   ThreadVec ready = ThreadVec_alloc();
-  int i, j, inCharClass;
+  int i, j, k, inCharClass;
   Inst *pc; /* Current position in VM (pc) */
   char *sp; /* Current position in input */
   Sub *sub; /* submatch (capture group) */
@@ -615,6 +615,12 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
       case Split: /* Non-deterministic choice */
         ThreadVec_push(&ready, thread(pc->y, sp, incref(sub)));
         pc = pc->x;  /* continue current thread */
+        continue;
+      case SplitMany: /* Non-deterministic choice */
+        for (k = 1; k < pc->arity; k++) {
+          ThreadVec_push(&ready, thread(pc->edges[k], sp, incref(sub)));
+        }
+        pc = pc->edges[0];  /* continue current thread */
         continue;
       case Save:
         sub = update(sub, pc->n, sp);

@@ -126,7 +126,7 @@ lli_smallestUniversalPeriod(LanguageLengthInfo *lli)
 void
 Prog_compute_in_degrees(Prog *p)
 {
-	int i;
+	int i, j;
 
 	/* Initialize */
 	for (i = 0; i < p->len; i++) {
@@ -139,7 +139,7 @@ Prog_compute_in_degrees(Prog *p)
 	for (i = 0; i < p->len; i++) {
 		switch(p->start[i].opcode) {
 		default:
-			fatal("bad count");
+			fatal("in-degree: unknown type");
 		case Char:
 			/* Always goes to next instr */
 			p->start[i+1].inDegree++;
@@ -155,6 +155,12 @@ Prog_compute_in_degrees(Prog *p)
 			/* Goes to X or Y */
 			p->start[i].x->inDegree++;
 			p->start[i].y->inDegree++;
+			break;
+		case SplitMany:
+			/* Goes to each child */
+			for (j = 0; j < p->start[i].arity; j++) {
+				p->start[i].edges[j]->inDegree++;
+			}
 			break;
 		case Any:
 			/* Always goes to next instr */
@@ -226,7 +232,109 @@ Prog_determineMemoNodes(Prog *p, int memoMode)
 	p->nMemoizedStates = nextStateNum;
 }
 
+int
+_countAltListSize(Regexp *r)
+{
+	if (r->type != Alt) {
+		// Base case -- some child of an Alt
+		return 1;
+	}
+	// Left-recursive: A|B|C -> Alt(Alt(A|B), C)
+	return 1 + _countAltListSize(r->left);
+}
 
+// Optimization passes
+Regexp* _optimizeAltGroups(Regexp *r);
+
+Regexp*
+optimize(Regexp *r)
+{
+	logMsg(LOG_INFO, "Optimizing regex");
+	return _optimizeAltGroups(r);
+}
+
+// Fill the children array in left-to-right order
+// Returns the smallest unused index
+int
+_fillAltChildren(Regexp *r, Regexp **children, int i)
+{
+	if (r->type == Alt) {
+		// Recursively populate the left children first
+		int next = _fillAltChildren(r->left, children, i);
+		// Now populate right child
+		assert(r->right->type != Alt); // I think?
+		children[next] = r->right;
+		return next + 1;
+	} else {
+		// End of the recursion
+		children[i] = r;
+		return i + 1;
+	}
+}
+
+Regexp*
+_optimizeAltGroups(Regexp *r)
+{
+	Regexp *altList = NULL;
+	Regexp *before = NULL;
+	int groupSize = 0, i = 0;
+
+	switch(r->type) {
+	default:
+		fatal("unknown type");
+		return NULL;
+	case Alt:
+		/* Prepare an AltList node */
+		logMsg(LOG_DEBUG, "Converting an Alt to an AltList");
+		groupSize = _countAltListSize(r);
+		logMsg(LOG_DEBUG, "  groupSize %d", groupSize);
+		assert(groupSize >= 2);
+
+		altList = mal(sizeof(*altList));
+		altList->type = AltList;
+		altList->children = mal(groupSize * sizeof(altList));
+		altList->arity = groupSize;
+		logMsg(LOG_DEBUG, "  Populating children array");
+		_fillAltChildren(r, altList->children, 0);
+
+		/* Optimize the children */
+		logMsg(LOG_DEBUG, "  Passing buck to children");
+		for (i = 0; i < groupSize; i++) {
+			altList->children[i] = _optimizeAltGroups(altList->children[i]);
+		}
+
+		return altList;
+	case Cat:
+		/* Binary operator -- pass the buck. */
+		logMsg(LOG_DEBUG, "  optimize: Cat: passing buck");
+		r->left = _optimizeAltGroups(r->left);
+		r->right = _optimizeAltGroups(r->right);
+		return r;
+	case Quest:
+	case Star:
+    case Plus:
+	case Paren:
+		/* Unary operators -- pass the buck. */
+		logMsg(LOG_DEBUG, "  optimize: Quest/Star/Plus/Paren: passing buck");
+		before = r->left;
+		r->left = _optimizeAltGroups(r->left);
+		if (r->left == before) {
+			logMsg(LOG_DEBUG, "  optimize: ?*+(: no change to child");
+		} else {
+			logMsg(LOG_DEBUG, "  optimize: ?*+(: changed child");
+		}
+		return r;
+	case Lit:
+	case Dot:
+	case CharEscape:
+		/* Terminals */
+		logMsg(LOG_DEBUG, "  optimize: ignoring terminal");
+		return r;
+	}
+	return r;
+}
+
+// Compile into a Prog
 Prog*
 compile(Regexp *r, int memoMode)
 {
@@ -264,15 +372,24 @@ compile(Regexp *r, int memoMode)
 	return p;
 }
 
-// how many instructions does r need?
+// How many instructions does r need?
 static int
 count(Regexp *r)
 {
+	int _count = 0, i;
 	switch(r->type) {
 	default:
-		fatal("bad count");
+		fatal("count: unknown type");
 	case Alt:
 		return 2 + count(r->left) + count(r->right);
+    case AltList:
+		_count = 0;
+		for (i = 0; i < r->arity; i++) {
+			// Each branch adds 1 jump
+			_count += count(r->children[i]) + 1;
+		}
+		// Need a SplitMany as well
+		return 1 + _count;
 	case Cat:
 		return count(r->left) + count(r->right);
 	case Lit:
@@ -299,7 +416,9 @@ Regexp_calcLLI(Regexp *r)
 	int i, j;
 	switch(r->type) {
 	default:
-		fatal("bad count");
+		fatal("calcLLI: unknown type");
+	case AltList:
+		return;
 	case Alt:
 		Regexp_calcLLI(r->left);
 		Regexp_calcLLI(r->right);
@@ -449,7 +568,9 @@ Regexp_calcVisitInterval(Regexp *r)
 {
 	switch(r->type) {
 	default:
-		fatal("bad count");
+		fatal("calcVI: unknown type");
+	case AltList:
+		return;
 	case Alt:
 		Regexp_calcVisitInterval(r->left);
 		Regexp_calcVisitInterval(r->right);
@@ -604,7 +725,8 @@ Regexp_calcVisitInterval(Regexp *r)
 static void
 emit(Regexp *r, int memoMode)
 {
-	Inst *p1, *p2, *t;
+	Inst *p1, *p2, *t, **t2;
+	int i;
 
 	switch(r->type) {
 	default:
@@ -621,6 +743,36 @@ emit(Regexp *r, int memoMode)
 		p1->y = pc;
 		emit(r->right, memoMode);
 		p2->x = pc;
+		break;
+
+	case AltList:
+		pc->opcode = SplitMany;
+		pc->arity = r->arity;
+		pc->edges = mal(r->arity * sizeof(Inst **));
+
+		/* The Jmp nodes associated with each branch */
+		t2 = mal(r->arity * sizeof(Inst **));
+
+		/* Emit the branches */
+		p1 = pc++;
+		p1->x = pc;
+		for (i = 0; i < r->arity; i++) {
+			/* Emit a branch */
+			p1->edges[i] = pc;
+			emit(r->children[i], memoMode);
+			/* Emit a Jmp node and save it so we can set its destination once we exhaust the AltList */
+			pc->opcode = Jmp;
+			t2[i] = pc;
+			/* Ready for the next branch */
+			pc++;
+		}
+
+		/* Revisit the Jmp nodes and set the destinations */
+		for (i = 0; i < r->arity; i++) {
+			t2[i]->x = pc;
+		}
+		free(t2);
+
 		break;
 
 	case Cat:
@@ -778,6 +930,7 @@ void
 printprog(Prog *p)
 {
 	Inst *pc, *e;
+	int i;
 	
 	pc = p->start;
 	e = p->start + p->len;
@@ -785,9 +938,19 @@ printprog(Prog *p)
 	for(; pc < e; pc++) {
 		switch(pc->opcode) {
 		default:
-			fatal("printprog");
+			fatal("printprog: unknown opcode");
 		case Split:
 			printf("%2d. split %d, %d (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), (int)(pc->x-p->start), (int)(pc->y-p->start), pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
+			//printf("%2d. split %d, %d\n", (int)(pc->stateNum), (int)(pc->x->stateNum), (int)(pc->y->stateNum));
+			break;
+		case SplitMany:
+			printf("%2d. splitmany ", (int) (pc - p->start));
+			for (i = 0; i < pc->arity; i++) {
+				printf("%d", (int) (pc->edges[i]-p->start));
+				if (i + 1 < pc->arity)
+					printf(",");
+			}
+			printf(" (memo? %d -- state %d, visitInterval %d)\n", pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
 			//printf("%2d. split %d, %d\n", (int)(pc->stateNum), (int)(pc->x->stateNum), (int)(pc->y->stateNum));
 			break;
 		case Jmp:
