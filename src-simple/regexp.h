@@ -53,6 +53,7 @@ struct Regexp
 	int eolAnchor;
 
 	/* CustomCharClass */
+	int plusDash; // Is an unescaped '-' part of the CCC, e.g. [-a] or [a-]?
 	int ccInvert;
 	int mergedRanges;
 
@@ -105,7 +106,7 @@ struct InstCharRange
 	int lows[5];
 	int highs[5]; // Inclusive
 	int count;
-	int invert;
+	int invert; // For \W, \S, \D
 };
 
 struct Inst

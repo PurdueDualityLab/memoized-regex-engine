@@ -47,7 +47,7 @@ vendor/cJSON.o: vendor/avl_tree.o
 	$(CC) -c $(CFLAGS) $*.c
 
 y.tab.h y.tab.c: parse.y
-	bison -v -y parse.y
+	${BISONPATH}bison -v -y parse.y
 
 clean:
 	rm -f *.o core re y.tab.[ch] y.output

@@ -976,14 +976,21 @@ emit(Regexp *r, int memoMode)
 	case CustomCharClass:
 		assert(r->mergedRanges);
 		pc->opcode = CharClass;
-		if (r->arity > nelem(pc->charRanges))
+		if (r->arity+1 > nelem(pc->charRanges)) // +1: space for a dash if needed
 			fatal("Too many ranges in char class");
 
+		pc->charRangeCounts = 0;
 		for (i = 0; i < r->arity; i++) {
 			_emitRegexpCharRange2Inst(r->children[i], pc);
 			pc->charRangeCounts++;
 		}
-		pc->charRangeCounts = r->arity;
+		if (r->plusDash) {
+			pc->charRanges[pc->charRangeCounts].lows[0] = '-';
+			pc->charRanges[pc->charRangeCounts].highs[0] = '-';
+			pc->charRanges[pc->charRangeCounts].count = 1;
+
+			pc->charRangeCounts++;
+		}
 		pc->invert = r->ccInvert;
 		pc++;
 		break;

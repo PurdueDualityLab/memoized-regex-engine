@@ -220,12 +220,29 @@ single:
 ccc:
 	'[' charRanges ']'
 	{
+		printf("[ charRanges ]\n");
 		$$ = reg(CustomCharClass, $2, nil);
+		$$->plusDash = 1;
 		$$->ccInvert = 0;
 	}
+	// Variant with dash -- unambiguous. Cannot do "charRanges '-'" because yacc is an LR(1) -- ambiguous?
+|	'[' '-' charRanges ']'
+	{
+		printf("[ - charRanges ]\n");
+		$$ = reg(CustomCharClass, $3, nil);
+		$$->plusDash = 1;
+		$$->ccInvert = 0;
+	}
+	// Inverted
 |   '[' '^' charRanges ']'
 	{
 		$$ = reg(CustomCharClass, $3, nil);
+		$$->ccInvert = 1;
+	}
+|   '[' '^' '-' charRanges ']'
+	{
+		$$ = reg(CustomCharClass, $4, nil);
+		$$->plusDash = 1;
 		$$->ccInvert = 1;
 	}
 ;
@@ -235,27 +252,33 @@ charRanges:
 	charRange
 |   charRanges charRange
 	{
+		printf("charRanges\n");
 		$$ = $2;
 		$$->left = $1;
 	}
 ;
 
 charRange:
-	charRangeChar
+	charRangeChar '-' charRangeChar
 	{
-		$$ = reg(CharRange, nil, nil);
-		$$->ccLow = $1;
-		$$->ccHigh = $1;
-	}
-|	charRangeChar '-' charRangeChar
-	{
+		printf("charRangeChar - charRangeChar\n");
 		$$ = reg(CharRange, nil, nil);
 		$$->ccLow = $1;
 		$$->ccHigh = $3;
 	}
-;
+|	charRangeChar
+	{
+		printf("charRangeChar\n");
+		$$ = reg(CharRange, nil, nil);
+		$$->ccLow = $1;
+		$$->ccHigh = $1;
+	}
+	;
 
-// All special chars are overridden inside a CCC
+// Most metachars are overridden inside a CCC
+// '-' is either a metachar (in the middle) or a leading literal (['-'...])
+// This syntax is limited.
+// In Python, for example, '-' works between charRanges as well, or as a suffix, e.g. [a-c-x-y] which is a-c + - + x-y
 charRangeChar:
 	CHAR
 	{

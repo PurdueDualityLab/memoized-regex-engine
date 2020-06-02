@@ -102,10 +102,16 @@ a[^\t]b , axb             , MATCH
 [a-c.+\\*()] , \          , MATCH
 [a-c.+\\*()] , *          , MATCH
 
-# - is only special inside a CCC
-[a-z] , p, MATCH
-a-z , p,   MISMATCH
-a-z , a-z, MATCH
+# '-' is only special inside a CCC
+[a-z] , p   , MATCH
+a-z   , p   , MISMATCH
+a-z   , a-z , MATCH
+
+# '-' can exist as the leading or trailing element of a CCC without implying a range
+[-x],   -, MATCH
+[-x],   x, MATCH
+[-x-z], y, MATCH
+[^-x],  -, MISMATCH
 
 ###
 # Optimizations etc.
