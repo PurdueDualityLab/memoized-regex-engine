@@ -39,7 +39,7 @@ class MyTask(libLF.parallel.ParallelTask):
     except KeyboardInterrupt:
       raise
     except BaseException as err:
-      libLF.log('Exception while testing regex /{}/: '.format(self.simpleRegex.pattern) + err)
+      libLF.log('Exception while testing regex /{}/: {}'.format(self.simpleRegex.pattern, str(err)))
       return err
     
   def _measurePhis(self, simpleRegex):
@@ -69,7 +69,7 @@ class MyTask(libLF.parallel.ParallelTask):
       return msa
 
     except BaseException as err:
-      libLF.log('Exception while analyzing: err <{}> pattern /{}/'.format(err, simpleRegex.pattern))
+      libLF.log('Exception while analyzing: err <{}> pattern /{}/'.format(str(err), simpleRegex.pattern))
       raise
 
 ################
