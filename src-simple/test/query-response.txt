@@ -66,6 +66,17 @@ a\tb    , a b             , MISMATCH  # The space is a space character
 a[\t]b  , a	b             , MATCH     # The space is a tab character
 a[^\t]b , axb             , MATCH
 
+# Other escapes work too
+\$      , $               , MATCH
+\$      , $a              , MATCH
+\$a     , $a              , MATCH
+\$$     , $               , MATCH
+\$$     , $a              , MISMATCH
+\^      , ^               , MATCH
+a\^     , a^              , MATCH
+^\^     , ^               , MATCH
+^\^     , a^              , MISMATCH
+
 # Custom character classes
 [a]     , a               , MATCH
 [a]     , b               , MISMATCH

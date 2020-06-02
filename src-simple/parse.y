@@ -176,6 +176,16 @@ escape:
 		$$ = reg(CharEscape, nil, nil);
 		$$->ch = '\\';
 	}
+|	'\\' '^'
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = '^';
+	}
+|	'\\' '$'
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = '$';
+	}
 ;
 
 single:
@@ -220,7 +230,7 @@ single:
 ccc:
 	'[' charRanges ']'
 	{
-		printf("[ charRanges ]\n");
+		//printf("[ charRanges ]\n");
 		$$ = reg(CustomCharClass, $2, nil);
 		$$->plusDash = 1;
 		$$->ccInvert = 0;
@@ -228,7 +238,7 @@ ccc:
 	// Variant with dash -- unambiguous. Cannot do "charRanges '-'" because yacc is an LR(1) -- ambiguous?
 |	'[' '-' charRanges ']'
 	{
-		printf("[ - charRanges ]\n");
+		//printf("[ - charRanges ]\n");
 		$$ = reg(CustomCharClass, $3, nil);
 		$$->plusDash = 1;
 		$$->ccInvert = 0;
@@ -252,7 +262,7 @@ charRanges:
 	charRange
 |   charRanges charRange
 	{
-		printf("charRanges\n");
+		//printf("charRanges\n");
 		$$ = $2;
 		$$->left = $1;
 	}
@@ -261,14 +271,14 @@ charRanges:
 charRange:
 	charRangeChar '-' charRangeChar
 	{
-		printf("charRangeChar - charRangeChar\n");
+		//printf("charRangeChar - charRangeChar\n");
 		$$ = reg(CharRange, nil, nil);
 		$$->ccLow = $1;
 		$$->ccHigh = $3;
 	}
 |	charRangeChar
 	{
-		printf("charRangeChar\n");
+		//printf("charRangeChar\n");
 		$$ = reg(CharRange, nil, nil);
 		$$->ccLow = $1;
 		$$->ccHigh = $1;
