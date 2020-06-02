@@ -28,11 +28,9 @@ typedef struct RLEVector RLEVector;
 
 /* Starts all zeros */
 RLEVector *
-RLEVector_create(int runLength);
+RLEVector_create(int runLength, int autoValidate);
 
-int
-RLEVector_runSize(RLEVector *vec);
-
+/* Set this ix to 1 */
 void
 RLEVector_set(RLEVector *vec, int ix);
 
@@ -40,9 +38,15 @@ RLEVector_set(RLEVector *vec, int ix);
 int
 RLEVector_get(RLEVector *vec, int ix);
 
+/* Size of the runs in use */
+int
+RLEVector_runSize(RLEVector *vec);
+
+/* In runs, not entries */
 int 
 RLEVector_currSize(RLEVector *vec);
 
+/* In runs, not entries */
 int 
 RLEVector_maxObservedSize(RLEVector *vec);
 

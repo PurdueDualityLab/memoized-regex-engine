@@ -5,16 +5,16 @@
 // Annotations, statistics, and memoization by James Davis, 2020.
 
 #include "regexp.h"
+#include "log.h"
+
 #include <sys/time.h>
 #include <assert.h>
-
-int LOG_THREAD_VEC = 0;
 
 void
 vec_strcat(char **dest, int *dAlloc, char *src)
 {
   int combinedLen = strlen(*dest) + strlen(src) + 5;
-  // printf("vec_strcat: dest %p *dest %p *dAlloc %d; string <%s>\n", dest, *dest, *dAlloc, *dest);
+  // logMsg(LOG_INFO, "vec_strcat: dest %p *dest %p *dAlloc %d; string <%s>\n", dest, *dest, *dAlloc, *dest);
 
   if (combinedLen > *dAlloc) {
     /* Re-alloc */
@@ -31,11 +31,9 @@ vec_strcat(char **dest, int *dAlloc, char *src)
   }
   
   strcat(*dest, src);
-  // printf("vec_strcat: dest %p *dest %p *dAlloc %d; string <%s>\n", dest, *dest, *dAlloc, *dest);
+  // logMsg(LOG_INFO, "vec_strcat: dest %p *dest %p *dAlloc %d; string <%s>\n", dest, *dest, *dAlloc, *dest);
   return;
 }
-
-static int VERBOSE = 0;
 
 typedef struct Thread Thread;
 typedef struct VisitTable VisitTable;
@@ -88,12 +86,11 @@ initVisitTable(Prog *prog, int nChars)
 void
 markVisit(VisitTable *visitTable, int statenum, int woffset)
 {
-  if (VERBOSE) {
-    printf("Visit: Visiting <%d, %d>\n", statenum, woffset);
+  logMsg(LOG_VERBOSE, "Visit: Visiting <%d, %d>", statenum, woffset);
   
-    if (visitTable->visitVectors[statenum][woffset] > 0)
-      printf("Hmm, already visited <%d, %d>\n", statenum, woffset);
-  }
+  if (visitTable->visitVectors[statenum][woffset] > 0)
+    logMsg(LOG_WARN, "Hmm, already visited <%d, %d>", statenum, woffset);
+
   assert(statenum < visitTable->nStates);
   assert(woffset < visitTable->nChars);
   
@@ -119,12 +116,12 @@ initMemoTable(Prog *prog, int nChars, int memoMode, int memoEncoding)
   if (memoMode != MEMO_NONE) {
     switch(memo.encoding){
     case ENCODING_NONE:
-      printf("%s: Initializing with encoding NONE\n", prefix);
-      printf("%s: cardQ = %d, Phi_memo = %d\n", prefix, cardQ, nStatesToTrack);
+      logMsg(LOG_INFO, "%s: Initializing with encoding NONE", prefix);
+      logMsg(LOG_INFO, "%s: cardQ = %d, Phi_memo = %d", prefix, cardQ, nStatesToTrack);
       /* Visit vectors */
       memo.visitVectors = mal(sizeof(*memo.visitVectors) * nStatesToTrack);
 
-      printf("%s: %d visit vectors x %d chars for each\n", prefix, nStatesToTrack, nChars);
+      logMsg(LOG_INFO, "%s: %d visit vectors x %d chars for each", prefix, nStatesToTrack, nChars);
       for (i = 0; i < nStatesToTrack; i++) {
         memo.visitVectors[i] = mal(sizeof(int) * nChars);
         for (j = 0; j < nChars; j++) {
@@ -133,19 +130,19 @@ initMemoTable(Prog *prog, int nChars, int memoMode, int memoEncoding)
       }
       break;
     case ENCODING_NEGATIVE:
-      printf("%s: Initializing with encoding NEGATIVE\n", prefix);
+      logMsg(LOG_INFO, "%s: Initializing with encoding NEGATIVE", prefix);
       memo.searchStateTable = NULL;
       break;
     case ENCODING_RLE:
     case ENCODING_RLE_TUNED:
       if (memo.encoding == ENCODING_RLE_TUNED)
-        printf("%s: Initializing with encoding RLE_TUNED\n", prefix);
+        logMsg(LOG_INFO, "%s: Initializing with encoding RLE_TUNED", prefix);
       else
-        printf("%s: Initializing with encoding RLE\n", prefix);
+        logMsg(LOG_INFO, "%s: Initializing with encoding RLE", prefix);
 
       memo.rleVectors = mal(sizeof(*memo.rleVectors) * nStatesToTrack);
 
-      printf("%s: %d RLE-encoded visit vectors\n", prefix, nStatesToTrack);
+      logMsg(LOG_INFO, "%s: %d RLE-encoded visit vectors", prefix, nStatesToTrack);
       j = -1;
       for (i = 0; i < nStatesToTrack; i++) {
         /* Find the corresponding states so we know the run lengths to use */
@@ -156,20 +153,20 @@ initMemoTable(Prog *prog, int nChars, int memoMode, int memoEncoding)
             if (visitInterval < 1)
               visitInterval = 1;
             //visitInterval = 60;
-            printf("%s: state %d (memo state %d) will use visitInterval %d\n", prefix, j, i, visitInterval);
-            memo.rleVectors[i] = RLEVector_create(visitInterval);
+            logMsg(LOG_INFO, "%s: state %d (memo state %d) will use visitInterval %d", prefix, j, i, visitInterval);
+            memo.rleVectors[i] = RLEVector_create(visitInterval, 0 /* Do not auto-validate */);
             break;
           }
         }
       }
       break;
     default:
-      printf("%s: Unexpected encoding %d\n", prefix, memo.encoding);
+      logMsg(LOG_INFO, "%s: Unexpected encoding %d", prefix, memo.encoding);
       assert(0);
     }
   }
 
-  printf("%s: initialized\n", prefix);
+  logMsg(LOG_INFO, "%s: initialized", prefix);
   return memo;
 }
 
@@ -182,9 +179,7 @@ woffset(char *input, char *sp)
 static int
 isMarked(Memo *memo, int statenum /* PC's memoStateNum */, int woffset)
 {
-  if (VERBOSE) {
-    printf("  isMarked: querying <%d, %d>\n", statenum, woffset);
-  }
+  logMsg(LOG_VERBOSE, "  isMarked: querying <%d, %d>", statenum, woffset);
 
   switch(memo->encoding){
   case ENCODING_NONE:
@@ -213,12 +208,10 @@ isMarked(Memo *memo, int statenum /* PC's memoStateNum */, int woffset)
 static void
 markMemo(Memo *memo, int statenum, int woffset)
 {
-  if (VERBOSE) {
-    printf("Memo: Marking <%d, %d>\n", statenum, woffset);
+  logMsg(LOG_VERBOSE, "Memo: Marking <%d, %d>", statenum, woffset);
 
-    if (isMarked(memo, statenum, woffset)) {
-      printf("\n****\n\n   Hmm, already marked s%d c%d\n\n*****\n\n", statenum, woffset);
-    }
+  if (isMarked(memo, statenum, woffset)) {
+    logMsg(LOG_WARN, "\n****\n\n   Hmm, already marked s%d c%d\n\n*****\n\n", statenum, woffset);
   }
 
   switch(memo->encoding) {
@@ -314,7 +307,7 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime)
     strcpy(memoConfig_encoding, "\"RLE_TUNED\"");
     break;
   default:
-    printf("Encoding %d\n", memo->encoding);
+    logMsg(LOG_ERROR, "Encoding %d", memo->encoding);
     assert(!"Unknown encoding\n");
   }
 
@@ -348,8 +341,8 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime)
     }
   }
 
-  printf("%s: Most-visited search state: <%d, %d> (%d visits)\n", prefix, vertexWithMostVisitedSearchState, mostVisitedOffset, maxVisitsPerSearchState);
-  printf("%s: Most-visited vertex: %d (%d visits over all its search states)\n", prefix, mostVisitedVertex, maxVisitsPerVertex);
+  logMsg(LOG_INFO, "%s: Most-visited search state: <%d, %d> (%d visits)", prefix, vertexWithMostVisitedSearchState, mostVisitedOffset, maxVisitsPerSearchState);
+  logMsg(LOG_INFO, "%s: Most-visited vertex: %d (%d visits over all its search states)", prefix, mostVisitedVertex, maxVisitsPerVertex);
   /* Info about simulation */
   fprintf(stderr, ", \"simulationInfo\": { \"nTotalVisits\": %d, \"nPossibleTotalVisitsWithMemoization\": %d, \"visitsToMostVisitedSearchState\": %d, \"visitsToMostVisitedVertex\": %d, \"simTimeUS\": %llu }",
     nTotalVisits, visitTable->nStates * visitTable->nChars, maxVisitsPerSearchState, maxVisitsPerVertex, elapsed_US);
@@ -364,7 +357,7 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime)
   switch(memo->encoding) {
     case ENCODING_NONE:
     /* All memoized states cost |w| */
-    printf("%s: No encoding, so all memoized vertices paid the full cost of |w| = %d slots\n", prefix, memo->nChars);
+    logMsg(LOG_INFO, "%s: No encoding, so all memoized vertices paid the full cost of |w| = %d slots", prefix, memo->nChars);
     for (i = 0; i < memo->nStates; i++) {
       sprintf(numBufForSprintf, "%d", memo->nChars);
       vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
@@ -374,7 +367,7 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime)
     }
     break;
   case ENCODING_NEGATIVE:
-    printf("%s: %d slots used (out of %d possible)\n",
+    logMsg(LOG_INFO, "%s: %d slots used (out of %d possible)",
       prefix, HASH_COUNT(memo->searchStateTable), memo->nStates * memo->nChars);
 
     /* Memoized state costs vary by number of visits to each node. */
@@ -405,9 +398,9 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime)
     break;
   case ENCODING_RLE:
   case ENCODING_RLE_TUNED:
-    printf("%s: |w| = %d\n", prefix, memo->nChars);
+    logMsg(LOG_INFO, "%s: |w| = %d", prefix, memo->nChars);
     for (i = 0; i < memo->nStates; i++) {
-      printf("%s: memo vector %d (RL %d) has %d runs (max observed during execution: %d, max possible: %d)\n",
+      logMsg(LOG_INFO, "%s: memo vector %d (RL %d) has %d runs (max observed during execution: %d, max possible: %d)",
         prefix, i, RLEVector_runSize(memo->rleVectors[i]),
         RLEVector_currSize(memo->rleVectors[i]),
         RLEVector_maxObservedSize(memo->rleVectors[i]),
@@ -451,8 +444,7 @@ ThreadVec_alloc()
   tv.maxThreads = 1000;
   tv.threads = mal(tv.maxThreads * sizeof(*tv.threads));
 
-	if (LOG_THREAD_VEC)
-		printf("TV: alloc -- threads %p\n", tv.threads);
+  logMsg(LOG_DEBUG, "TV: alloc -- threads %p", tv.threads);
   return tv;
 }
 
@@ -463,8 +455,7 @@ ThreadVec_realloc(ThreadVec *tv)
   Thread *newThreads = mal(newMaxThreads * sizeof(*newThreads));
 
   memcpy(newThreads, tv->threads, tv->nThreads * sizeof(*newThreads));
-	if (LOG_THREAD_VEC)
-		printf("TV: realloc from %d to %d threads, %p -> %p\n", tv->maxThreads, newMaxThreads, tv->threads, newThreads);
+  logMsg(LOG_DEBUG, "TV: realloc from %d to %d threads, %p -> %p", tv->maxThreads, newMaxThreads, tv->threads, newThreads);
 
   tv->maxThreads = newMaxThreads;
 
@@ -485,8 +476,7 @@ ThreadVec_pop(ThreadVec *tv)
   assert(tv->nThreads > 0);
 
   t = tv->threads[tv->nThreads-1];
-	if (LOG_THREAD_VEC)
-		printf("TV: Popping t %d (pc %p, sp %p, sub %p)\n", tv->nThreads, t.pc, t.sp, t.sub);
+  logMsg(LOG_VERBOSE, "TV: Popping t %d (pc %p, sp %p, sub %p)", tv->nThreads, t.pc, t.sp, t.sub);
 
   tv->nThreads--;
   assert(tv->nThreads >= 0);
@@ -499,11 +489,41 @@ ThreadVec_push(ThreadVec *tv, Thread t)
   if (tv->nThreads == tv->maxThreads)
     ThreadVec_realloc(tv);
 
-	if (LOG_THREAD_VEC)
-		printf("TV: Pushing t %d (pc %p, sp %p, sub %p)\n", tv->nThreads+1, t.pc, t.sp, t.sub);
+  logMsg(LOG_VERBOSE, "TV: Pushing t %d (pc %p, sp %p, sub %p)", tv->nThreads+1, t.pc, t.sp, t.sub);
   tv->threads[ tv->nThreads ] = t;
   tv->nThreads++;
   assert(tv->nThreads <= tv->maxThreads);
+}
+
+static int
+_inCharClass(Inst *pc, char c)
+{
+  int i, j;
+  int inThisRange = 0, inAnyInstCharRange = 0;
+
+  // Test for membership in each of the CharRange conditions
+  for (i = 0; i < pc->charRangeCounts; i++) {
+    logMsg(LOG_DEBUG, "testing range %d of %d (inv this one? %d)", i, pc->charRangeCounts, pc->charRanges[i].invert ? 1 : 0);
+    inThisRange = 0;
+    for (j = 0; j < pc->charRanges[i].count; j++) {
+      logMsg(LOG_DEBUG, "testing range %d.%d: [%d, %d]", i, j, pc->charRanges[i].lows[j], pc->charRanges[i].highs[j]);
+      inThisRange += pc->charRanges[i].lows[j] <= (int) c && (int) c <= pc->charRanges[i].highs[j];
+    }
+
+    // Invert the inner formula
+    if (pc->charRanges[i].invert)
+      inThisRange = !inThisRange;
+
+    if (inThisRange) {
+      logMsg(LOG_VERBOSE, "in range %d", i);
+      inAnyInstCharRange = 1;
+    }
+  }
+
+  // Apply top-level inversion
+  if ( (inAnyInstCharRange && !pc->invert) || (!inAnyInstCharRange && pc->invert) )
+    return 1;
+  return 0;
 }
 
 int
@@ -512,7 +532,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
   Memo memo;
   VisitTable visitTable;
   ThreadVec ready = ThreadVec_alloc();
-  int i, j, inCharClass;
+  int i;
   Inst *pc; /* Current position in VM (pc) */
   char *sp; /* Current position in input */
   Sub *sub; /* submatch (capture group) */
@@ -522,16 +542,14 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
   inputEOL = input + strlen(input);
 
   /* Prep visit table */
-  if (VERBOSE)
-    printf("Initializing visit table\n");
+  logMsg(LOG_VERBOSE, "Initializing visit table");
   visitTable = initVisitTable(prog, strlen(input) + 1);
 
   /* Prep memo table */
-  if (VERBOSE)
-    printf("Initializing memo table\n");
+  logMsg(LOG_VERBOSE, "Initializing memo table");
   memo = initMemoTable(prog, strlen(input) + 1, prog->memoMode, prog->memoEncoding);
 
-  printf("\n\n***************\n\n  Backtrack: Simulation begins\n\n************\n\n");
+  logMsg(LOG_INFO, "Backtrack: Simulation begins");
   startTime = now();
 
   /* queue initial thread */
@@ -549,8 +567,7 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
     sub = next.sub;
     assert(sub->ref > 0);
     for(;;) { /* Run thread to completion */
-      if (VERBOSE)
-        printf("  search state: <%d (M: %d), %d>\n", pc->stateNum, pc->memoStateNum, woffset(input, sp));
+      logMsg(LOG_VERBOSE, "  search state: <%d (M: %d), %d>", pc->stateNum, pc->memoStateNum, woffset(input, sp));
 
       if (prog->memoMode != MEMO_NONE && pc->memoStateNum >= 0) {
         /* Check if we've been here. */
@@ -591,34 +608,19 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
         if (*sp == 0)
           goto Dead;
         /* Look through char class mins/maxes */
-        if (VERBOSE)
-          printf("Does char %d match CC %d (inv %d)? charClassCounts %d\n",
-            *sp, pc->c, pc->invert, pc->charClassCounts);
-        inCharClass = 0;
-        for (j = 0; j < pc->charClassCounts; j++) {
-          if (VERBOSE)
-            printf("testing range [%d, %d]\n", pc->charClassMins[j], pc->charClassMaxes[j]);
-          if (pc->charClassMins[j] <= (int) *sp && (int) *sp <= pc->charClassMaxes[j]) {
-            if (VERBOSE)
-              printf("in range %d\n", j);
-            inCharClass = 1;
-          }
-        }
+        logMsg(LOG_VERBOSE, "Does char %d match CC? charClassCounts %d",
+          *sp, pc->charRangeCounts);
 
-        /* Check for match, honoring invert */
-        if ((inCharClass && pc->invert) || (!inCharClass && !pc->invert)) {
-          if (VERBOSE)
-            printf("no match (inCharClass %d invert %d)\n", inCharClass, pc->invert);
+        if (!_inCharClass(pc, *sp)) {
+          logMsg(LOG_VERBOSE, "not in char class");
           goto Dead;
         }
-        if (VERBOSE)
-          printf("char %d matched CC %d\n", *sp, pc->c);
+        logMsg(LOG_VERBOSE, "char %d matched CC", *sp);
         pc++;
         sp++;  
         continue;
       case Match:
-        if (VERBOSE)
-          printf("Match: eolAnchor %d sp %p inputEOL %p\n", prog->eolAnchor, sp, inputEOL);
+        logMsg(LOG_VERBOSE, "Match: eolAnchor %d sp %p inputEOL %p", prog->eolAnchor, sp, inputEOL);
         if (!prog->eolAnchor || (prog->eolAnchor && sp == inputEOL)) {
           for(i=0; i<nsubp; i++)
             subp[i] = sub->sub[i];
@@ -635,6 +637,12 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
       case Split: /* Non-deterministic choice */
         ThreadVec_push(&ready, thread(pc->y, sp, incref(sub)));
         pc = pc->x;  /* continue current thread */
+        continue;
+      case SplitMany: /* Non-deterministic choice */
+        for (i = 1; i < pc->arity; i++) {
+          ThreadVec_push(&ready, thread(pc->edges[i], sp, incref(sub)));
+        }
+        pc = pc->edges[0];  /* continue current thread */
         continue;
       case Save:
         sub = update(sub, pc->n, sp);

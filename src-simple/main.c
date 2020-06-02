@@ -4,6 +4,8 @@
 
 #include "regexp.h"
 #include "vendor/cJSON.h"
+#include "log.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -70,25 +72,26 @@ loadQuery(char *inFile)
 	}
 
 	// Read file
-	printf("Reading %s\n", inFile);
+	printf("HELLO\n");
+	logMsg(LOG_INFO, "Reading %s", inFile);
 	rawJson = loadFile(inFile);
-	printf("Contents: <%s>\n", rawJson);
+	logMsg(LOG_INFO, "Contents: <%s>", rawJson);
 
 	// Parse contents
-	printf("json parse\n");
+	logMsg(LOG_INFO, "json parse");
 	parsedJson = cJSON_Parse(rawJson);
-	printf("%d keys\n", cJSON_GetArraySize(parsedJson));
+	logMsg(LOG_INFO, "%d keys", cJSON_GetArraySize(parsedJson));
 	assert(cJSON_GetArraySize(parsedJson) >= 2);
 	
 	key = cJSON_GetObjectItem(parsedJson, "pattern");
 	assert(key != NULL);
 	q.regex = strdup(key->valuestring);
-	printf("regex: <%s>\n", q.regex);
+	logMsg(LOG_INFO, "regex: <%s>", q.regex);
 
 	key = cJSON_GetObjectItem(parsedJson, "input");
 	assert(key != NULL);
 	q.input = strdup(key->valuestring);
-	printf("input: <%s>\n", q.input);
+	logMsg(LOG_INFO, "input: <%s>", q.input);
 
 	cJSON_Delete(parsedJson);
 	free(rawJson);
@@ -153,21 +156,32 @@ main(int argc, char **argv)
 		q.input = argv[4];
 	}
 
+	// Parse
 	re = parse(q.regex);
+
+	// Optimize
+	logMsg(LOG_INFO, "Non-optimized re:");
 	printre(re);
 	printf("\n");
 
+	re = optimize(re);
+	logMsg(LOG_INFO, "Optimized re:");
+	printre(re);
+	printf("\n");
+
+	// Compile
 	prog = compile(re, memoMode);
 	printprog(prog);
+
+	// Simulate
 	prog->memoMode = memoMode;
 	prog->memoEncoding = memoEncoding;
 
-	printf("Candidate string: %s\n", q.input);
+	logMsg(LOG_INFO, "Candidate string: %s", q.input);
 	for(j=0; j<nelem(tab); j++) { /* Go through all matchers */
 		if (strcmp(tab[j].name, "backtrack") != 0) { /* We just care about backtrack */
 			continue;
 		}
-		printf("%s ", tab[j].name);
 		memset(sub, 0, sizeof sub);
 		if(!tab[j].fn(prog, q.input, sub, nelem(sub))) {
 			printf("-no match-\n");

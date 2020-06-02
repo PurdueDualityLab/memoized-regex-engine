@@ -21,11 +21,13 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#include "rle.h"
+#include "log.h"
+#include "vendor/avl_tree.h"
+
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include "rle.h"
-#include "vendor/avl_tree.h"
 
 #define BIT_ISSET(x, i) ( ( (x) & ( (1) << (i) ) ) != 0 )
 #define BIT_SET(x, i) ( (x) | ( (1) << (i) ) ) /* Returns with bit set */
@@ -34,15 +36,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MASK_FOR(ix, bitsPerRun) ( BIT_SET(0, RUN_OFFSET(ix, bitsPerRun)) )
 /* Run number within a repeating sequence of k-bit runs. [0, nRuns). */
 #define RUN_NUMBER(ix, rleStart, bitsPerRun) ( ( (ix) - (rleStart) ) / (bitsPerRun) )
-
-static int TEST = 0;
-static int RUN_TIME_CHECKS = 0;
-enum {
-  VERBOSE_LVL_NONE,
-  VERBOSE_LVL_SOME,
-  VERBOSE_LVL_ALL,
-};
-static int VERBOSE_LVL = VERBOSE_LVL_NONE;
 
 /* Internal API: RLENode */
 typedef struct RLENode RLENode;
@@ -130,10 +123,11 @@ struct RLEVector
   int currNEntries;
   int mostNEntries; /* High water mark */
   int nBitsInRun; /* Length of the runs we encode */
+  int autoValidate; /* Validate after every API usage. This can be wildly expensive. */
 };
 
 RLEVector *
-RLEVector_create(int runLength)
+RLEVector_create(int runLength, int autoValidate)
 {
   RLENode node;
   RLEVector *vec = malloc(sizeof *vec);
@@ -143,67 +137,25 @@ RLEVector_create(int runLength)
   vec->nBitsInRun = runLength;
 
   if (runLength > 8 * sizeof(node.run)) {
-    printf("Need %d bits, only have %llu\n", runLength, 8llu * sizeof(node.run));
+    logMsg(LOG_INFO, "RLEVector_create: Need %d bits, only have %llu", runLength, 8llu * sizeof(node.run));
     vec->nBitsInRun = 1;
   }
+  vec->autoValidate = autoValidate;
 
-  if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
-    printf("RLEVector_create: vec %p nBitsInRun %d\n", vec, vec->nBitsInRun);
-
-  if (TEST) {
-    RLEVector *vec2 = malloc(sizeof *vec);
-
-    printf("\n**********\n\n  RLEVector_create: running test\n\n**********\n\n");
-    vec2->root = NULL;
-    vec2->currNEntries = 0;
-    vec2->mostNEntries = 0;
-    vec2->nBitsInRun = 2;
-    _RLEVector_validate(vec2);
-
-    printf("get from empty\n");
-    assert(RLEVector_currSize(vec2) == 0);
-    assert(RLEVector_get(vec2, 5) == 0);
-
-    printf("set 5\n");
-    RLEVector_set(vec2, 5);
-    assert(RLEVector_currSize(vec2) == 1);
-    printf("set 7\n");
-    RLEVector_set(vec2, 7);
-    assert(RLEVector_currSize(vec2) == 1); /* Run-length 2 should accommodate this: 01-01 */
-    printf("set 6\n");
-    RLEVector_set(vec2, 6);
-    assert(RLEVector_currSize(vec2) == 2); /* But not this: 01-11 */
-    printf("set 4\n");
-    RLEVector_set(vec2, 4);
-    assert(RLEVector_currSize(vec2) == 1); /* But now we have 11-11 */
-
-    printf("get 4-8\n");
-    assert(RLEVector_get(vec2, 4) == 1);
-    assert(RLEVector_get(vec2, 5) == 1);
-    assert(RLEVector_get(vec2, 6) == 1);
-    assert(RLEVector_get(vec2, 7) == 1);
-    assert(RLEVector_get(vec2, 8) == 0);
-    printf("\n\n  RLEVector_create: Tests passed\n\n**********\n\n");
-  }
+  logMsg(LOG_VERBOSE, "RLEVector_create: vec %p nBitsInRun %d, autoValidate %d", vec, vec->nBitsInRun, vec->autoValidate);
 
   return vec;
 }
 
-/* Performs a full walk of the tree looking for fishy business. */
+/* Performs a full walk of the tree looking for fishy business. O(n) steps. */
 static void
 _RLEVector_validate(RLEVector *vec)
 {
   RLENode *prev = NULL, *curr = NULL;
   int nNodes = 0;
 
-  if (!RUN_TIME_CHECKS)
-    return;
-
 	assert(vec != NULL);
-  if (VERBOSE_LVL >= VERBOSE_LVL_ALL) {
-    printf("  _RLEVector_validate: Validating vec %p (size %d, runs of length %d)\n", vec, vec->currNEntries, vec->nBitsInRun);
-  }
-
+  logMsg(LOG_DEBUG, "  _RLEVector_validate: Validating vec %p (size %d, runs of length %d)", vec, vec->currNEntries, vec->nBitsInRun);
 
   if (vec->currNEntries == 0) {
     return;
@@ -218,11 +170,13 @@ _RLEVector_validate(RLEVector *vec)
     }
 
     while (prev != NULL && curr != NULL) {
-      if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
-        printf("prev (%d,%d,%llu) curr (%d,%d,%llu)\n", prev->offset, prev->nRuns, prev->run, curr->offset, curr->nRuns, curr->run);
+      logMsg(LOG_DEBUG, "rleVector_validate: prev (%d,%d,%llu) curr (%d,%d,%llu)", prev->offset, prev->nRuns, prev->run, curr->offset, curr->nRuns, curr->run);
       assert(prev->offset < curr->offset); /* In-order */
 			if (RLENode_end(prev) == curr->offset) {
-				assert(prev->run != curr->run); /* Adjacent are merged */
+				if (prev->run == curr->run){ 
+          /* Adjacent identical runs should have been merged */
+          assert(!"rleVector_validate: Adjacent identical runs are not merged");
+        }
 			}
       prev = curr;
       curr = avl_tree_entry(avl_tree_next_in_order(&curr->node), RLENode, node);
@@ -230,9 +184,7 @@ _RLEVector_validate(RLEVector *vec)
     }
   }
 
-  if (VERBOSE_LVL >= VERBOSE_LVL_ALL) {
-    printf("nNodes %d currNEntries %d\n", nNodes, vec->currNEntries);
-  }
+  logMsg(LOG_DEBUG, "rleVector_validate: nNodes %d currNEntries %d", nNodes, vec->currNEntries);
   assert(vec->currNEntries == nNodes);
 }
 
@@ -277,46 +229,16 @@ RLEVector_getNeighbors(RLEVector *vec, int ix)
 		rnn.c = avl_tree_entry(avl_tree_first_in_order(vec->root), RLENode, node);
 	}
 	
-  if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
-		printf("rnn: a %p b %p c %p\n", rnn.a, rnn.b, rnn.c);
+  logMsg(LOG_DEBUG, "rnn: a %p b %p c %p\n", rnn.a, rnn.b, rnn.c);
 	return rnn;
-
-  /* Find a */
-	if (rnn.a != NULL) {
-		printf("rnn: ix %d a (%d,%d,%llu)\n", ix, rnn.a->offset, rnn.a->nRuns, rnn.a->run);
-	}
-  
-  /* Find b or c */
-  if (rnn.a == NULL) {
-    node = avl_tree_entry(avl_tree_first_in_order(vec->root), RLENode, node);
-  } else {
-    node = avl_tree_entry(avl_tree_next_in_order(&rnn.a->node), RLENode, node);
-  }
-
-  if (node == NULL) {
-    /* Not present, nor successor */
-    rnn.b = NULL;
-    rnn.c = NULL;
-  }
-  else if (RLENode_contains(node, ix)) {
-    /* We have b, let's add c */
-    rnn.b = node;
-    rnn.c = avl_tree_entry(avl_tree_next_in_order(&rnn.b->node), RLENode, node);
-  } else {
-    /* We have c */
-    rnn.b = NULL;
-    rnn.c = node;
-  }
-
-  if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
-		printf("rnn: a %p b %p c %p\n", rnn.a, rnn.b, rnn.c);
-  return rnn;
 }
 
 /* Given a populated RNN, merge a-b and b-c if possible. */
 static void
-RLEVector_mergeNeighbors(RLEVector *vec, RLENodeNeighbors rnn)
+_RLEVector_mergeNeighbors(RLEVector *vec, RLENodeNeighbors rnn)
 {
+  logMsg(LOG_DEBUG, "mergeNeighbors: begins");
+
   int nBefore = vec->currNEntries;
 
   /* Because rnn are adjacent, we can directly manipulate offsets without
@@ -326,8 +248,7 @@ RLEVector_mergeNeighbors(RLEVector *vec, RLENodeNeighbors rnn)
 
     rnn.a->nRuns += rnn.b->nRuns;
 
-    if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
-      printf("merge: Removed (%d,%d), merged with now-(%d,%d,%llu)\n", rnn.b->offset, rnn.b->nRuns, rnn.a->offset, rnn.a->nRuns, rnn.a->run);
+    logMsg(LOG_DEBUG, "merge: Removed (%d,%d), merged with now-(%d,%d,%llu)", rnn.b->offset, rnn.b->nRuns, rnn.a->offset, rnn.a->nRuns, rnn.a->run);
     free(rnn.b);
 
     /* Set b to a, so that the next logic will work. */
@@ -337,14 +258,15 @@ RLEVector_mergeNeighbors(RLEVector *vec, RLENodeNeighbors rnn)
     _RLEVector_removeRun(vec, rnn.c);
 
     rnn.b->nRuns += rnn.c->nRuns;
-    if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
-      printf("merge: Removed (%d,%d), merged with now-(%d,%d,%llu)\n", rnn.c->offset, rnn.c->nRuns, rnn.b->offset, rnn.b->nRuns, rnn.b->run);
+    logMsg(LOG_DEBUG, "merge: Removed (%d,%d), merged with now-(%d,%d,%llu)", rnn.c->offset, rnn.c->nRuns, rnn.b->offset, rnn.b->nRuns, rnn.b->run);
 
     free(rnn.c);
   }
 
-  if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
-    printf("mergeNeighbors: before %d after %d\n", nBefore, vec->currNEntries);
+  logMsg(LOG_DEBUG, "mergeNeighbors: before %d after %d", nBefore, vec->currNEntries);
+
+  if (vec->autoValidate)
+    _RLEVector_validate(vec);
 }
 
 int
@@ -364,10 +286,11 @@ RLEVector_set(RLEVector *vec, int ix)
   int oldRunKernel = 0, newRunKernel = 0;
 	int roundedIx = ix - RUN_OFFSET(ix, vec->nBitsInRun);
 
-  if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
-    printf("RLEVector_set: %d\n", ix);
+  logMsg(LOG_VERBOSE, "RLEVector_set: %d", ix);
 
-  _RLEVector_validate(vec);
+  if (vec->autoValidate)
+    _RLEVector_validate(vec);
+
   assert(RLEVector_get(vec, ix) == 0); /* Shouldn't be set already */
 
   rnn = RLEVector_getNeighbors(vec, ix);
@@ -376,8 +299,7 @@ RLEVector_set(RLEVector *vec, int ix)
    * Update rnn.{a,b,c} as we go. */
   if (rnn.b == NULL) {
     /* Case: creates a run */
-    if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
-      printf("%d: Creating a run\n", ix);
+    logMsg(LOG_DEBUG, "%d: Creating a run", ix);
 
     newRunKernel = MASK_FOR(ix, vec->nBitsInRun);
     newRun = RLENode_create(roundedIx, 1, newRunKernel, vec->nBitsInRun);
@@ -389,8 +311,7 @@ RLEVector_set(RLEVector *vec, int ix)
     RLENode *prefixRun = NULL, *oldRun = NULL, *suffixRun = NULL;
     int ixRunNumber = 0, nRunsInPrefix = 0, nRunsInSuffix = 0;
 
-    if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
-      printf("%d: Splitting the run (%d,%d,%llu)\n", ix, rnn.b->offset, rnn.b->nRuns, rnn.b->run);
+    logMsg(LOG_DEBUG, "%d: Splitting the run (%d,%d,%llu)", ix, rnn.b->offset, rnn.b->nRuns, rnn.b->run);
 
     /* Calculate the run kernels */
     oldRun = rnn.b;
@@ -401,8 +322,7 @@ RLEVector_set(RLEVector *vec, int ix)
     _RLEVector_removeRun(vec, oldRun);
 
     /* Insert the new run */
-		if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
-			printf("adding intercalary run\n");
+    logMsg(LOG_DEBUG, "adding intercalary run");
     newRun = RLENode_create(roundedIx, 1, newRunKernel, vec->nBitsInRun);
     _RLEVector_addRun(vec, newRun);
     rnn.b = newRun;
@@ -413,16 +333,14 @@ RLEVector_set(RLEVector *vec, int ix)
     nRunsInSuffix = oldRun->nRuns - (ixRunNumber + 1);
 
     if (nRunsInPrefix > 0) {
-			if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
-				printf("adding prefix\n");
+      logMsg(LOG_DEBUG, "adding prefix");
       prefixRun = RLENode_create(oldRun->offset, nRunsInPrefix, oldRunKernel, vec->nBitsInRun);
       _RLEVector_addRun(vec, prefixRun);
 
       rnn.a = prefixRun;
     }
     if (nRunsInSuffix > 0) {
-			if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
-				printf("adding suffix\n");
+      logMsg(LOG_DEBUG, "adding suffix");
       suffixRun = RLENode_create(roundedIx + vec->nBitsInRun, nRunsInSuffix, oldRunKernel, vec->nBitsInRun);
       _RLEVector_addRun(vec, suffixRun);
 
@@ -433,13 +351,14 @@ RLEVector_set(RLEVector *vec, int ix)
     free(oldRun);
   }
 
-	if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
-		printf("Before merge: run is (%d,%d,%llu)\n", rnn.b->offset, rnn.b->nRuns, rnn.b->run);
+  logMsg(LOG_DEBUG, "Before merge: run is (%d,%d,%llu)", rnn.b->offset, rnn.b->nRuns, rnn.b->run);
 
-  RLEVector_mergeNeighbors(vec, rnn);
+  _RLEVector_mergeNeighbors(vec, rnn);
   /* After merging, rnn.{a,b,c} is untrustworthy. */
   
-  _RLEVector_validate(vec);
+  if (vec->autoValidate)
+    _RLEVector_validate(vec);
+
   return;
 }
 
@@ -449,9 +368,10 @@ RLEVector_get(RLEVector *vec, int ix)
   RLENode target;
   RLENode *match = NULL;
 
-  if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
-    printf("RLEVector_get: %d\n", ix);
-  _RLEVector_validate(vec);
+  logMsg(LOG_DEBUG, "RLEVector_get: %d", ix);
+
+  if (vec->autoValidate)
+    _RLEVector_validate(vec);
 
   target.offset = ix;
   target.nRuns = -1;
@@ -463,8 +383,7 @@ RLEVector_get(RLEVector *vec, int ix)
     return 0;
   }
 
-  if (VERBOSE_LVL >= VERBOSE_LVL_ALL)
-    printf("match: %p\n", match);
+  logMsg(LOG_DEBUG, "match: %p", match);
   return BIT_ISSET(match->run, ix % match->nBitsInRun);
 }
 
@@ -489,8 +408,7 @@ RLEVector_destroy(RLEVector *vec)
 
 static void _RLEVector_addRun(RLEVector *vec, RLENode *node)
 {
-	if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
-		printf("Adding run (%d,%d,%llu)\n", node->offset, node->nRuns, node->run);
+  logMsg(LOG_DEBUG, "Adding run (%d,%d,%llu)", node->offset, node->nRuns, node->run);
 
 	assert(avl_tree_insert(&vec->root, &node->node, RLENode_avl_tree_cmp) == NULL);
   vec->currNEntries++;
@@ -501,9 +419,11 @@ static void _RLEVector_addRun(RLEVector *vec, RLENode *node)
 
 static void _RLEVector_removeRun(RLEVector *vec, RLENode *node)
 {
-	if (VERBOSE_LVL >= VERBOSE_LVL_SOME)
-		printf("Removing run (%d,%d,%llu)\n", node->offset, node->nRuns, node->run);
+	logMsg(LOG_DEBUG, "Removing run (%d,%d,%llu)", node->offset, node->nRuns, node->run);
 
 	avl_tree_remove(&vec->root, &node->node);
   vec->currNEntries--;
+
+  if (vec->autoValidate)
+    _RLEVector_validate(vec);
 }

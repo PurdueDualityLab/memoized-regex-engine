@@ -19,6 +19,7 @@
 typedef struct Regexp Regexp;
 typedef struct Prog Prog;
 typedef struct Inst Inst;
+typedef struct InstCharRange InstCharRange;
 typedef struct Memo Memo;
 typedef struct SearchState SearchState;
 typedef struct SearchStateTable SearchStateTable;
@@ -36,24 +37,45 @@ struct LanguageLengthInfo
 struct Regexp
 {
 	int type;
-	int n;
-	int ch;
-	Regexp *left;
-	Regexp *right;
+
+	int n; /* Quantifiers: Non-greedy? 1 means yes. */
+	int ch; /* Literals, CharEscape's: Character. */
+	Regexp *left; /* Child for unary operators. Left child for binary operators. */
+	Regexp *right; /* Left child for binary operators. */
+
+    /* May be populated in an optimization pass that converts binary operators to *-arity.
+	 * Used by Alt and CCC */
+	Regexp **children;
+	int arity;
+
+	/* Anchored search? (applied to the root Regexp) */
 	int bolAnchor;
 	int eolAnchor;
 
+	/* CustomCharClass */
+	int plusDash; // Is an unescaped '-' part of the CCC, e.g. [-a] or [a-]?
+	int ccInvert;
+	int mergedRanges;
+
+	/* CharRange */
+	Regexp *ccLow;  /* Lit or CharEscape */
+	Regexp *ccHigh; /* Lit or CharEscape */
+
+	/* Do not use. */
 	LanguageLengthInfo lli;
 	int visitInterval;
 };
 
 enum	/* Regexp.type */
 {
-	Alt = 1, /* A | B */
+	Alt = 1, /* A | B -- 2-arity */
+	AltList, /* A | B | ... -- *-arity */
 	Cat,     /* AB */
 	Lit,     /* "a" */
 	Dot,     /* any char */
 	CharEscape, /* \s, \S, etc. */
+	CustomCharClass, /* [...] -- *-arity */
+	CharRange, /* 'a' or 'a-z' */
 	Paren,   /* (...) */
 	Quest,   /* A? */
 	Star,    /* A* */
@@ -66,6 +88,8 @@ void printre(Regexp*);
 void fatal(char*, ...);
 void *mal(int);
 
+Regexp *optimize(Regexp *r);
+
 struct Prog
 {
 	Inst *start;
@@ -74,6 +98,15 @@ struct Prog
 	int memoEncoding; /* Memo.encoding */
 	int nMemoizedStates;
 	int eolAnchor;
+};
+
+struct InstCharRange
+{
+	// Big enough to hold any built-in char classes
+	int lows[5];
+	int highs[5]; // Inclusive
+	int count;
+	int invert; // For \W, \S, \D
 };
 
 struct Inst
@@ -88,10 +121,13 @@ struct Inst
 	Inst *x; /* Outgoing edge -- destination 1 (default option) */
 	Inst *y; /* Outgoing edge -- destination 2 (backup) */
 	int gen;	// global state, oooh!
+
+	Inst **edges; /* Outgoing edges for case of *-arity */
+	int arity;
 	
-	int charClassMins[8]; 
-	int charClassMaxes[8]; /* Inclusive */
-	int charClassCounts;
+	/* For CharClass */
+	InstCharRange charRanges[32];
+	int charRangeCounts; /* Number of used slots */
 	int invert;
 
 	/*  These are the intervals at which this vertex may be visited
@@ -107,6 +143,7 @@ enum	/* Inst.opcode */
 	Match,
 	Jmp,
 	Split,
+	SplitMany,
 	Any,
 	CharClass,
 	Save,
@@ -181,7 +218,7 @@ enum /* Memo.encoding */
 	ENCODING_NONE,
 	ENCODING_NEGATIVE,  /* Hash table */
 	ENCODING_RLE,       /* Run-length encoding */
-	ENCODING_RLE_TUNED, /* RLE, tuned for language lengths */
+	ENCODING_RLE_TUNED, /* DO NOT USE -- RLE, tuned for language lengths -- DO NOT USE */
 };
 
 int backtrack(Prog*, char*, char**, int);

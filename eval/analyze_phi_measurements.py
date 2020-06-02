@@ -12,8 +12,10 @@ Original file is located at
 try:
   import google.colab
   IN_COLAB = True
+  print("In Google Colab")
 except:
   IN_COLAB = False
+  print("Not in Google Colab")
 
 if IN_COLAB:
   from google.colab import drive
@@ -74,20 +76,26 @@ def loadNDJSON(filepath):
 allFile = os.path.join(DATA_PATH, 'LF-phiMeasurements.json')
 slFile = os.path.join(DATA_PATH, 'sl-phiMeasurements.json')
 
+print('Loading "all regexes" measurements from {}'.format(allFile))
 allReg = loadNDJSON(allFile)
 print('Loaded %d measurements for "all" regexes' % (len(allReg)))
 
+print('Loading "SL regexes" measurements from {}'.format(slFile))
 slReg = loadNDJSON(slFile)
 print('Loaded %d measurements for "SL" regexes' % (len(slReg)))
 
 """## Munge into DF"""
 
 ## Raw values
+INCLUDE_MEMO_LOOP = True
+
 measure2name = {
-    'memoAll':      r'$|Q|$',
-    'memoInDegGT1':  r'$|\Phi_{in-degree > 1}|$',
-    'memoLoop':   r'$|\Phi_{quantifier}|$',
+    'full memoization':      r'$|Q|$',
+    'selective: indeg>1':    r'$|Q_{in-deg>1}|$',
 }
+if INCLUDE_MEMO_LOOP:
+  measure2name['selective: loop'] = r'$|Q_{ancestor}|$'
+
 rows = []
 for regexType, measurements in [("All", allReg), ("SL", slReg)]:
   for dat in measurements:
@@ -102,23 +110,25 @@ dfRaw = pd.DataFrame(
     )
 
 ## Ratios
+INCLUDE_LOOP2INDEG = False
 rat2name = {
-    'indeg2Q':    r'$\frac{|\Phi_{in-degree > 1}|}{|Q|}$',
-    'loop2Q':     r'$\frac{|\Phi_{quantifier}|}{|Q|}$',
-    'loop2indeg': r'$\frac{|\Phi_{quantifier}|}{|\Phi_{in-degree > 1}|}$',
+    'indeg2Q':    r'$\frac{|Q_{in-deg>1}|}{|Q|}$',
+    'loop2Q':     r'$\frac{|Q_{ancestor}|}{|Q|}$',
+    'loop2indeg': r'$\frac{|Q_{ancestor}|}{|Q_{in-deg>1}|}$',
 }
 rows = []
 for regexType, measurements in [("All", allReg), ("SL", slReg)]:
   for dat in measurements:
-    rat1 = dat['policy2nSelectedVertices']['memoInDegGT1'] / dat['policy2nSelectedVertices']['memoAll']
+    rat1 = dat['policy2nSelectedVertices']['selective: indeg>1'] / dat['policy2nSelectedVertices']['full memoization']
     rows += [[regexType, rat2name['indeg2Q'], rat1]]
     
-    rat2 = dat['policy2nSelectedVertices']['memoLoop']     / dat['policy2nSelectedVertices']['memoAll']
+    rat2 = dat['policy2nSelectedVertices']['selective: loop']     / dat['policy2nSelectedVertices']['full memoization']
     rows += [[regexType, rat2name['loop2Q'], rat2]]
     
-    if dat['policy2nSelectedVertices']['memoInDegGT1'] > 0:
-      rat3 = dat['policy2nSelectedVertices']['memoLoop']     / dat['policy2nSelectedVertices']['memoInDegGT1']
-      rows += [[regexType, rat2name['loop2indeg'], rat3]]
+    if INCLUDE_LOOP2INDEG:
+      if dat['policy2nSelectedVertices']['selective: indeg>1'] > 0:
+        rat3 = dat['policy2nSelectedVertices']['selective: loop']     / dat['policy2nSelectedVertices']['selective: indeg>1']
+        rows += [[regexType, rat2name['loop2indeg'], rat3]]
 dfRatios = pd.DataFrame(data=rows, columns=['Regex type', 'Measure', 'Value'])
 
 """## Summarize DF"""
@@ -132,6 +142,8 @@ print(dfRatios.groupby(['Regex type', 'Measure']).describe())
 
 """## Plot"""
 
+DISTINGUISH_SL = False
+
 font = {'family' : 'normal',
         'weight' : 'normal',
         'size'   : 14}
@@ -143,29 +155,29 @@ plt.figure(1)
 rawPlt_whis = [1,99]
 rawPlt_showfliers = False
 rawPlt_fname = os.path.join(FIG_PATH, 'vertex-set-sizes-whis{}-{}-fliers{}.{}'.format(rawPlt_whis[0], rawPlt_whis[1], rawPlt_showfliers, FIG_FILE_FORMAT))
-ax = sns.boxplot(x="Measure", y="Value", hue="Regex type", data=dfRaw,
+hue = "Regex type" if DISTINGUISH_SL else None
+ax = sns.boxplot(x="Measure", y="Value", hue=hue, data=dfRaw,
                  #width=1.0,
                  whis=rawPlt_whis, showfliers=rawPlt_showfliers
                 #, palette="Set3"
                  )
 plt.title('Sizes of selected vertex-sets', fontsize=20)
 plt.xticks(fontsize=20)
-plt.yticks(fontsize=16)
+plt.yticks(fontsize=20)
 plt.tight_layout()
 print("Saving to {}".format(rawPlt_fname))
-plt.savefig(fname=rawPlt_fname)
+plt.savefig(fname=rawPlt_fname, bbox_inches='tight')
 
 plt.figure(2)
 ratiosPlt_whis = [1,99]
 ratiosPlt_showfliers = False
 ratiosPlt_fname = os.path.join(FIG_PATH, 'vertex-sizes-ratios-whis{}-{}-fliers{}.{}'.format(ratiosPlt_whis[0], ratiosPlt_whis[1], ratiosPlt_showfliers, FIG_FILE_FORMAT))
-ax = sns.boxplot(x="Measure", y="Value", hue="Regex type", data=dfRatios,
+ax = sns.boxplot(x="Measure", y="Value", hue=hue, data=dfRatios,
                  #width=1.0,
                  whis=ratiosPlt_whis, showfliers=ratiosPlt_showfliers,
                  )
 plt.title('Space reduction via selective memoization', fontsize=20)
 plt.xticks(fontsize=24)
 plt.yticks(fontsize=16)
-plt.tight_layout()
 print("Saving to {}".format(ratiosPlt_fname))
-plt.savefig(fname=ratiosPlt_fname)
+plt.savefig(fname=ratiosPlt_fname, bbox_inches='tight')

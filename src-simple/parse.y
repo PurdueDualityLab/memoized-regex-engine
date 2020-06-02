@@ -4,8 +4,7 @@
 
 %{
 #include "regexp.h"
-
-#define KEEP_CG 1
+#include "log.h"
 
 static int yylex(void);
 static void yyerror(char*);
@@ -20,32 +19,29 @@ static int nparen;
 	int nparen;
 }
 
-%token	<c> BOL_ANCHOR CHAR EOL_ANCHOR EOL
-%type	<re>	alt concat repeat single escape line 
+%token	<c> CHAR EOL
+%type	<re>	alt concat repeat single escape line ccc charRanges charRange charRangeChar
 %type	<nparen> count
 
 %%
 
 line: 
-	BOL_ANCHOR alt EOL_ANCHOR EOL
+	'^' alt '$' EOL
 	{
-		printf("double anchors\n");
 		parsed_regexp = $2;
 		parsed_regexp->bolAnchor = 1;
 		parsed_regexp->eolAnchor = 1;
 		return 1;
 	}
-|	BOL_ANCHOR alt EOL
+|	'^' alt EOL
 	{
-		printf("bol anchor\n");
 		parsed_regexp = $2;
 		parsed_regexp->bolAnchor = 1;
 		parsed_regexp->eolAnchor = 0;
 		return 1;
 	}
-|	alt EOL_ANCHOR EOL
+|	alt '$' EOL
 	{
-		printf("eol anchor\n");
 		parsed_regexp = $1;
 		parsed_regexp->bolAnchor = 0;
 		parsed_regexp->eolAnchor = 1;
@@ -53,12 +49,12 @@ line:
 	}
 |	alt EOL
 	{
-		printf("no anchors\n");
 		parsed_regexp = $1;
 		parsed_regexp->bolAnchor = 0;
 		parsed_regexp->eolAnchor = 0;
 		return 1;
 	}
+;
 
 alt:
 	concat
@@ -160,22 +156,43 @@ escape:
 		$$ = reg(CharEscape, nil, nil);
 		$$->ch = '.';
 	}
+|	'\\' '['
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = '[';
+	}
+|	'\\' ']'
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = ']';
+	}
+|	'\\' '-'
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = '-';
+	}
 |	'\\' '\\'
 	{
 		$$ = reg(CharEscape, nil, nil);
 		$$->ch = '\\';
+	}
+|	'\\' '^'
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = '^';
+	}
+|	'\\' '$'
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = '$';
 	}
 ;
 
 single:
 	'(' count alt ')'
 	{
-	#if KEEP_CG
 		$$ = reg(Paren, $3, nil);
 		$$->n = $2;
-	#else
-		$$ = $3;
-	#endif
 	}
 |	'(' '?' ':' alt ')'
 	{
@@ -190,6 +207,10 @@ single:
 		$$ = reg(Lit, nil, nil);
 		$$->ch = ':';
 	}
+|	ccc
+	{
+		$$ = $1;
+	}
 |	CHAR
 	{
 		$$ = reg(Lit, nil, nil);
@@ -199,7 +220,124 @@ single:
 	{
 		$$ = reg(Dot, nil, nil);
 	}
+|	'-'
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = '-';
+	}
 ;
+
+ccc:
+	'[' charRanges ']'
+	{
+		//printf("[ charRanges ]\n");
+		$$ = reg(CustomCharClass, $2, nil);
+		$$->plusDash = 1;
+		$$->ccInvert = 0;
+	}
+	// Variant with dash -- unambiguous. Cannot do "charRanges '-'" because yacc is an LR(1) -- ambiguous?
+|	'[' '-' charRanges ']'
+	{
+		//printf("[ - charRanges ]\n");
+		$$ = reg(CustomCharClass, $3, nil);
+		$$->plusDash = 1;
+		$$->ccInvert = 0;
+	}
+	// Inverted
+|   '[' '^' charRanges ']'
+	{
+		$$ = reg(CustomCharClass, $3, nil);
+		$$->ccInvert = 1;
+	}
+|   '[' '^' '-' charRanges ']'
+	{
+		$$ = reg(CustomCharClass, $4, nil);
+		$$->plusDash = 1;
+		$$->ccInvert = 1;
+	}
+;
+
+// Structure is a linked list: (CharRange 1 with details) L (CharRange 2 with details) L ...
+charRanges:
+	charRange
+|   charRanges charRange
+	{
+		//printf("charRanges\n");
+		$$ = $2;
+		$$->left = $1;
+	}
+;
+
+charRange:
+	charRangeChar '-' charRangeChar
+	{
+		//printf("charRangeChar - charRangeChar\n");
+		$$ = reg(CharRange, nil, nil);
+		$$->ccLow = $1;
+		$$->ccHigh = $3;
+	}
+|	charRangeChar
+	{
+		//printf("charRangeChar\n");
+		$$ = reg(CharRange, nil, nil);
+		$$->ccLow = $1;
+		$$->ccHigh = $1;
+	}
+	;
+
+// Most metachars are overridden inside a CCC
+// '-' is either a metachar (in the middle) or a leading literal (['-'...])
+// This syntax is limited.
+// In Python, for example, '-' works between charRanges as well, or as a suffix, e.g. [a-c-x-y] which is a-c + - + x-y
+charRangeChar:
+	CHAR
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = $1;
+	}
+|   escape
+|   '.'
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = '.';
+	}
+|   ':'
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = ':';
+	}
+|   '*'
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = '*';
+	}
+|   '+'
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = '+';
+	}
+|   '?'
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = '?';
+	}
+|   '('
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = '(';
+	}
+|   ')'
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = ')';
+	}
+|   '|'
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = '|';
+	}
+;
+
 
 %%
 
@@ -216,12 +354,8 @@ yylex(void)
 	if(input == NULL || *input == 0)
 		return EOL;
 	c = *input++;
-	if(strchr("|*+?():.\\", c))
+	if(strchr("^|*+?():.\\[^-]$", c))
 		return c;
-	if(c == '^')
-		return BOL_ANCHOR;
-	if(c == '$')
-		return EOL_ANCHOR;
 	yylval.c = c;
 	return CHAR;
 }
@@ -259,11 +393,7 @@ parse(char *s)
 	if(parsed_regexp == nil)
 		yyerror("parser nil");
 		
-#if KEEP_CG
 	r = reg(Paren, parsed_regexp, nil);	// $0 parens
-#else
-	r = parsed_regexp;
-#endif
 	bolDotstar = reg(Star, reg(Dot, nil, nil), nil);
 	bolDotstar->n = 1;	// non-greedy
 	eolDotstar = reg(Star, reg(Dot, nil, nil), nil);
@@ -272,11 +402,11 @@ parse(char *s)
 	/* Tack on the dotstars */
 	combine = r;
 	if (!parsed_regexp->bolAnchor) {
-		printf("No ^, tacking on leading .*\n");
+		logMsg(LOG_INFO, "No ^, tacking on leading .*");
 		combine = reg(Cat, bolDotstar, combine);
 	}
 	if (!parsed_regexp->eolAnchor) {
-		printf("No $, tacking on trailing .*\n");
+		logMsg(LOG_INFO, "No $, tacking on trailing .*");
 		combine = reg(Cat, combine, eolDotstar);
 	}
 	combine->bolAnchor = parsed_regexp->bolAnchor;
@@ -311,6 +441,8 @@ reg(int type, Regexp *left, Regexp *right)
 void
 printre(Regexp *r)
 {
+	int i;
+
 	switch(r->type) {
 	default:
 		printf("???");
@@ -321,6 +453,17 @@ printre(Regexp *r)
 		printre(r->left);
 		printf(", ");
 		printre(r->right);
+		printf(")");
+		break;
+
+	case AltList:
+		printf("AltList(");
+		for (i = 0; i < r->arity; i++) {
+			printre(r->children[i]);
+			if (i+1 < r->arity) {
+				printf(", ");
+			}
+		}
 		printf(")");
 		break;
 
@@ -373,5 +516,38 @@ printre(Regexp *r)
 		printre(r->left);
 		printf(")");
 		break;
+
+	case CustomCharClass:
+		if (r->ccInvert)
+			printf("Neg");
+		printf("CCC(");
+		if (r->mergedRanges) {
+			for (i = 0; i < r->arity; i++) {
+				printre(r->children[i]);
+				if (i + 1 < r->arity)
+					printf(",");
+			}
+		}
+		else {
+			printre(r->left);
+		}
+		printf(")");
+		break;
+
+	case CharRange:
+		if (r->left != NULL) {
+			printre(r->left);
+			printf(",");
+		}
+		printf("CharRange(");
+
+		if (r->ccLow == r->ccHigh)
+			printre(r->ccLow);
+		else {
+			printre(r->ccLow);
+			printf("-");
+			printre(r->ccHigh);
+		}
+		printf(")");
 	}
 }

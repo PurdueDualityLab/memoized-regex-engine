@@ -1,4 +1,5 @@
 # Copyright 2007-2009 Russ Cox.  All Rights Reserved.
+# Extensions are Copyright 2020 James Davis. All rights Reserved.
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
@@ -18,6 +19,12 @@ OFILES=\
 	vendor/avl_tree.o\
 	vendor/cJSON.o\
 	rle.o\
+	log.o\
+
+RLE_TEST_OFILES=\
+	vendor/avl_tree.o\
+	rle.o\
+	log.o\
 
 HFILES=\
 	regexp.h\
@@ -25,6 +32,7 @@ HFILES=\
 	vendor/avl_tree.h\
 	vendor/cJSON.h\
 	rle.h\
+	log.h\
 
 re: $(OFILES)
 	$(CC) -o re $(OFILES)
@@ -39,8 +47,13 @@ vendor/cJSON.o: vendor/avl_tree.o
 	$(CC) -c $(CFLAGS) $*.c
 
 y.tab.h y.tab.c: parse.y
-	bison -v -y parse.y
+	${BISONPATH}bison -v -y parse.y
 
 clean:
 	rm -f *.o core re y.tab.[ch] y.output
 	cd vendor; make clean; cd -
+
+tests:
+	make re;
+	$(CC) -o rle-test rle-test.c $(RLE_TEST_OFILES)
+	MEMOIZATION_LOGLVL=debug ./rle-test && cd ../eval; MEMOIZATION_LOGLVL=debug ./unittest-prototype.py
