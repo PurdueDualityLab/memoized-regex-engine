@@ -552,13 +552,13 @@ def main(regexFile, useCSharpToFindMostEI, queryPrototype, nTrialsPerCondition, 
 parser = argparse.ArgumentParser(description='Measure the dynamic costs of memoization -- the space and time costs of memoizing this set of regexes, as determined using the prototype engine.')
 parser.add_argument('--regex-file', type=str, help='In: NDJSON file of objects containing libMemo.SimpleRegex objects (at least the key "pattern", and "evilInput" if you want an SL-specific analysis)', required=True,
   dest='regexFile')
-parser.add_argument('--useCSharpToFindMostEI', help='In: Use CSharp to find the most evil input? Default is to use the prototype engine', action='store_true', default=False,
+parser.add_argument('--useCSharpToFindMostEI', help='In: Use CSharp to find the most evil input? Default is to use the prototype engine. This is a way of ensuring that the SL regexes you claim to have protected aren\'t easily eliminated by existing optimizations or aren\'t an artifact of an inefficient prototype', action='store_true', default=False,
   dest='useCSharpToFindMostEI')
 parser.add_argument('--queryPrototype', help='In: Query prototype?', required=False, action='store_true', default=False,
   dest='queryPrototype')
 parser.add_argument('--trials', type=int, help='In: Number of trials per experimental condition (only for prototype, and only affects time complexity)', required=False, default=20,
   dest='nTrialsPerCondition')
-parser.add_argument('--queryProductionEngines', help='In: Query other engines', required=False, action='store_true', default=False,
+parser.add_argument('--queryProductionEngines', help='In: Test resource cap effectiveness. Queries other engines (C\#, Perl, PHP) on the SL input to see the effectiveness of resource cap-style defenses', required=False, action='store_true', default=False,
   dest='queryProductionEngines')
 parser.add_argument('--time-sensitive', help='In: Is this a time-sensitive analysis? If not, run in parallel', required=False, action='store_true', default=False,
   dest='timeSensitive')
