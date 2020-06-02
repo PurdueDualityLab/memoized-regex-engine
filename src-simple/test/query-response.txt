@@ -74,14 +74,23 @@ a\Da    , axa             , MATCH
 [a-c.+*()] , *            , MATCH
 [a-c.+*()] , (            , MATCH
 [a-c.+*()] , )            , MATCH
-[a-c.+\*()] , *           , MATCH
-[a-c.+\\*()] , \          , MATCH
 [\w]       , a            , MATCH
 [\W]       , %            , MATCH
 [^\W]      , a            , MATCH
 [^\w]      , %            , MATCH
 [^a-cx-z]  , m            , MATCH
 [^a-cx-z]  , b            , MISMATCH
+[\s]       , b            , MISMATCH
+
+# Escaping within CCCs
+[\[\]\-\\] , [, MATCH
+[\[\]\-\\] , ], MATCH
+[\[\]\-\\] , -, MATCH
+[\[\]\-\\] , \, MATCH
+[^\[\]\-\\] , [, MISMATCH
+[a-c.+\*()] , *           , MATCH
+[a-c.+\\*()] , \          , MATCH
+[a-c.+\\*()] , *          , MATCH
 
 ###
 # Optimizations etc.

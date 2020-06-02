@@ -73,7 +73,7 @@ enum	/* Regexp.type */
 	Lit,     /* "a" */
 	Dot,     /* any char */
 	CharEscape, /* \s, \S, etc. */
-	CustomCharClass, /* [...] */
+	CustomCharClass, /* [...] -- *-arity */
 	CharRange, /* 'a' or 'a-z' */
 	Paren,   /* (...) */
 	Quest,   /* A? */

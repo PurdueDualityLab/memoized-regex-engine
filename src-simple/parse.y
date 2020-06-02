@@ -156,6 +156,21 @@ escape:
 		$$ = reg(CharEscape, nil, nil);
 		$$->ch = '.';
 	}
+|	'\\' '['
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = '[';
+	}
+|	'\\' ']'
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = ']';
+	}
+|	'\\' '-'
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = '-';
+	}
 |	'\\' '\\'
 	{
 		$$ = reg(CharEscape, nil, nil);
