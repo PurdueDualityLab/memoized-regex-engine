@@ -56,6 +56,16 @@ a\da    , axa             , MISMATCH
 a\Da    , a9a             , MISMATCH
 a\Da    , axa             , MATCH
 
+# Other meaningful escapes -- this file format doesn't support whitespace except in the middle of things,
+#   and must be line-by-line. But we can try out a tab!
+\t      , t               , MISMATCH
+\n      , n               , MISMATCH
+\r      , r               , MISMATCH
+a\tb    , a	b             , MATCH     # The space is a tab character
+a\tb    , a b             , MISMATCH  # The space is a space character
+a[\t]b  , a	b             , MATCH     # The space is a tab character
+a[^\t]b , axb             , MATCH
+
 # Custom character classes
 [a]     , a               , MATCH
 [a]     , b               , MISMATCH

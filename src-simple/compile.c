@@ -829,10 +829,22 @@ _emitRegexpCharEscape2InstCharRange(Regexp *r, InstCharRange *instCR)
 		instCR->count = 1;
 		instCR->invert = isupper(r->ch);
 		return;
+	/* Not a built-in CC */
+	// Handle special escape sequences
+	case 'r': // UNIX-style!
+	case 'n':
+		instCR->lows[0] = '\n'; instCR->highs[0] = '\n';
+		instCR->count = 1;
+		return;
+	case 't':
+		instCR->lows[0] = '\t'; instCR->highs[0] = '\t';
+		instCR->count = 1;
+		return;
+	// By default, treat it as "not an escape": \a is just a literal "a"
 	default:
-		/* Not a built-in CC */
 		instCR->lows[0] = r->ch; instCR->highs[0] = r->ch;
 		instCR->count = 1;
+		return;
 	}
 }
 
