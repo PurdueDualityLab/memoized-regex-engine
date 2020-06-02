@@ -53,7 +53,7 @@ clean:
 	rm -f *.o core re y.tab.[ch] y.output
 	cd vendor; make clean; cd -
 
-test: rle-test.c
+tests:
 	make re;
 	$(CC) -o rle-test rle-test.c $(RLE_TEST_OFILES)
 	MEMOIZATION_LOGLVL=debug ./rle-test && cd ../eval; MEMOIZATION_LOGLVL=debug ./unittest-prototype.py

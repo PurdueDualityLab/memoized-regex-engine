@@ -19,6 +19,7 @@
 typedef struct Regexp Regexp;
 typedef struct Prog Prog;
 typedef struct Inst Inst;
+typedef struct InstCharRange InstCharRange;
 typedef struct Memo Memo;
 typedef struct SearchState SearchState;
 typedef struct SearchStateTable SearchStateTable;
@@ -42,13 +43,22 @@ struct Regexp
 	Regexp *left; /* Child for unary operators. Left child for binary operators. */
 	Regexp *right; /* Left child for binary operators. */
 
-    /* May be populated in an optimization pass that converts binary operators to *-arity */
+    /* May be populated in an optimization pass that converts binary operators to *-arity.
+	 * Used by Alt and CCC */
 	Regexp **children;
 	int arity;
 
 	/* Anchored search? (applied to the root Regexp) */
 	int bolAnchor;
 	int eolAnchor;
+
+	/* CustomCharClass */
+	int ccInvert;
+	int mergedRanges;
+
+	/* CharRange */
+	Regexp *ccLow;  /* Lit or CharEscape */
+	Regexp *ccHigh; /* Lit or CharEscape */
 
 	/* Do not use. */
 	LanguageLengthInfo lli;
@@ -63,6 +73,8 @@ enum	/* Regexp.type */
 	Lit,     /* "a" */
 	Dot,     /* any char */
 	CharEscape, /* \s, \S, etc. */
+	CustomCharClass, /* [...] */
+	CharRange, /* 'a' or 'a-z' */
 	Paren,   /* (...) */
 	Quest,   /* A? */
 	Star,    /* A* */
@@ -87,6 +99,15 @@ struct Prog
 	int eolAnchor;
 };
 
+struct InstCharRange
+{
+	// Big enough to hold any built-in char classes
+	int lows[5];
+	int highs[5]; // Inclusive
+	int count;
+	int invert;
+};
+
 struct Inst
 {
 	int opcode; /* Instruction. Determined by the corresponding Regex node */
@@ -103,9 +124,9 @@ struct Inst
 	Inst **edges; /* Outgoing edges for case of *-arity */
 	int arity;
 	
-	int charClassMins[8]; 
-	int charClassMaxes[8]; /* Inclusive */
-	int charClassCounts;
+	/* For CharClass */
+	InstCharRange charRanges[32];
+	int charRangeCounts; /* Number of used slots */
 	int invert;
 
 	/*  These are the intervals at which this vertex may be visited

@@ -56,10 +56,36 @@ a\da    , axa             , MISMATCH
 a\Da    , a9a             , MISMATCH
 a\Da    , axa             , MATCH
 
-# Confirm RLE doesn't break things
-.*.*    , aaaaaaaaaaaaaa  , MATCH
-(..)*   , aaaaaaaaaaaaaa  , MATCH
-(..)*   , aaaaaaaaaaaaaaa , MATCH
+# Custom character classes
+[a]     , a               , MATCH
+[a]     , b               , MISMATCH
+[^a]    , a               , MISMATCH
+[^a]    , b               , MATCH
+[a-z]   , a               , MATCH
+[a-z]   , b               , MATCH
+[a-z]   , p               , MATCH
+[a-z]   , z               , MATCH
+[a-zA]  , A               , MATCH
+[a-zA-Z] , p              , MATCH
+[a-zA-Z] , P              , MATCH
+[a-cxyz] , y              , MATCH
+[a-c.+*()] , .            , MATCH
+[a-c.+*()] , +            , MATCH
+[a-c.+*()] , *            , MATCH
+[a-c.+*()] , (            , MATCH
+[a-c.+*()] , )            , MATCH
+[a-c.+\*()] , *           , MATCH
+[a-c.+\\*()] , \          , MATCH
+[\w]       , a            , MATCH
+[\W]       , %            , MATCH
+[^\W]      , a            , MATCH
+[^\w]      , %            , MATCH
+[^a-cx-z]  , m            , MATCH
+[^a-cx-z]  , b            , MISMATCH
+
+###
+# Optimizations etc.
+###
 
 # AltList / SplitMany
 a|b , a , MATCH
@@ -81,3 +107,8 @@ x(a|b|c|d)y , xey, MISMATCH
 (a|(b|c)|d) , b, MATCH
 (a|(b|c)|d) , c, MATCH
 (a|(b|c)|d) , d, MATCH
+
+# Confirm RLE doesn't break things
+.*.*    , aaaaaaaaaaaaaa  , MATCH
+(..)*   , aaaaaaaaaaaaaa  , MATCH
+(..)*   , aaaaaaaaaaaaaaa , MATCH
