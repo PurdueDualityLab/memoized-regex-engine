@@ -91,7 +91,7 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
   # PERF_PUMPS_TO_TRY = [ 1000 ] # i*500 for i in range(1,5) ]
 
   #PROD_ENGINE_PUMPS = 500 * 1000
-  PROD_ENGINE_PUMPS = 100 * 1000
+  PROD_ENGINE_PUMPS = 200 * 1000 # Takes 27 seconds in Node.js on my MacBook. 100K takes 7 seconds, but wine is slow to start (sometimes 5 seconds) so we want to play it safe with a 10 second timeout.
   #PROD_ENGINE_PUMPS = 1 * 1000
   #PROD_ENGINE_PUMPS = 900
 
@@ -120,8 +120,12 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
         ei = self._findAnySLInputUsingCSharp(self.regex)
       else:
         ei, _ = self._findMostSLInput(self.regex)
+
       if ei is None:
+        libLF.log("  Could not trigger SL behavior in C#")
         return MyTask.NOT_SL
+      else:
+        libLF.log("  Triggered SL behavior in C#")
 
       if self.taskConfig.queryPrototype():
         libLF.log("  TASK: Running analysis on SL regex")
@@ -171,7 +175,7 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
       traceback.print_exc()
       return err
   
-  def _measureProductionEngineBehavior(self, regex, evilInput, maxQuerySec=5, useCSharpTimeout=True, engines=PRODUCTION_ENGINE_TO_CLI.keys()):
+  def _measureProductionEngineBehavior(self, regex, evilInput, maxQuerySec=10, useCSharpTimeout=True, engines=PRODUCTION_ENGINE_TO_CLI.keys()):
     """Returns { "perl": EngineBehavior, "php": eb, "csharp": eb }"""
 
     if useCSharpTimeout:
@@ -567,13 +571,13 @@ def main(regexFile, useCSharpToFindMostEI, queryPrototype, nTrialsPerCondition, 
 parser = argparse.ArgumentParser(description='Measure the dynamic costs of memoization -- the space and time costs of memoizing this set of regexes, as determined using the prototype engine.')
 parser.add_argument('--regex-file', type=str, help='In: NDJSON file of objects containing libMemo.SimpleRegex objects (at least the key "pattern", and "evilInput" if you want an SL-specific analysis)', required=True,
   dest='regexFile')
-parser.add_argument('--useCSharpToFindMostEI', help='In: Use CSharp to find the most evil input? Default is to use the prototype engine', action='store_true', default=False,
+parser.add_argument('--useCSharpToFindMostEI', help='In: Use CSharp to find the most evil input? Default is to use the prototype engine. This is a way of ensuring that the SL regexes you claim to have protected aren\'t easily eliminated by existing optimizations or aren\'t an artifact of an inefficient prototype', action='store_true', default=False,
   dest='useCSharpToFindMostEI')
 parser.add_argument('--queryPrototype', help='In: Query prototype?', required=False, action='store_true', default=False,
   dest='queryPrototype')
 parser.add_argument('--trials', type=int, help='In: Number of trials per experimental condition (only for prototype, and only affects time complexity)', required=False, default=20,
   dest='nTrialsPerCondition')
-parser.add_argument('--queryProductionEngines', help='In: Query other engines', required=False, action='store_true', default=False,
+parser.add_argument('--queryProductionEngines', help='In: Test resource cap effectiveness. Queries other engines (C\#, Perl, PHP) on the SL input to see the effectiveness of resource cap-style defenses', required=False, action='store_true', default=False,
   dest='queryProductionEngines')
 parser.add_argument('--time-sensitive', help='In: Is this a time-sensitive analysis? If not, run in parallel', required=False, action='store_true', default=False,
   dest='timeSensitive')
