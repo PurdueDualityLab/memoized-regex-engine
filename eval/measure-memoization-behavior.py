@@ -152,16 +152,17 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
       lastMDA = self.pump_to_mdas[MyTask.PERF_PUMPS_TO_TRY[-1]]
 
       # Collect pump data for the engines we tested
-      lastMDA.productionEnginePumps = MyTask.PROD_ENGINE_PUMPS
-      if 'perl' in PRODUCTION_ENGINE_TO_CLI:
-        libLF.log("perl behavior: {}".format(productionEngine_to_behavior["perl"]))
-        lastMDA.perlBehavior = productionEngine_to_behavior["perl"]
-      if 'php' in PRODUCTION_ENGINE_TO_CLI:
-        libLF.log("php behavior: {}".format(productionEngine_to_behavior["php"]))
-        lastMDA.phpBehavior = productionEngine_to_behavior["php"]
-      if 'csharp' in PRODUCTION_ENGINE_TO_CLI:
-        libLF.log("csharp behavior: {}".format(productionEngine_to_behavior["csharp"]))
-        lastMDA.csharpBehavior = productionEngine_to_behavior["csharp"]
+      if self.taskConfig.queryProductionEngines():
+        lastMDA.productionEnginePumps = MyTask.PROD_ENGINE_PUMPS
+        if 'perl' in PRODUCTION_ENGINE_TO_CLI:
+          libLF.log("perl behavior: {}".format(productionEngine_to_behavior["perl"]))
+          lastMDA.perlBehavior = productionEngine_to_behavior["perl"]
+        if 'php' in PRODUCTION_ENGINE_TO_CLI:
+          libLF.log("php behavior: {}".format(productionEngine_to_behavior["php"]))
+          lastMDA.phpBehavior = productionEngine_to_behavior["php"]
+        if 'csharp' in PRODUCTION_ENGINE_TO_CLI:
+          libLF.log("csharp behavior: {}".format(productionEngine_to_behavior["csharp"]))
+          lastMDA.csharpBehavior = productionEngine_to_behavior["csharp"]
       return lastMDA.toDataFrame()
     except KeyboardInterrupt:
       raise
@@ -464,8 +465,26 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
 
 ################
 
+def regIsSupportedByPrototype(regex):
+  try:
+    queryFile = libMemo.ProtoRegexEngine.buildQueryFile(regex.pattern, "a")
+    libMemo.ProtoRegexEngine.query(libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_None, libMemo.ProtoRegexEngine.ENCODING_SCHEME.ES_None, queryFile)
+    return True
+  except BaseException as err:
+    print(err)
+    return False
+
 def getTasks(regexFile, nTrialsPerCondition, taskConfig):
   regexes = loadRegexFile(regexFile)
+
+  # Filter for prototype support
+  regexes = [
+    reg
+    for reg in regexes
+    if regIsSupportedByPrototype(reg)
+  ]
+  libLF.log("{} regexes were supported by prototype".format(len(regexes)))
+
   tasks = [MyTask(regex, nTrialsPerCondition, taskConfig) for regex in regexes]
   libLF.log('Prepared {} tasks'.format(len(tasks)))
   return tasks
@@ -565,6 +584,10 @@ parser.add_argument('--out-file', type=str, help='Out: A pickled dataframe conve
 
 # Parse args
 args = parser.parse_args()
+
+if not args.queryPrototype and not args.queryProductionEngines:
+  libLF.log("Error, you must request at least one of {--queryPrototype, --queryProductionEngines}")
+  sys.exit(1)
 
 # Here we go!
 main(args.regexFile, args.useCSharpToFindMostEI, args.queryPrototype, args.nTrialsPerCondition, args.queryProductionEngines, args.timeSensitive, args.parallelism, args.outFile)
