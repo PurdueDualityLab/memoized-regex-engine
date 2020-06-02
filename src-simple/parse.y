@@ -6,8 +6,6 @@
 #include "regexp.h"
 #include "log.h"
 
-#define KEEP_CG 1
-
 static int yylex(void);
 static void yyerror(char*);
 static Regexp *parsed_regexp;
@@ -21,28 +19,28 @@ static int nparen;
 	int nparen;
 }
 
-%token	<c> BOL_ANCHOR CHAR EOL_ANCHOR EOL
-%type	<re>	alt concat repeat single escape line 
+%token	<c> CHAR EOL
+%type	<re>	alt concat repeat single escape line ccc charRanges charRange charRangeChar
 %type	<nparen> count
 
 %%
 
 line: 
-	BOL_ANCHOR alt EOL_ANCHOR EOL
+	'^' alt '$' EOL
 	{
 		parsed_regexp = $2;
 		parsed_regexp->bolAnchor = 1;
 		parsed_regexp->eolAnchor = 1;
 		return 1;
 	}
-|	BOL_ANCHOR alt EOL
+|	'^' alt EOL
 	{
 		parsed_regexp = $2;
 		parsed_regexp->bolAnchor = 1;
 		parsed_regexp->eolAnchor = 0;
 		return 1;
 	}
-|	alt EOL_ANCHOR EOL
+|	alt '$' EOL
 	{
 		parsed_regexp = $1;
 		parsed_regexp->bolAnchor = 0;
@@ -56,6 +54,7 @@ line:
 		parsed_regexp->eolAnchor = 0;
 		return 1;
 	}
+;
 
 alt:
 	concat
@@ -167,12 +166,8 @@ escape:
 single:
 	'(' count alt ')'
 	{
-	#if KEEP_CG
 		$$ = reg(Paren, $3, nil);
 		$$->n = $2;
-	#else
-		$$ = $3;
-	#endif
 	}
 |	'(' '?' ':' alt ')'
 	{
@@ -187,6 +182,10 @@ single:
 		$$ = reg(Lit, nil, nil);
 		$$->ch = ':';
 	}
+|	ccc
+	{
+		$$ = $1;
+	}
 |	CHAR
 	{
 		$$ = reg(Lit, nil, nil);
@@ -197,6 +196,95 @@ single:
 		$$ = reg(Dot, nil, nil);
 	}
 ;
+
+ccc:
+	'[' charRanges ']'
+	{
+		$$ = reg(CustomCharClass, $2, nil);
+		$$->ccInvert = 0;
+	}
+|   '[' '^' charRanges ']'
+	{
+		$$ = reg(CustomCharClass, $3, nil);
+		$$->ccInvert = 1;
+	}
+;
+
+// Structure is a linked list: (CharRange 1 with details) L (CharRange 2 with details) L ...
+charRanges:
+	charRange
+|   charRanges charRange
+	{
+		$$ = $2;
+		$$->left = $1;
+	}
+;
+
+charRange:
+	charRangeChar
+	{
+		$$ = reg(CharRange, nil, nil);
+		$$->ccLow = $1;
+		$$->ccHigh = $1;
+	}
+|	charRangeChar '-' charRangeChar
+	{
+		$$ = reg(CharRange, nil, nil);
+		$$->ccLow = $1;
+		$$->ccHigh = $3;
+	}
+;
+
+// All special chars are overridden inside a CCC
+charRangeChar:
+	CHAR
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = $1;
+	}
+|   escape
+|   '.'
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = '.';
+	}
+|   ':'
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = ':';
+	}
+|   '*'
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = '*';
+	}
+|   '+'
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = '+';
+	}
+|   '?'
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = '?';
+	}
+|   '('
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = '(';
+	}
+|   ')'
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = ')';
+	}
+|   '|'
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = '|';
+	}
+;
+
 
 %%
 
@@ -213,12 +301,8 @@ yylex(void)
 	if(input == NULL || *input == 0)
 		return EOL;
 	c = *input++;
-	if(strchr("|*+?():.\\", c))
+	if(strchr("^|*+?():.\\[^-]$", c))
 		return c;
-	if(c == '^')
-		return BOL_ANCHOR;
-	if(c == '$')
-		return EOL_ANCHOR;
 	yylval.c = c;
 	return CHAR;
 }
@@ -256,11 +340,7 @@ parse(char *s)
 	if(parsed_regexp == nil)
 		yyerror("parser nil");
 		
-#if KEEP_CG
 	r = reg(Paren, parsed_regexp, nil);	// $0 parens
-#else
-	r = parsed_regexp;
-#endif
 	bolDotstar = reg(Star, reg(Dot, nil, nil), nil);
 	bolDotstar->n = 1;	// non-greedy
 	eolDotstar = reg(Star, reg(Dot, nil, nil), nil);
@@ -383,5 +463,38 @@ printre(Regexp *r)
 		printre(r->left);
 		printf(")");
 		break;
+
+	case CustomCharClass:
+		if (r->ccInvert)
+			printf("Neg");
+		printf("CCC(");
+		if (r->mergedRanges) {
+			for (i = 0; i < r->arity; i++) {
+				printre(r->children[i]);
+				if (i + 1 < r->arity)
+					printf(",");
+			}
+		}
+		else {
+			printre(r->left);
+		}
+		printf(")");
+		break;
+
+	case CharRange:
+		if (r->left != NULL) {
+			printre(r->left);
+			printf(",");
+		}
+		printf("CharRange(");
+
+		if (r->ccLow == r->ccHigh)
+			printre(r->ccLow);
+		else {
+			printre(r->ccLow);
+			printf("-");
+			printre(r->ccHigh);
+		}
+		printf(")");
 	}
 }

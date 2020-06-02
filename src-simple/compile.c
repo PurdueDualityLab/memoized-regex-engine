@@ -232,6 +232,22 @@ Prog_determineMemoNodes(Prog *p, int memoMode)
 	p->nMemoizedStates = nextStateNum;
 }
 
+// Optimization passes
+Regexp* _optimizeAltGroups(Regexp *r);
+Regexp* _mergeCustomCharClassRanges(Regexp *r);
+
+Regexp*
+optimize(Regexp *r)
+{
+	Regexp *ret;
+
+	logMsg(LOG_INFO, "Optimizing regex");
+	ret = r;
+	ret = _optimizeAltGroups(ret);
+	ret = _mergeCustomCharClassRanges(ret);
+	return ret;
+}
+
 int
 _countAltListSize(Regexp *r)
 {
@@ -241,16 +257,6 @@ _countAltListSize(Regexp *r)
 	}
 	// Left-recursive: A|B|C -> Alt(Alt(A|B), C)
 	return 1 + _countAltListSize(r->left);
-}
-
-// Optimization passes
-Regexp* _optimizeAltGroups(Regexp *r);
-
-Regexp*
-optimize(Regexp *r)
-{
-	logMsg(LOG_INFO, "Optimizing regex");
-	return _optimizeAltGroups(r);
 }
 
 // Fill the children array in left-to-right order
@@ -276,12 +282,11 @@ Regexp*
 _optimizeAltGroups(Regexp *r)
 {
 	Regexp *altList = NULL;
-	Regexp *before = NULL;
 	int groupSize = 0, i = 0;
 
 	switch(r->type) {
 	default:
-		fatal("unknown type");
+		fatal("optimizeAltGroups: unknown type");
 		return NULL;
 	case Alt:
 		/* Prepare an AltList node */
@@ -314,15 +319,101 @@ _optimizeAltGroups(Regexp *r)
 	case Star:
     case Plus:
 	case Paren:
+	case CustomCharClass:
 		/* Unary operators -- pass the buck. */
-		logMsg(LOG_DEBUG, "  optimize: Quest/Star/Plus/Paren: passing buck");
-		before = r->left;
+		logMsg(LOG_DEBUG, "  optimize: Quest/Star/Plus/Paren/CCC: passing buck");
 		r->left = _optimizeAltGroups(r->left);
-		if (r->left == before) {
-			logMsg(LOG_DEBUG, "  optimize: ?*+(: no change to child");
-		} else {
-			logMsg(LOG_DEBUG, "  optimize: ?*+(: changed child");
+		return r;
+	case Lit:
+	case Dot:
+	case CharEscape:
+	case CharRange:
+		/* Terminals */
+		logMsg(LOG_DEBUG, "  optimize: ignoring terminal");
+		return r;
+	}
+	return r;
+}
+
+int
+_countCCCNRanges(Regexp *r)
+{
+	if (r->type != CharRange)
+		fatal("countCCCNRanges: unexpected type");
+
+	int nChildren = 1;
+	if (r->left != NULL) {
+		// Left-recursive: A|B|C -> Alt(Alt(A|B), C)
+		nChildren += _countCCCNRanges(r->left);
+	}
+	return nChildren;
+}
+
+// Fill the children array in left-to-right order
+// Returns the smallest unused index
+int
+_fillCCCChildren(Regexp *r, Regexp **children, int i)
+{
+	if (r->type != CharRange)
+		fatal("fillCCCChildren: unexpected type");
+
+	int next = i;
+	if (r->left != NULL) {
+		// Recursively populate the left children first
+		next = _fillCCCChildren(r->left, children, i);
+		r->left = NULL;
+	}
+	// Now populate "right child" -- the node itself
+	children[next] = r;
+	return next + 1;
+}
+
+Regexp*
+_mergeCustomCharClassRanges(Regexp *r)
+{
+	int i;
+	int groupSize = 0;
+
+	switch(r->type) {
+	default:
+		logMsg(LOG_ERROR, "type %d", r->type);
+		fatal("mergeCustomCharClassRanges: unknown type");
+		return NULL;
+	case CustomCharClass:
+		logMsg(LOG_DEBUG, "In-place updating a CCC to have all its children in one place");
+		groupSize = _countCCCNRanges(r->left);
+		logMsg(LOG_DEBUG, "  groupSize %d", groupSize);
+
+		r->children = mal(groupSize * sizeof(Regexp *));
+		r->arity = groupSize;
+		logMsg(LOG_DEBUG, "  Populating children array");
+		_fillCCCChildren(r->left, r->children, 0);
+
+		r->mergedRanges = 1;
+		r->left = NULL;
+		r->right = NULL;
+
+		return r;
+	case AltList:
+		/* *-ary operator -- pass the buck. */
+		for (i = 0; i < r->arity; i++) {
+			r->children[i] = _mergeCustomCharClassRanges(r->children[i]);
 		}
+		return r;
+	case Alt:
+	case Cat:
+		/* Binary operator -- pass the buck. */
+		logMsg(LOG_DEBUG, "  optimize: Cat: passing buck");
+		r->left = _mergeCustomCharClassRanges(r->left);
+		r->right = _mergeCustomCharClassRanges(r->right);
+		return r;
+	case Quest:
+	case Star:
+    case Plus:
+	case Paren:
+		/* Unary operators -- pass the buck. */
+		logMsg(LOG_DEBUG, "  optimize: Quest/Star/Plus/Paren/CCC: passing buck");
+		r->left = _mergeCustomCharClassRanges(r->left);
 		return r;
 	case Lit:
 	case Dot:
@@ -395,6 +486,7 @@ count(Regexp *r)
 	case Lit:
 	case Dot:
 	case CharEscape:
+	case CustomCharClass:
 		return 1;
 	case Paren:
 		return 2 + count(r->left);
@@ -418,6 +510,8 @@ Regexp_calcLLI(Regexp *r)
 	default:
 		fatal("calcLLI: unknown type");
 	case AltList:
+	case CustomCharClass:
+	case CharRange:
 		return;
 	case Alt:
 		Regexp_calcLLI(r->left);
@@ -495,6 +589,8 @@ Regexp_calcLLI(Regexp *r)
 static void
 printre_VI(Regexp *r)
 {
+	return;
+
 	switch(r->type) {
 	default:
 		printf("???");
@@ -570,6 +666,7 @@ Regexp_calcVisitInterval(Regexp *r)
 	default:
 		fatal("calcVI: unknown type");
 	case AltList:
+	case CustomCharClass:
 		return;
 	case Alt:
 		Regexp_calcVisitInterval(r->left);
@@ -700,6 +797,73 @@ Regexp_calcVisitInterval(Regexp *r)
 	}
 }
 
+static void
+_emitRegexpCharEscape2InstCharRange(Regexp *r, InstCharRange *instCR)
+{
+	if (r->type != CharEscape) {
+		assert(!"emitrcr2instCR: Unexpected type");
+	}
+
+	switch (r->ch) {
+	case 's':
+	case 'S':
+		/* space, newline, tab, vertical wsp, a few others */
+		instCR->lows[0] = 9; instCR->highs[0] = 13;
+		instCR->lows[1] = 28; instCR->highs[1] = 32;
+		instCR->count = 2;
+		instCR->invert = isupper(r->ch);
+		return;
+	case 'w':
+	case 'W':
+		/* a-z A-Z 0-9 */
+		instCR->lows[0] = 97; instCR->highs[0] = 122;
+		instCR->lows[1] = 65; instCR->highs[1] = 90;
+		instCR->lows[2] = 48; instCR->highs[2] = 57;
+		instCR->count = 3;
+		instCR->invert = isupper(r->ch);
+		return;
+	case 'd':
+	case 'D':
+		/* 0-9 */
+		instCR->lows[0] = 48; instCR->highs[0] = 57;
+		instCR->count = 1;
+		instCR->invert = isupper(r->ch);
+		return;
+	default:
+		/* Not a built-in CC */
+		instCR->lows[0] = r->ch; instCR->highs[0] = r->ch;
+		instCR->count = 1;
+	}
+}
+
+static void
+_emitRegexpCharRange2Inst(Regexp *r, Inst *inst)
+{
+	InstCharRange *next = &inst->charRanges[ inst->charRangeCounts ];
+	switch (r->type) {
+    default:
+		assert(!"emitrcr2int: Unexpected type");
+	case CharEscape: /* e.g. \w (built-in CC) or \a (nothing) */
+		_emitRegexpCharEscape2InstCharRange(r, next);
+		break;
+	case CharRange:
+		switch (r->ccLow->type) {
+		case Lit: /* 'a-z' */
+			assert(r->ccHigh->type == Lit); /* 'a', or 'a-z' (but not 'a-\w') */
+			next->lows[0] = r->ccLow->ch; next->highs[0] = r->ccHigh->ch;
+			next->count = 1;
+			break;
+		case CharEscape:
+			assert(r->ccLow->ch == r->ccHigh->ch); // '\w', not '\w-\s'
+			_emitRegexpCharEscape2InstCharRange(r->ccLow, next);
+			break;
+		default:
+			assert(!"emitrcr2int: CharRange: Unexpected child type");
+		}
+		break;
+	}
+}
+
 /* Populate pc for r
  *   emit() produces instructions corresponding to r
  *   and saves them into the global pc array
@@ -730,7 +894,7 @@ emit(Regexp *r, int memoMode)
 
 	switch(r->type) {
 	default:
-		fatal("bad emit");
+		fatal("emit: unknown type");
 
 	case Alt:
 		pc->opcode = Split;
@@ -793,54 +957,28 @@ emit(Regexp *r, int memoMode)
 		pc++;
 		break;
 
-	case CharEscape:
-		pc->c = r->ch;
-		pc->visitInterval = 0;
-		switch (r->ch) {
-		case 's':
-		case 'S':
-			/* space, newline, tab, vertical wsp, a few others */
-			pc->opcode = CharClass;
-			pc->charClassMins[0] = 9; pc->charClassMaxes[0] = 13;
-			pc->charClassMins[1] = 28; pc->charClassMaxes[1] = 32;
-			pc->charClassCounts = 2;
-			pc->invert = isupper(r->ch);
-			break;
-		case 'w':
-		case 'W':
-			/* a-z A-Z 0-9 */
-			pc->opcode = CharClass;
-			pc->charClassMins[0] = 97; pc->charClassMaxes[0] = 122;
-			pc->charClassMins[1] = 65; pc->charClassMaxes[1] = 90;
-			pc->charClassMins[2] = 48; pc->charClassMaxes[2] = 57;
-			pc->charClassCounts = 3;
-			pc->invert = isupper(r->ch);
-			break;
-		case 'd':
-		case 'D':
-			/* 0-9 */
-			pc->opcode = CharClass;
-			pc->charClassMins[0] = 48; pc->charClassMaxes[0] = 57;
-			pc->charClassCounts = 1;
-			pc->invert = isupper(r->ch);
-			break;
-		default: 
-			/* Not a char class, treat as the char itself */
-			pc->opcode = Char;
+	case CustomCharClass:
+		assert(r->mergedRanges);
+		pc->opcode = CharClass;
+		if (r->arity > nelem(pc->charRanges))
+			fatal("Too many ranges in char class");
 
-			// a la "raw mode", treat the 2-char sequences \n and \t as literal newline and tab
-			if (r->ch == 'n') {
-				pc->c = '\n';
-			}
-			else if (r->ch == 't'){
-				pc->c = '\t';
-			}
-			else if (r->ch == 'b') {
-				pc->c = '\b';
-			}
-			else
-				pc->c = r->ch;
+		for (i = 0; i < r->arity; i++) {
+			_emitRegexpCharRange2Inst(r->children[i], pc);
+			pc->charRangeCounts++;
 		}
+		pc->charRangeCounts = r->arity;
+		pc->invert = r->ccInvert;
+		pc++;
+		break;
+
+	case CharEscape:
+		pc->opcode = CharClass;
+		pc->visitInterval = 0;
+
+		_emitRegexpCharRange2Inst(r, pc);
+		pc->charRangeCounts = 1;
+
 		pc++;
 		break;
 	

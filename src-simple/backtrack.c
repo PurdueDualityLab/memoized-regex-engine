@@ -495,13 +495,44 @@ ThreadVec_push(ThreadVec *tv, Thread t)
   assert(tv->nThreads <= tv->maxThreads);
 }
 
+static int
+_inCharClass(Inst *pc, char c)
+{
+  int i, j;
+  int inThisRange = 0, inAnyInstCharRange = 0;
+
+  // Test for membership in each of the CharRange conditions
+  for (i = 0; i < pc->charRangeCounts; i++) {
+    logMsg(LOG_DEBUG, "testing range %d of %d (inv this one? %d)", i, pc->charRangeCounts, pc->charRanges[i].invert ? 1 : 0);
+    inThisRange = 0;
+    for (j = 0; j < pc->charRanges[i].count; j++) {
+      logMsg(LOG_DEBUG, "testing range %d.%d: [%d, %d]", i, j, pc->charRanges[i].lows[j], pc->charRanges[i].highs[j]);
+      inThisRange += pc->charRanges[i].lows[j] <= (int) c && (int) c <= pc->charRanges[i].highs[j];
+    }
+
+    // Invert the inner formula
+    if (pc->charRanges[i].invert)
+      inThisRange = !inThisRange;
+
+    if (inThisRange) {
+      logMsg(LOG_VERBOSE, "in range %d", i);
+      inAnyInstCharRange = 1;
+    }
+  }
+
+  // Apply top-level inversion
+  if ( (inAnyInstCharRange && !pc->invert) || (!inAnyInstCharRange && pc->invert) )
+    return 1;
+  return 0;
+}
+
 int
 backtrack(Prog *prog, char *input, char **subp, int nsubp)
 {
   Memo memo;
   VisitTable visitTable;
   ThreadVec ready = ThreadVec_alloc();
-  int i, j, k, inCharClass;
+  int i;
   Inst *pc; /* Current position in VM (pc) */
   char *sp; /* Current position in input */
   Sub *sub; /* submatch (capture group) */
@@ -577,23 +608,14 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
         if (*sp == 0)
           goto Dead;
         /* Look through char class mins/maxes */
-        logMsg(LOG_VERBOSE, "Does char %d match CC %d (inv %d)? charClassCounts %d",
-          *sp, pc->c, pc->invert, pc->charClassCounts);
-        inCharClass = 0;
-        for (j = 0; j < pc->charClassCounts; j++) {
-          logMsg(LOG_VERBOSE, "testing range [%d, %d]", pc->charClassMins[j], pc->charClassMaxes[j]);
-          if (pc->charClassMins[j] <= (int) *sp && (int) *sp <= pc->charClassMaxes[j]) {
-            logMsg(LOG_VERBOSE, "in range %d", j);
-            inCharClass = 1;
-          }
-        }
+        logMsg(LOG_VERBOSE, "Does char %d match CC? charClassCounts %d",
+          *sp, pc->charRangeCounts);
 
-        /* Check for match, honoring invert */
-        if ((inCharClass && pc->invert) || (!inCharClass && !pc->invert)) {
-          logMsg(LOG_VERBOSE, "no match (inCharClass %d invert %d)", inCharClass, pc->invert);
+        if (!_inCharClass(pc, *sp)) {
+          logMsg(LOG_VERBOSE, "not in char class");
           goto Dead;
         }
-        logMsg(LOG_VERBOSE, "char %d matched CC %d", *sp, pc->c);
+        logMsg(LOG_VERBOSE, "char %d matched CC", *sp);
         pc++;
         sp++;  
         continue;
@@ -617,8 +639,8 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
         pc = pc->x;  /* continue current thread */
         continue;
       case SplitMany: /* Non-deterministic choice */
-        for (k = 1; k < pc->arity; k++) {
-          ThreadVec_push(&ready, thread(pc->edges[k], sp, incref(sub)));
+        for (i = 1; i < pc->arity; i++) {
+          ThreadVec_push(&ready, thread(pc->edges[i], sp, incref(sub)));
         }
         pc = pc->edges[0];  /* continue current thread */
         continue;
