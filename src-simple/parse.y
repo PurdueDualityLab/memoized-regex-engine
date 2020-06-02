@@ -210,6 +210,11 @@ single:
 	{
 		$$ = reg(Dot, nil, nil);
 	}
+|	'-'
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = '-';
+	}
 ;
 
 ccc:

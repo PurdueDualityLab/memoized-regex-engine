@@ -102,6 +102,11 @@ a[^\t]b , axb             , MATCH
 [a-c.+\\*()] , \          , MATCH
 [a-c.+\\*()] , *          , MATCH
 
+# - is only special inside a CCC
+[a-z] , p, MATCH
+a-z , p,   MISMATCH
+a-z , a-z, MATCH
+
 ###
 # Optimizations etc.
 ###
