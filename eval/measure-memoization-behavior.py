@@ -91,7 +91,7 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
   # PERF_PUMPS_TO_TRY = [ 1000 ] # i*500 for i in range(1,5) ]
 
   #PROD_ENGINE_PUMPS = 500 * 1000
-  PROD_ENGINE_PUMPS = 100 * 1000
+  PROD_ENGINE_PUMPS = 200 * 1000 # Takes 27 seconds in Node.js on my MacBook. 100K takes 7 seconds, but wine is slow to start (sometimes 5 seconds) so we want to play it safe with a 10 second timeout.
   #PROD_ENGINE_PUMPS = 1 * 1000
   #PROD_ENGINE_PUMPS = 900
 
@@ -120,8 +120,12 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
         ei = self._findAnySLInputUsingCSharp(self.regex)
       else:
         ei, _ = self._findMostSLInput(self.regex)
+
       if ei is None:
+        libLF.log("  Could not trigger SL behavior in C#")
         return MyTask.NOT_SL
+      else:
+        libLF.log("  Triggered SL behavior in C#")
 
       if self.taskConfig.queryPrototype():
         libLF.log("  TASK: Running analysis on SL regex")
@@ -170,7 +174,7 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
       traceback.print_exc()
       return err
   
-  def _measureProductionEngineBehavior(self, regex, evilInput, maxQuerySec=5, useCSharpTimeout=True, engines=PRODUCTION_ENGINE_TO_CLI.keys()):
+  def _measureProductionEngineBehavior(self, regex, evilInput, maxQuerySec=10, useCSharpTimeout=True, engines=PRODUCTION_ENGINE_TO_CLI.keys()):
     """Returns { "perl": EngineBehavior, "php": eb, "csharp": eb }"""
 
     if useCSharpTimeout:
