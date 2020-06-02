@@ -236,6 +236,10 @@ Prog_determineMemoNodes(Prog *p, int memoMode)
 Regexp* _optimizeAltGroups(Regexp *r);
 Regexp* _mergeCustomCharClassRanges(Regexp *r);
 
+/* Update this Regexp AST to make it more amenable to compilation
+ *  - replace Alt-chains with a "flat" AltList with one child per Alt entity
+ *  - replace a CustomCharClass's CharRange chain with a flat list of CharRange's within the CCC
+ */
 Regexp*
 optimize(Regexp *r)
 {
