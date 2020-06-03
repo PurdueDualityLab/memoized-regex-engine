@@ -1,0 +1,4 @@
+{"nick": "Baseline", "pattern": "^a$", "evilInputs": [{"pumpPairs": [{"prefix": "", "pump": " "}], "suffix": "z"}]}
+{"nick": "Microsoft", "pattern": "^[a-zA-Z0-9]+([._]?[a-zA-Z0-9]+)*$", "evilInputs": [{"pumpPairs": [{"prefix": "", "pump": "a"}], "suffix": "!"}]}
+{"nick": "Stack Overflow", "pattern": "\\s+$", "evilInputs": [{"pumpPairs": [{"prefix": "", "pump": " "}], "suffix": "z"}]}
+{"nick": "Cloudflare", "pattern": "(?:(?:\"|'|\\]|\\}|\\|\\d|(?:nan|infinity|true|false|null|undefined|symbol|math) |\\`|\\-|\\+)+[)]*;?((?:\\s|-|~|!|{}|\\|\\||\\+)*.*(?:.*=.*)))", "evilInputs": [{"pumpPairs": [{"prefix": "", "pump": "+"}], "suffix": ""}]}
