@@ -38,7 +38,7 @@ struct Regexp
 {
 	int type;
 
-	int n; /* Quantifiers: Non-greedy? 1 means yes. */
+	int n; /* Quantifiers: Non-greedy? 1 means yes. Saves: Paren count. */
 	int ch; /* Literals, CharEscape's: Character. */
 	Regexp *left; /* Child for unary operators. Left child for binary operators. */
 	Regexp *right; /* Left child for binary operators. */
@@ -61,6 +61,9 @@ struct Regexp
 	Regexp *ccLow;  /* Lit or CharEscape */
 	Regexp *ccHigh; /* Lit or CharEscape */
 
+	/* Backref */
+	int cgNum;
+
 	/* Do not use. */
 	LanguageLengthInfo lli;
 	int visitInterval;
@@ -80,6 +83,7 @@ enum	/* Regexp.type */
 	Quest,   /* A? */
 	Star,    /* A* */
 	Plus,    /* A+ */
+	Backref, /* \1 */
 };
 
 Regexp *parse(char*);
@@ -88,7 +92,8 @@ void printre(Regexp*);
 void fatal(char*, ...);
 void *mal(int);
 
-Regexp *optimize(Regexp *r);
+/* Transformation pass */
+Regexp *transform(Regexp *r);
 
 struct Prog
 {
@@ -113,7 +118,7 @@ struct Inst
 {
 	int opcode; /* Instruction. Determined by the corresponding Regex node */
 	int c; /* For Lit: The literal character to match */
-	int n; /* Flag set during parsing. 1 means greedy. Also used for non-capture groups? */
+	int n; /* Quant: 1 means greedy. Save: 2*n and 2*n + 1 are paired. */
 	int stateNum; /* 0 to Prog->len-1 */
 	int shouldMemo;
 	int inDegree;
@@ -129,6 +134,9 @@ struct Inst
 	InstCharRange charRanges[32];
 	int charRangeCounts; /* Number of used slots */
 	int invert;
+
+	/* For StringCompare */
+	int cgNum;
 
 	/*  These are the intervals at which this vertex may be visited
 	 *    during the automaton simulation.
@@ -147,6 +155,7 @@ enum	/* Inst.opcode */
 	Any,
 	CharClass,
 	Save,
+	StringCompare,
 };
 
 Prog *compile(Regexp*, int);
