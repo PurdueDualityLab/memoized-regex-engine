@@ -70,7 +70,7 @@ pikevm(Prog *prog, char *input, char **subp, int nsubp)
 	matched = nil;	
 	for(i=0; i<nsubp; i++)
 		subp[i] = nil;
-	sub = newsub(nsubp);
+	sub = newsub(nsubp, input);
 	for(i=0; i<nsubp; i++)
 		sub->sub[i] = nil;
 
