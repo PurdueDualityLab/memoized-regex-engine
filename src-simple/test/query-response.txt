@@ -4,7 +4,7 @@
 #   Empty lines are ignored
 #   A # introduces a comment
 
-# REGEX , INPUT , MATCH/MISMATCH
+# REGEX , INPUT , MATCH/MISMATCH/SYNTAX
 # -----   -----   ---------------
 
 # R1 . R2
@@ -123,6 +123,10 @@ a-z   , a-z , MATCH
 [-x],   x, MATCH
 [-x-z], y, MATCH
 [^-x],  -, MISMATCH
+
+[x-],        x, SYNTAX
+[a-b-x-y],   x, SYNTAX
+[^x-],       -, SYNTAX
 
 ###
 # Optimizations etc.

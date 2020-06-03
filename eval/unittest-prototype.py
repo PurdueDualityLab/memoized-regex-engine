@@ -38,6 +38,7 @@ class TestCase:
   """Test case"""
   def __init__(self, line):
     self.regex, self.input, self.result = [piece.strip() for piece in line.split(",")]
+    self.syntaxError = (self.result == "SYNTAX")
     self.shouldMatch = (self.result == "MATCH")
   
   def run(self):
@@ -62,12 +63,23 @@ class TestCase:
       libLF.log("  Test case: {}".format(rawCmd))
 
       queryFile = libMemo.ProtoRegexEngine.buildQueryFile(self.regex, self.input)
-      em = libMemo.ProtoRegexEngine.query(selectionScheme, encodingScheme, queryFile)
-
-      if (em.matched and self.shouldMatch) or (not em.matched and not self.shouldMatch):
-        tr = TestResult(True, "Correct, match(/{}/, {})={} under selection '{}' encoding '{}'".format(self.regex, self.input, em.matched, selectionScheme, encodingScheme))
-      else:
-        tr = TestResult(False, "Incorrect, match(/{}/, {})={} under selection {} encoding {} -- try {}".format(self.regex, self.input, em.matched, selectionScheme, encodingScheme, rawCmd))
+      validRegex = True
+      try:
+        em = libMemo.ProtoRegexEngine.query(selectionScheme, encodingScheme, queryFile)
+      except SyntaxError as err:
+        validRegex = False
+        if self.syntaxError:
+          tr = TestResult(True, "Correct, syntax error for /{}/".format(self.regex))
+        else:
+          tr = TestResult(False, "Incorrect, syntax error for /{}/".format(self.regex))
+      
+      if self.syntaxError and validRegex:
+          tr = TestResult(False, "Incorrect, expected syntax error for /{}/".format(self.regex))
+      elif validRegex:
+        if (em.matched and self.shouldMatch) or (not em.matched and not self.shouldMatch):
+          tr = TestResult(True, "Correct, match(/{}/, {})={} under selection '{}' encoding '{}'".format(self.regex, self.input, em.matched, selectionScheme, encodingScheme))
+        else:
+          tr = TestResult(False, "Incorrect, match(/{}/, {})={} under selection {} encoding {} -- try {}".format(self.regex, self.input, em.matched, selectionScheme, encodingScheme, rawCmd))
       testResults.append(tr)
     return testResults
 
