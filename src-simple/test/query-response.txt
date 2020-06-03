@@ -165,3 +165,22 @@ x(a|b|c|d)y , xey, MISMATCH
 .*.*    , aaaaaaaaaaaaaa  , MATCH
 (..)*   , aaaaaaaaaaaaaa  , MATCH
 (..)*   , aaaaaaaaaaaaaaa , MATCH
+
+# Backreferences (will blow up on malformed regexes)
+(a)\1 , a1 , MISMATCH # A MATCH implies the CharEscape is not converted to a backref
+(a)\1 , aa , MATCH
+(a)\1 , ab , MISMATCH
+(a)\1 , a  , MISMATCH
+(a*)b\1 , b , MATCH
+(a*)b\1 , aba , MATCH
+^(a*)b\1$ , aaba , MISMATCH
+^(a*)b\1$ , abaa , MISMATCH
+^(a*)b\1$ , aabaa , MATCH
+(a)?b\1$ , b , MATCH
+(a)?b\1$ , aba , MATCH
+(a)(?:b)\1 , aba , MATCH
+(a)(b)(c)(d)(e*)\5\4\3\2\1 , abcdeeeeeedcba , MATCH
+(a)(b)(c)(d)(e*)\5\4\3\2\1 , abcdeeeeedcba , MISMATCH
+(a)(b)(c)(d)(e*)\5\4\3\2\1 , abcdeeeedcba , MATCH
+# Test that any memoization is correctly applied
+^(aa|a)(a|aa)\1$ , aaaa, MATCH

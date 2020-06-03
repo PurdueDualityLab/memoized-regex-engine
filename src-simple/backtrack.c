@@ -541,6 +541,16 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 
   inputEOL = input + strlen(input);
 
+  /* Disable memoization if there are backreferences. */
+  for (i = 0, pc = prog->start; i < prog->len; i++, pc++) {
+    if (pc->opcode == StringCompare) {
+      logMsg(LOG_INFO, "Backreferences present -- disabling memoization");
+      prog->memoMode = MEMO_NONE;
+      prog->memoEncoding = ENCODING_NONE;
+      break;
+    }
+  }
+
   /* Prep visit table */
   logMsg(LOG_VERBOSE, "Initializing visit table");
   visitTable = initVisitTable(prog, strlen(input) + 1);
@@ -648,6 +658,30 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
         sub = update(sub, pc->n, sp);
         pc++;
         continue;
+      case StringCompare:
+        /* Check if appropriate sub matches */
+        if (1) {
+        // Scope!
+        char *begin = sub->sub[2*pc->cgNum];
+        char *end = sub->sub[2*pc->cgNum + 1];
+        int charsRemaining = inputEOL - sp;
+          logMsg(LOG_DEBUG, "charsRemaining %d end-begin %d", charsRemaining, end-begin);
+        if (charsRemaining >= end - begin) {
+          if (memcmp(begin, sp, end-begin) == 0) {
+            logMsg(LOG_DEBUG, "Backref matched (%d chars)", end - begin);
+            sp += end-begin;
+            pc++;
+            continue;
+          }
+          else
+            logMsg(LOG_DEBUG, "Backref mismatch (%d chars)", end - begin);
+        }
+        else
+            logMsg(LOG_DEBUG, "Remaining string too short");
+        }
+        goto Dead;
+      default:
+        logMsg(LOG_ERROR, "Unknown opcode %d", pc->opcode);
       }
     }
   Dead:

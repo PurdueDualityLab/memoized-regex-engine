@@ -160,12 +160,12 @@ main(int argc, char **argv)
 	re = parse(q.regex);
 
 	// Optimize
-	logMsg(LOG_INFO, "Non-optimized re:");
+	logMsg(LOG_INFO, "Initial re:");
 	printre(re);
 	printf("\n");
 
-	re = optimize(re);
-	logMsg(LOG_INFO, "Optimized re:");
+	re = transform(re);
+	logMsg(LOG_INFO, "Transformed re:");
 	printre(re);
 	printf("\n");
 

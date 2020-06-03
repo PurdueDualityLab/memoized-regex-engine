@@ -140,10 +140,6 @@ Prog_compute_in_degrees(Prog *p)
 		switch(p->start[i].opcode) {
 		default:
 			fatal("in-degree: unknown type");
-		case Char:
-			/* Always goes to next instr */
-			p->start[i+1].inDegree++;
-			break;
 		case Match:
 			/* Terminates search */
 			break;
@@ -163,14 +159,10 @@ Prog_compute_in_degrees(Prog *p)
 			}
 			break;
 		case Any:
-			/* Always goes to next instr */
-			p->start[i+1].inDegree++;
-			break;
 		case CharClass:
-			/* Always goes to next instr */
-			p->start[i+1].inDegree++;
-			break;
+		case Char:
 		case Save:
+		case StringCompare:
 			/* Always goes to next instr */
 			p->start[i+1].inDegree++;
 			break;
@@ -232,8 +224,9 @@ Prog_determineMemoNodes(Prog *p, int memoMode)
 	p->nMemoizedStates = nextStateNum;
 }
 
-// Optimization passes
-Regexp* _optimizeAltGroups(Regexp *r);
+// Transformation passes
+Regexp* _transformAltGroups(Regexp *r);
+Regexp* _escapedNumsToBackrefs(Regexp *r);
 Regexp* _mergeCustomCharClassRanges(Regexp *r);
 
 /* Update this Regexp AST to make it more amenable to compilation
@@ -241,13 +234,14 @@ Regexp* _mergeCustomCharClassRanges(Regexp *r);
  *  - replace a CustomCharClass's CharRange chain with a flat list of CharRange's within the CCC
  */
 Regexp*
-optimize(Regexp *r)
+transform(Regexp *r)
 {
 	Regexp *ret;
 
 	logMsg(LOG_INFO, "Optimizing regex");
 	ret = r;
-	ret = _optimizeAltGroups(ret);
+	ret = _transformAltGroups(ret);
+	ret = _escapedNumsToBackrefs(ret);
 	ret = _mergeCustomCharClassRanges(ret);
 	return ret;
 }
@@ -283,14 +277,14 @@ _fillAltChildren(Regexp *r, Regexp **children, int i)
 }
 
 Regexp*
-_optimizeAltGroups(Regexp *r)
+_transformAltGroups(Regexp *r)
 {
 	Regexp *altList = NULL;
 	int groupSize = 0, i = 0;
 
 	switch(r->type) {
 	default:
-		fatal("optimizeAltGroups: unknown type");
+		fatal("transformAltGroups: unknown type");
 		return NULL;
 	case Alt:
 		/* Prepare an AltList node */
@@ -309,15 +303,15 @@ _optimizeAltGroups(Regexp *r)
 		/* Optimize the children */
 		logMsg(LOG_DEBUG, "  Passing buck to children");
 		for (i = 0; i < groupSize; i++) {
-			altList->children[i] = _optimizeAltGroups(altList->children[i]);
+			altList->children[i] = _transformAltGroups(altList->children[i]);
 		}
 
 		return altList;
 	case Cat:
 		/* Binary operator -- pass the buck. */
-		logMsg(LOG_DEBUG, "  optimize: Cat: passing buck");
-		r->left = _optimizeAltGroups(r->left);
-		r->right = _optimizeAltGroups(r->right);
+		logMsg(LOG_DEBUG, "  transform: Cat: passing buck");
+		r->left = _transformAltGroups(r->left);
+		r->right = _transformAltGroups(r->right);
 		return r;
 	case Quest:
 	case Star:
@@ -325,18 +319,68 @@ _optimizeAltGroups(Regexp *r)
 	case Paren:
 	case CustomCharClass:
 		/* Unary operators -- pass the buck. */
-		logMsg(LOG_DEBUG, "  optimize: Quest/Star/Plus/Paren/CCC: passing buck");
-		r->left = _optimizeAltGroups(r->left);
+		logMsg(LOG_DEBUG, "  transform: Quest/Star/Plus/Paren/CCC: passing buck");
+		r->left = _transformAltGroups(r->left);
 		return r;
 	case Lit:
 	case Dot:
 	case CharEscape:
 	case CharRange:
 		/* Terminals */
-		logMsg(LOG_DEBUG, "  optimize: ignoring terminal");
+		logMsg(LOG_DEBUG, "  transform: ignoring terminal");
 		return r;
 	}
 	return r;
+}
+
+Regexp *
+_escapedNumsToBackrefs(Regexp *r)
+{
+	char s[2];
+	int i, n;
+	switch(r->type) {
+	default:
+		logMsg(LOG_ERROR, "type %d", r->type);
+		fatal("mergeCustomCharClassRanges: unknown type");
+		return NULL;
+	case CharEscape:
+		s[0] = r->ch;
+		s[1] = '\0';
+		n = atoi(s);
+		if (0 < n && n < 10) {
+			/* Change inline */
+			r->type = Backref;
+			r->cgNum = n;
+		}
+		return r;
+	case AltList:
+		/* *-ary operator -- pass the buck. */
+		for (i = 0; i < r->arity; i++) {
+			r->children[i] = _escapedNumsToBackrefs(r->children[i]);
+		}
+		return r;
+	case Alt:
+	case Cat:
+		/* Binary operator -- pass the buck. */
+		logMsg(LOG_DEBUG, "  transform: Cat: passing buck");
+		r->left = _escapedNumsToBackrefs(r->left);
+		r->right = _escapedNumsToBackrefs(r->right);
+		return r;
+	case Quest:
+	case Star:
+    case Plus:
+	case Paren:
+		/* Unary operators -- pass the buck. */
+		logMsg(LOG_DEBUG, "  transform: Quest/Star/Plus/Paren/CCC: passing buck");
+		r->left = _escapedNumsToBackrefs(r->left);
+		return r;
+	case Lit:
+	case Dot:
+	case CustomCharClass:
+		/* Terminals */
+		logMsg(LOG_DEBUG, "  transform: ignoring terminal");
+		return r;
+	}
 }
 
 int
@@ -407,7 +451,7 @@ _mergeCustomCharClassRanges(Regexp *r)
 	case Alt:
 	case Cat:
 		/* Binary operator -- pass the buck. */
-		logMsg(LOG_DEBUG, "  optimize: Cat: passing buck");
+		logMsg(LOG_DEBUG, "  transform: Cat: passing buck");
 		r->left = _mergeCustomCharClassRanges(r->left);
 		r->right = _mergeCustomCharClassRanges(r->right);
 		return r;
@@ -416,14 +460,15 @@ _mergeCustomCharClassRanges(Regexp *r)
     case Plus:
 	case Paren:
 		/* Unary operators -- pass the buck. */
-		logMsg(LOG_DEBUG, "  optimize: Quest/Star/Plus/Paren/CCC: passing buck");
+		logMsg(LOG_DEBUG, "  transform: Quest/Star/Plus/Paren/CCC: passing buck");
 		r->left = _mergeCustomCharClassRanges(r->left);
 		return r;
 	case Lit:
 	case Dot:
 	case CharEscape:
+	case Backref:
 		/* Terminals */
-		logMsg(LOG_DEBUG, "  optimize: ignoring terminal");
+		logMsg(LOG_DEBUG, "  transform: ignoring terminal");
 		return r;
 	}
 	return r;
@@ -491,6 +536,7 @@ count(Regexp *r)
 	case Dot:
 	case CharEscape:
 	case CustomCharClass:
+	case Backref:
 		return 1;
 	case Paren:
 		return 2 + count(r->left);
@@ -512,6 +558,7 @@ Regexp_calcLLI(Regexp *r)
 	int i, j;
 	switch(r->type) {
 	default:
+		return;
 		fatal("calcLLI: unknown type");
 	case AltList:
 	case CustomCharClass:
@@ -668,6 +715,7 @@ Regexp_calcVisitInterval(Regexp *r)
 {
 	switch(r->type) {
 	default:
+		return;
 		fatal("calcVI: unknown type");
 	case AltList:
 	case CustomCharClass:
@@ -1084,6 +1132,11 @@ emit(Regexp *r, int memoMode)
 			p2->y = t;
 		}
 		break;
+
+	case Backref:
+		pc->opcode = StringCompare;
+		pc->cgNum = r->cgNum;
+		pc++;
 	}
 }
 
@@ -1100,6 +1153,9 @@ printprog(Prog *p)
 		switch(pc->opcode) {
 		default:
 			fatal("printprog: unknown opcode");
+		case StringCompare:
+			printf("%2d. stringcompare %d (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->cgNum, pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
+			break;
 		case Split:
 			printf("%2d. split %d, %d (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), (int)(pc->x-p->start), (int)(pc->y-p->start), pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
 			//printf("%2d. split %d, %d\n", (int)(pc->stateNum), (int)(pc->x->stateNum), (int)(pc->y->stateNum));

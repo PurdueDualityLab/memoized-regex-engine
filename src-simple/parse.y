@@ -447,7 +447,7 @@ printre(Regexp *r)
 	default:
 		printf("???");
 		break;
-	
+		
 	case Alt:
 		printf("Alt(");
 		printre(r->left);
@@ -549,5 +549,11 @@ printre(Regexp *r)
 			printre(r->ccHigh);
 		}
 		printf(")");
+		break;
+
+	case Backref:
+		printf("Backref(%d)", r->cgNum);
+		break;
 	}
+
 }
