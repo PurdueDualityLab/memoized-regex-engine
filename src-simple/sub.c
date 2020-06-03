@@ -7,7 +7,7 @@
 Sub *freesub;
 
 Sub*
-newsub(int n)
+newsub(int n, char *start)
 {
 	Sub *s;
 	
@@ -17,6 +17,7 @@ newsub(int n)
 	else
 		s = mal(sizeof *s);
 	s->nsub = n;
+	s->start = start;
 	s->ref = 1;
 	return s;
 }
@@ -35,7 +36,8 @@ update(Sub *s, int i, char *p)
 	int j;
 
 	if(s->ref > 1) {
-		s1 = newsub(s->nsub);
+		/* Fork */
+		s1 = newsub(s->nsub, s->start);
 		for(j=0; j<s->nsub; j++)
 			s1->sub[j] = s->sub[j];
 		s->ref--;
@@ -52,4 +54,11 @@ decref(Sub *s)
 		s->sub[0] = (char*)freesub;
 		freesub = s;
 	}
+}
+
+int
+isgroupset(Sub *s, int g)
+{
+	assert(g*2 <= MAXSUB);
+	return s->sub[2*g] != nil && s->sub[2*g + 1] != nil;
 }

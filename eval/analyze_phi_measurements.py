@@ -135,10 +135,10 @@ dfRatios = pd.DataFrame(data=rows, columns=['Regex type', 'Measure', 'Value'])
 
 pd.set_option('display.max_columns', 30)
 print("\n*******\n\n  Summary of raw values:\n\n")
-print(dfRaw.groupby(['Regex type', 'Measure']).describe())
+print(dfRaw.groupby(['Regex type', 'Measure']).describe(percentiles=[0.01, 0.05, 0.1, .25, .5, .75, 0.9, 0.95, 0.99]))
 
 print("\n*******\n\n  Summary of ratios:\n\n")
-print(dfRatios.groupby(['Regex type', 'Measure']).describe())
+print(dfRatios.groupby(['Regex type', 'Measure']).describe(percentiles=[0.01, 0.05, 0.1, .25, .5, .75, 0.9, 0.95, 0.99]))
 
 """## Plot"""
 

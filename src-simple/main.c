@@ -141,13 +141,15 @@ main(int argc, char **argv)
 	Query q;
 	Regexp *re;
 	Prog *prog;
-	char *sub[MAXSUB];
+	char *sub[MAXSUB]; /* Start and end pointers for each CG */
 
 	if(argc < 4)
 		usage();
 	
 	memoMode = getMemoMode(argv[1]);
 	memoEncoding = getEncoding(argv[2]);
+	if (memoMode == MEMO_NONE)
+		memoEncoding = ENCODING_NONE;
 
 	if (strcmp(argv[3], "-f") == 0) {
 		q = loadQuery(argv[4]);

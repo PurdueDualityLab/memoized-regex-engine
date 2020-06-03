@@ -173,19 +173,24 @@ struct Sub
 {
 	int ref;
 	int nsub;
-	char *sub[MAXSUB];
+	char *start; /* Easy way to calculate w[i] vs. char * */
+	char *sub[MAXSUB]; /* Two slots for each CG, \0 (whole string) - \9 */
 };
 
-Sub *newsub(int n);
+Sub *newsub(int n, char *start);
 Sub *incref(Sub*);
 Sub *copy(Sub*);
 Sub *update(Sub*, int, char*);
 void decref(Sub*);
+int isgroupset(Sub*, int);
 
 struct SearchState
 {
 	int stateNum;
 	int stringIndex;
+	/* Used for backrefs */
+	int cgStarts[MAXSUB/2];
+	int cgEnds[MAXSUB/2];
 };
 
 struct SearchStateTable
@@ -194,21 +199,23 @@ struct SearchStateTable
 	UT_hash_handle hh; /* Makes this structure hashable */
 };
 
+/* Declare here so visible for selecting vertices during compilation */
 struct Memo
 {
 	int nStates; /* |Phi| */
 	int nChars;  /* |w| */
 	int mode;
 	int encoding;
+	int backrefs; /* Backrefs present? */
 
 	/* Carries structures for use under the various supported encodings.
      * I suppose this could be a union ;-) */
 
 	/* ENCODING_NONE */
-	int **visitVectors; /* Booleans */
+	int **visitVectors; /* Booleans: vv[q][i] */
 
 	/* ENCODING_NEGATIVE */
-	SearchStateTable *searchStateTable; /* < q, i > */
+	SearchStateTable *searchStateTable; /* < q, i [, backrefs ] > */
 
 	/* ENCODING_RLE, ENCODING_RLE_TUNED */
 	RLEVector **rleVectors;
