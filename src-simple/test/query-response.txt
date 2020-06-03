@@ -182,3 +182,5 @@ x(a|b|c|d)y , xey, MISMATCH
 (a)(b)(c)(d)(e*)\5\4\3\2\1 , abcdeeeeeedcba , MATCH
 (a)(b)(c)(d)(e*)\5\4\3\2\1 , abcdeeeeedcba , MISMATCH
 (a)(b)(c)(d)(e*)\5\4\3\2\1 , abcdeeeedcba , MATCH
+# Test that any memoization is correctly applied
+^(aa|a)(a|aa)\1$ , aaaa, MATCH

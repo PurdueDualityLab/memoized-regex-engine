@@ -541,6 +541,16 @@ backtrack(Prog *prog, char *input, char **subp, int nsubp)
 
   inputEOL = input + strlen(input);
 
+  /* Disable memoization if there are backreferences. */
+  for (i = 0, pc = prog->start; i < prog->len; i++, pc++) {
+    if (pc->opcode == StringCompare) {
+      logMsg(LOG_INFO, "Backreferences present -- disabling memoization");
+      prog->memoMode = MEMO_NONE;
+      prog->memoEncoding = ENCODING_NONE;
+      break;
+    }
+  }
+
   /* Prep visit table */
   logMsg(LOG_VERBOSE, "Initializing visit table");
   visitTable = initVisitTable(prog, strlen(input) + 1);
