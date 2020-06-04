@@ -1,0 +1,24 @@
+### Performance test suite: Query-response pairs with result by memoization
+# Format:
+#   Whitespace is stripped, and "," is a special character
+#   Empty lines are ignored
+#   A # introduces a comment
+
+# REGEX , PREFIX:PUMP:SUFFIX, MEMO , CURVE
+# -----   ------------------  ----   -----
+
+# K-regexes: Exponential
+^(a|a)*$ , a:a:z            , NONE     ,    EXP
+^(a|a)*$ , a:b:z            , FULL     ,    LIN
+^(a|a)*$ , a:b:z            , INDEG    ,    LIN
+^(a|a)*$ , a:b:z            , ANCESTOR ,    LIN
+
+# K-regexes: Polynomial
+
+# K-regexes: Finitely ambiguous
+
+# K-regexes: Linear
+
+# E-regexes: REWBR
+
+# E-regexes: REWLA

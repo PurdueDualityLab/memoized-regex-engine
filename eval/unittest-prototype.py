@@ -21,7 +21,8 @@ import itertools
 
 # Shell dependencies
 
-DEFAULT_TEST_SUITE = os.path.join(os.environ['MEMOIZATION_PROJECT_ROOT'], 'src-simple', 'test', 'query-response.txt')
+DEFAULT_SEMANTIC_TEST_SUITE = os.path.join(os.environ['MEMOIZATION_PROJECT_ROOT'], 'src-simple', 'test', 'semantic-behav.txt')
+DEFAULT_PERF_TEST_SUITE = os.path.join(os.environ['MEMOIZATION_PROJECT_ROOT'], 'src-simple', 'test', 'perf-behav.txt')
 
 shellDeps = [ libMemo.ProtoRegexEngine.CLI ]
 
@@ -36,16 +37,54 @@ class TestResult:
 
 class TestCase:
   """Test case"""
-  def __init__(self, line):
-    self.regex, self.input, self.result = [piece.strip() for piece in line.split(",")]
-    self.syntaxError = (self.result == "SYNTAX")
-    self.shouldMatch = (self.result == "MATCH")
+  def __init__(self):
+    assert(False) # Use factory method
+  
+  @staticmethod
+  def Factory(line, testType):
+    if testType == TestSuite.SEMANTIC_TEST:
+      return SemanticTestCase(line)
+    elif testType == TestSuite.PERF_TEST:
+      return PerformanceTestCase(line)
+    assert(False)
   
   def run(self):
     """Returns [SUCCESS, DESCRIPTION] for each configuration to try"""
-    # Under all configurations
+    # Subclass and overload
+    assert(False)
+  
+  def _queryEngine(self, ss, es, regex, input):
+    """Returns rawCmd, validSyntax, EngineMeasurements"""
+    try:
+      queryFile = libMemo.ProtoRegexEngine.buildQueryFile(self.regex, self.input)
+      rawCmd = "{} {} {} '{}' {}".format(libMemo.ProtoRegexEngine.CLI,
+            libMemo.ProtoRegexEngine.SELECTION_SCHEME.scheme2cox[ss],
+            libMemo.ProtoRegexEngine.ENCODING_SCHEME.scheme2cox[es],
+          self.regex, self.input
+      )
+      libLF.log("  Test case: {}".format(rawCmd))
+      em = libMemo.ProtoRegexEngine.query(ss, es, queryFile)
+      validSyntax = True
+    except SyntaxError as err:
+      validSyntax = False
+      em = None
+    
+    if not SAVE_TMP_FILES:
+      os.file.unlink(queryFile)
+    
+    return rawCmd, validSyntax, em
+
+class SemanticTestCase(TestCase):
+  def __init__(self, line):
+    self.regex, self.input, self.result = [piece.strip() for piece in line.split(",")]
+    self.expectSyntaxError = (self.result == "SYNTAX")
+    self.shouldMatch = (self.result == "MATCH")
+    self.type = TestSuite.SEMANTIC_TEST
+  
+  def run(self):
     testResults = []
 
+    # Semantics should be identical across all memoization treatments
     for selectionScheme, encodingScheme in itertools.product(
       libMemo.ProtoRegexEngine.SELECTION_SCHEME.scheme2cox.keys(),
       libMemo.ProtoRegexEngine.ENCODING_SCHEME.scheme2cox.keys()
@@ -55,99 +94,131 @@ class TestCase:
          libMemo.ProtoRegexEngine.ENCODING_SCHEME.scheme2cox[encodingScheme] != "none":
          continue
 
-      rawCmd = "{} {} {} '{}' {}".format(libMemo.ProtoRegexEngine.CLI,
-            libMemo.ProtoRegexEngine.SELECTION_SCHEME.scheme2cox[selectionScheme],
-            libMemo.ProtoRegexEngine.ENCODING_SCHEME.scheme2cox[encodingScheme],
-          self.regex, self.input
-      )
-      libLF.log("  Test case: {}".format(rawCmd))
+      rawCmd, validRegex, em = self._queryEngine(selectionScheme, encodingScheme, self.regex, self.input)
 
-      queryFile = libMemo.ProtoRegexEngine.buildQueryFile(self.regex, self.input)
-      validRegex = True
-      try:
-        em = libMemo.ProtoRegexEngine.query(selectionScheme, encodingScheme, queryFile)
-      except SyntaxError as err:
-        validRegex = False
-        if self.syntaxError:
+      # Calculate the TestResult
+      if validRegex:
+        if self.expectSyntaxError:
+          tr = TestResult(False, "Incorrect, expected syntax error for /{}/".format(self.regex))
+        else:
+          if (em.matched and self.shouldMatch) or (not em.matched and not self.shouldMatch):
+            tr = TestResult(True, "Correct, match(/{}/, {})={} under selection '{}' encoding '{}'".format(self.regex, self.input, em.matched, selectionScheme, encodingScheme))
+          else:
+            tr = TestResult(False, "Incorrect, match(/{}/, {})={} under selection {} encoding {} -- try {}".format(self.regex, self.input, em.matched, selectionScheme, encodingScheme, rawCmd))
+      else: # Invalid regex
+        if self.expectSyntaxError:
           tr = TestResult(True, "Correct, syntax error for /{}/".format(self.regex))
         else:
           tr = TestResult(False, "Incorrect, syntax error for /{}/".format(self.regex))
       
-      if self.syntaxError and validRegex:
-          tr = TestResult(False, "Incorrect, expected syntax error for /{}/".format(self.regex))
-      elif validRegex:
-        if (em.matched and self.shouldMatch) or (not em.matched and not self.shouldMatch):
-          tr = TestResult(True, "Correct, match(/{}/, {})={} under selection '{}' encoding '{}'".format(self.regex, self.input, em.matched, selectionScheme, encodingScheme))
-        else:
-          tr = TestResult(False, "Incorrect, match(/{}/, {})={} under selection {} encoding {} -- try {}".format(self.regex, self.input, em.matched, selectionScheme, encodingScheme, rawCmd))
       testResults.append(tr)
     return testResults
 
-class TestSuite:
-  """Test cases from the test suite"""
-  def __init__(self, testSuiteFile):
-    self.testCases = []
-    self._loadTestSuite(testSuiteFile)
-  
-  def getTestCases(self):
-    return self.testCases
-  
-  def _loadTestSuite(self, testSuiteFile):
-    libLF.log("Loading test suite from {}".format(testSuiteFile))
-    with open(testSuiteFile, 'r') as inStream:
-      for line in inStream:
-        # Skip empty lines or comment lines
-        if re.match(r'^\s*$', line) or re.match(r'^\s*#', line):
-          continue
-        # Remove trailing comments
-        line = line.split("#")[0]
-        tc = TestCase(line)
-        self.testCases.append(tc)
-    libLF.log("Loaded {} test cases".format(len(self.testCases)))
+class PerformanceTestCase(TestCase):
+  def __init__(self, line):
+    reg, evilInput, memo, curve = [piece.strip() for piece in line.split(",")]
 
-def main(queryFile):
-  libLF.log('queryFile {}' \
-    .format(queryFile))
+  def run(self):
+    return [TestResult(False, "TODO")]
+
+class TestSuite:
+  """A collection of test cases"""
+
+  SEMANTIC_TEST = "semantics"
+  PERF_TEST = "performance"
+
+  def __init__(self, testSuiteFile, testsType):
+    self.testSuiteFile = testSuiteFile
+    self.type = testsType
+
+    self.tests = self._loadTests()
+  
+  def _loadTests(self):
+    libLF.log("Loading {} test suite from {}".format(self.type, self.testSuiteFile))
+
+    tests = []
+    with open(self.testSuiteFile, 'r') as inStream:
+      for line in inStream:
+        line = self._removeComments(line)
+        if not line:
+          continue
+        tests.append(TestCase.Factory(line, self.type))
+    libLF.log("Loaded {} {} test cases from {}".format(self.type, len(tests), self.testSuiteFile))
+    return tests
+  
+  def _removeComments(self, line):
+    """Remove comments from line in test suite file
+    
+    Returns None or a stripped line"""
+    # Skip empty lines or comment lines
+    if re.match(r'^\s*$', line) or re.match(r'^\s*#', line):
+      return None
+    return line.split("#")[0]
+  
+  def run(self):
+    """Run test cases and log results
+
+    returns nFailures"""
+    nTestCases = len(self.tests)
+    testFailures = []
+    nFailures = 0
+
+    for i, testCase in enumerate(self.tests):
+      libLF.log("Case {}/{}".format(i, nTestCases))
+
+      anyFailures = False
+      for testResult in testCase.run():
+        if not testResult.success:
+          testFailures.append(testResult.description)
+          anyFailures = True
+
+      if anyFailures:
+        nFailures += 1
+
+    if testFailures:
+      libLF.log("{}/{} {} tests failed in some way:".format(nFailures, nTestCases, self.type))
+      for failDescr in testFailures:
+        libLF.log("  {}".format(failDescr))
+    else:
+      libLF.log("All {} {} tests passed".format(nTestCases, self.type))
+
+    return nFailures
+
+def main(semanticsTestsFile, performanceTestsFile):
+  libLF.log('semanticsTestsFile {} performanceTestsFile {}' \
+    .format(semanticsTestsFile, performanceTestsFile))
 
   #### Check dependencies
   libLF.checkShellDependencies(shellDeps)
 
-  testSuite = TestSuite(queryFile)
-  nTestCases = len(testSuite.getTestCases())
-
-  testFailures = []
-
-  # Try all test cases
-  nFailures = 0
-  for i, testCase in enumerate(testSuite.getTestCases()):
-    libLF.log("Case {}/{}".format(i, nTestCases))
-
-    anyFailures = False
-    for testResult in testCase.run():
-      if not testResult.success:
-        testFailures.append(testResult.description)
-        anyFailures = True
-
-    if anyFailures:
-      nFailures += 1
+  #### Load and run each test
+  summary = [] 
   
-  #### Emit results
-  if testFailures:
-    libLF.log("{}/{} tests failed in some way:".format(nFailures, nTestCases))
-    for failDescr in testFailures:
-      libLF.log("  {}".format(failDescr))
-  else:
-    libLF.log("All {} tests passed".format(nTestCases))
+  for testType, testsFile in [
+    (TestSuite.SEMANTIC_TEST, semanticsTestsFile), (TestSuite.PERF_TEST, performanceTestsFile)
+  ]:
+    libLF.log("Loading {} tests from {}".format(testType, testsFile))
+    ts = TestSuite(testsFile, testType)
+
+    libLF.log("Running {} tests".format(testType))
+    nFailures = ts.run()
+    summary.append("{} tests from {}: {} failures".format(testType, testsFile, nFailures))
+  
+  libLF.log("****************************************")
+  for line in summary:
+    libLF.log("  " + line)
 
 #####################################################
 
 # Parse args
 parser = argparse.ArgumentParser(description='Unit test driver for the prototype')
-parser.add_argument('--queryFile', type=str, default=DEFAULT_TEST_SUITE, help='In: Test suite file of inputs and outputs. Format is described in the default file, {}'.format(DEFAULT_TEST_SUITE), required=False,
-  dest='queryFile')
+parser.add_argument('--semanticsTestsFile', type=str, default=DEFAULT_SEMANTIC_TEST_SUITE, help='In: Test suite file of inputs and outputs. Format is described in the default file, {}'.format(DEFAULT_SEMANTIC_TEST_SUITE), required=False,
+  dest='semanticsTestsFile')
+parser.add_argument('--performanceTestsFile', type=str, default=DEFAULT_PERF_TEST_SUITE, help='In: Test suite file of inputs and outputs. Format is described in the default file, {}'.format(DEFAULT_PERF_TEST_SUITE), required=False,
+  dest='performanceTestsFile')
 
 # Parse args
 args = parser.parse_args()
 
 # Here we go!
-main(args.queryFile)
+main(args.semanticsTestsFile, args.performanceTestsFile)

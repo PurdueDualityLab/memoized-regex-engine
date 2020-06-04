@@ -1,4 +1,4 @@
-### Prototype test suite: Query-response pairs (independent of memoization configuration)
+### Semantic test suite: Query-response pairs (independent of memoization configuration)
 # Format:
 #   Whitespace is stripped, and "," is a special character
 #   Empty lines are ignored
