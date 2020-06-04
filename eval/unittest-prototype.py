@@ -31,9 +31,14 @@ SAVE_TMP_FILES = True
 
 ##########
 class TestResult:
-  def __init__(self, success, description):
+  """Result of a test
+  
+  success: Boolean
+  failureMsg:  Str
+  """
+  def __init__(self, success, failureMsg):
     self.success = success
-    self.description = description
+    self.failureMsg = failureMsg
 
 class TestCase:
   """Test case"""
@@ -41,26 +46,26 @@ class TestCase:
     assert(False) # Use factory method
   
   @staticmethod
-  def Factory(line, testType):
+  def Factory(pieces, testType):
     if testType == TestSuite.SEMANTIC_TEST:
-      return SemanticTestCase(line)
+      return SemanticTestCase(pieces)
     elif testType == TestSuite.PERF_TEST:
-      return PerformanceTestCase(line)
+      return PerformanceTestCase(pieces)
     assert(False)
   
   def run(self):
-    """Returns [SUCCESS, DESCRIPTION] for each configuration to try"""
+    """Returns TestResult[], one per attempted configuration"""
     # Subclass and overload
     assert(False)
   
   def _queryEngine(self, ss, es, regex, input):
     """Returns rawCmd, validSyntax, EngineMeasurements"""
     try:
-      queryFile = libMemo.ProtoRegexEngine.buildQueryFile(self.regex, self.input)
+      queryFile = libMemo.ProtoRegexEngine.buildQueryFile(regex, input)
       rawCmd = "{} {} {} '{}' {}".format(libMemo.ProtoRegexEngine.CLI,
             libMemo.ProtoRegexEngine.SELECTION_SCHEME.scheme2cox[ss],
             libMemo.ProtoRegexEngine.ENCODING_SCHEME.scheme2cox[es],
-          self.regex, self.input
+          regex, input
       )
       libLF.log("  Test case: {}".format(rawCmd))
       em = libMemo.ProtoRegexEngine.query(ss, es, queryFile)
@@ -75,8 +80,8 @@ class TestCase:
     return rawCmd, validSyntax, em
 
 class SemanticTestCase(TestCase):
-  def __init__(self, line):
-    self.regex, self.input, self.result = [piece.strip() for piece in line.split(",")]
+  def __init__(self, pieces):
+    self.regex, self.input, self.result = pieces
     self.expectSyntaxError = (self.result == "SYNTAX")
     self.shouldMatch = (self.result == "MATCH")
     self.type = TestSuite.SEMANTIC_TEST
@@ -115,11 +120,95 @@ class SemanticTestCase(TestCase):
     return testResults
 
 class PerformanceTestCase(TestCase):
-  def __init__(self, line):
-    reg, evilInput, memo, curve = [piece.strip() for piece in line.split(",")]
+  CURVE_EXP = "exponential"
+  CURVE_POLY = "polynomial"
+  CURVE_LIN = "linear"
+
+  def __init__(self, pieces):
+    regex, evilInput, memo, curve = pieces
+    self.regex = regex
+    ei_pref, ei_pump, ei_suff = [p.strip() for p in evilInput.split(":")]
+    self.evilInput = libLF.EvilInput().initFromRaw(
+      True,
+      [ libLF.PumpPair().initFromRaw(ei_pref, ei_pump) ],
+      ei_suff
+    )
+
+    if memo == "NONE":
+      self.memoSS = libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_None
+    elif memo == "FULL":
+      self.memoSS = libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_Full
+    elif memo == "INDEG":
+      self.memoSS = libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_InDeg
+    elif memo == "ANCESTOR":
+      self.memoSS = libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_Loop
+    else:
+      raise SyntaxError("Unexpected memo " + memo)
+
+    if curve == "EXP":
+      self.curve = PerformanceTestCase.CURVE_EXP
+    elif curve == "POLY":
+      self.curve = PerformanceTestCase.CURVE_POLY
+    elif curve == "LIN":
+      self.curve = PerformanceTestCase.CURVE_LIN
+    else:
+      raise SyntaxError("Unexpected curve " + curve)
 
   def run(self):
-    return [TestResult(False, "TODO")]
+    testResults = []
+
+    baselineVisits = None
+    nAdjustedVisits = []
+    maxPumpsExp = 10
+    maxPumpsElse = 50
+    maxPumps = maxPumpsExp if self.curve == PerformanceTestCase.CURVE_EXP else maxPumpsElse
+
+    # Collect visit counts as we increase pump
+    for nPumps in range(1, maxPumps):
+      input = self.evilInput.build(nPumps)
+      rawCmd, validRegex, em = self._queryEngine(self.memoSS, libMemo.ProtoRegexEngine.ENCODING_SCHEME.ES_None, self.regex, input)
+      assert(validRegex)
+
+      if not baselineVisits:
+        assert(nPumps == 1)
+        baselineVisits = em.si_nTotalVisits
+
+      # Subtract off the "one pump" term so we can see the growth rate
+      nAdjustedVisits.append(em.si_nTotalVisits - baselineVisits)
+    
+    # Confirm the visit counts indicate the expected curve
+    matchedCurve = self._checkCurve(nAdjustedVisits, self.curve)
+    return [
+      TestResult(matchedCurve, "Error, expected curve {} but visits {}".format(self.curve, nAdjustedVisits))
+    ]
+  
+  def _firstRatios(self, visitCounts):
+    return [
+        b / a if a > 0 else 2
+        for a, b in zip(visitCounts, visitCounts[1:])
+      ]
+
+  def _firstDifferences(self, visitCounts):
+    return [
+        b - a
+        for a, b in zip(visitCounts, visitCounts[1:])
+      ]
+
+  def _checkCurve(self, visitCounts, expectedCurve):
+    """Returns True if curve fits, else False"""
+    libLF.log("Expected {} curve -- visits {}".format(expectedCurve, visitCounts))
+    firstRatios = self._firstRatios(visitCounts)
+    firstDifferences  = self._firstDifferences(visitCounts)
+    print("rats: " + str(firstRatios))
+    print("diffs: " + str(firstDifferences) + " ({} unique, {} visitCounts)".format(len(set(firstDifferences)), len(visitCounts)))
+    if expectedCurve == PerformanceTestCase.CURVE_EXP: 
+      return min(firstRatios) >= 2
+    elif expectedCurve == PerformanceTestCase.CURVE_POLY: 
+      # Super-linear means that the number of visits grows more-than-linearly with the input
+      # The behavior gets weird once REWBR are introduced, so be generous here
+      return len(set(firstDifferences)) >= len(visitCounts)/2
+    elif expectedCurve == PerformanceTestCase.CURVE_LIN:
+      return len(set(firstDifferences)) == 1
 
 class TestSuite:
   """A collection of test cases"""
@@ -139,21 +228,25 @@ class TestSuite:
     tests = []
     with open(self.testSuiteFile, 'r') as inStream:
       for line in inStream:
-        line = self._removeComments(line)
-        if not line:
+        pieces = self._parse(line)
+        if not pieces:
           continue
-        tests.append(TestCase.Factory(line, self.type))
+        tests.append(TestCase.Factory(pieces, self.type))
     libLF.log("Loaded {} {} test cases from {}".format(self.type, len(tests), self.testSuiteFile))
     return tests
   
-  def _removeComments(self, line):
-    """Remove comments from line in test suite file
+  def _parse(self, line):
+    """Parse line in test suite file
     
-    Returns None or a stripped line"""
+    Returns None or a list of the stripped, comma-separated pieces"""
     # Skip empty lines or comment lines
     if re.match(r'^\s*$', line) or re.match(r'^\s*#', line):
       return None
-    return line.split("#")[0]
+    preComment = line.split("#")[0]
+    return [
+      piece.strip()
+      for piece in preComment.split(",")
+    ]
   
   def run(self):
     """Run test cases and log results
@@ -169,7 +262,7 @@ class TestSuite:
       anyFailures = False
       for testResult in testCase.run():
         if not testResult.success:
-          testFailures.append(testResult.description)
+          testFailures.append(testResult.failureMsg)
           anyFailures = True
 
       if anyFailures:
@@ -184,9 +277,9 @@ class TestSuite:
 
     return nFailures
 
-def main(semanticsTestsFile, performanceTestsFile):
-  libLF.log('semanticsTestsFile {} performanceTestsFile {}' \
-    .format(semanticsTestsFile, performanceTestsFile))
+def main(semanticsTestsFile, performanceTestsFile, perfOnly):
+  libLF.log('semanticsTestsFile {} performanceTestsFile {} perfOnly {}' \
+    .format(semanticsTestsFile, performanceTestsFile, perfOnly))
 
   #### Check dependencies
   libLF.checkShellDependencies(shellDeps)
@@ -195,8 +288,12 @@ def main(semanticsTestsFile, performanceTestsFile):
   summary = [] 
   
   for testType, testsFile in [
-    (TestSuite.SEMANTIC_TEST, semanticsTestsFile), (TestSuite.PERF_TEST, performanceTestsFile)
+    (TestSuite.SEMANTIC_TEST, semanticsTestsFile),
+    (TestSuite.PERF_TEST, performanceTestsFile)
   ]:
+    if perfOnly and testType != TestSuite.PERF_TEST:
+      continue
+
     libLF.log("Loading {} tests from {}".format(testType, testsFile))
     ts = TestSuite(testsFile, testType)
 
@@ -216,9 +313,10 @@ parser.add_argument('--semanticsTestsFile', type=str, default=DEFAULT_SEMANTIC_T
   dest='semanticsTestsFile')
 parser.add_argument('--performanceTestsFile', type=str, default=DEFAULT_PERF_TEST_SUITE, help='In: Test suite file of inputs and outputs. Format is described in the default file, {}'.format(DEFAULT_PERF_TEST_SUITE), required=False,
   dest='performanceTestsFile')
+parser.add_argument('--perfOnly', default=False, action='store_true', help='Skip semantic tests')
 
 # Parse args
 args = parser.parse_args()
 
 # Here we go!
-main(args.semanticsTestsFile, args.performanceTestsFile)
+main(args.semanticsTestsFile, args.performanceTestsFile, args.perfOnly)

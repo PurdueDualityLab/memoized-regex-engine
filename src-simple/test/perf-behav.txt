@@ -7,18 +7,46 @@
 # REGEX , PREFIX:PUMP:SUFFIX, MEMO , CURVE
 # -----   ------------------  ----   -----
 
-# K-regexes: Exponential
+##########################
+# K-regexes
+##########################
+
+# Exponential
 ^(a|a)*$ , a:a:z            , NONE     ,    EXP
-^(a|a)*$ , a:b:z            , FULL     ,    LIN
-^(a|a)*$ , a:b:z            , INDEG    ,    LIN
-^(a|a)*$ , a:b:z            , ANCESTOR ,    LIN
+^(aa*)*$  , a:a:z            , NONE     ,    EXP  # NB: (a*)* yields an infinite loop
+^(a|a)*$  , a:a:z            , FULL     ,   LIN
+^(a|a)*$ , a:a:z             , INDEG    ,    LIN
+^(a|a)*$ , a:a:z             , ANCESTOR ,    LIN
 
-# K-regexes: Polynomial
+# Polynomial
+^a*a*$    , a:a:z             , NONE     ,    POLY
+^a*a*$    , a:a:z             , FULL     ,    LIN
+^a*a*$    , a:a:z             , INDEG    ,    LIN
+^a*a*$    , a:a:z             , ANCESTOR ,    LIN
 
-# K-regexes: Finitely ambiguous
+## Finitely ambiguous
 
-# K-regexes: Linear
+# Test uses 10 pumps, and this has 11 sets of a|a
+^(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)$  , a:a:z   , NONE     , EXP
+# The leading prefix is needed to trigger the full ambiguity at each step, otherwise we don't visit all the vertices initially and the growth rate "grows"
+^(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)$  , aaaaaaaaaaa:a:z   , FULL     , LIN
+^(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)$  , aaaaaaaaaaa:a:z   , INDEG    , LIN
+^(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)$  , aaaaaaaaaaa:a:z   , ANCESTOR , EXP
+
+# Linear
+^a*$      , a:a:a             , NONE     ,    LIN
+^a*$      , a:a:z             , NONE     ,    LIN
+
+##########################
+# E-regexes
+##########################
 
 # E-regexes: REWBR
+^(a|a)*\1$          , a:a:b       , NONE     ,   EXP    # Exp ambig
+^(a|a)*\1$          , a:a:b       , FULL     ,   LIN    # All eliminable
+^(a*)(a*)\1$        , a:a:b       , NONE     ,   POLY   # Poly ambig
+^(a*)(a*)\1$        , a:a:b       , FULL     ,   POLY   # Not eliminable, because we reach the second CG with varying CG_1
+^(a|a)*(a*)(a*)\1$  , a:a:b       , NONE     ,   EXP    # Exp ambig
+^(a|a)*(a*)(a*)\1$  , a:a:b       , FULL     ,   POLY   # Can reduce to poly
 
 # E-regexes: REWLA
