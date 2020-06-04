@@ -84,6 +84,7 @@ enum	/* Regexp.type */
 	Star,    /* A* */
 	Plus,    /* A+ */
 	Backref, /* \1 */
+	Lookahead, /* (?=A) */
 };
 
 Regexp *parse(char*);
@@ -149,6 +150,7 @@ enum	/* Inst.opcode */
 {
 	Char = 1,
 	Match,
+	RecursiveMatch, // For the lookahead sub-automata
 	Jmp,
 	Split,
 	SplitMany,
@@ -156,6 +158,7 @@ enum	/* Inst.opcode */
 	CharClass,
 	Save,
 	StringCompare,
+	ZeroWidthAssertion,
 };
 
 Prog *compile(Regexp*, int);

@@ -166,7 +166,31 @@ x(a|b|c|d)y , xey, MISMATCH
 (..)*   , aaaaaaaaaaaaaa  , MATCH
 (..)*   , aaaaaaaaaaaaaaa , MATCH
 
-# Backreferences (will blow up on malformed regexes)
+# REWZWA Lookahead assertions
+a(?=b)b     , ab , MATCH
+a(?=a|b|c)b , ab , MATCH
+a(?=a|b|c)b , ab , MATCH
+a(?=b)$ , ab , MISMATCH
+a(?=b)c , ab , MISMATCH
+a(?=b)c , ac , MISMATCH
+a(?=\w+)$ , a , MISMATCH
+a(?=\w+)bc$ , abc , MATCH
+a(?=b\w+)b$ , ab , MISMATCH
+a(?=b\w?c)bc$ , abc , MATCH
+a(?=b?b?b?b?b?)bc$ , abc , MATCH
+a(?=b)(?=b)bc$ , abc , MATCH
+a(?=b)b(?=c)c$ , abc , MATCH
+
+# REWLA: Cases with loads of backtracking to screw up
+^(a|a)*(?=(?:b|a)*)$  , aaaaa       , MATCH
+^(a|a)*(?=(?:aa?)*)$  , aaaaa       , MATCH
+^(a|a)*(?=(?:a?aa?)*)$  , aaaaab      , MISMATCH
+^(a|a)*(?=(?:aa?)*)b$ , aaaaa       , MISMATCH
+
+(?=(?:a*a*z))        , aaaaa       , MISMATCH
+^(?=(?:a*a*))$         , aaaaaa      , MISMATCH   # The lookahead matches, but the outer pattern is just ^$
+
+# REWBR Backreferences (will blow up if the backref number is malformed)
 (a)\1 , a1 , MISMATCH # A MATCH implies the CharEscape is not converted to a backref
 (a)\1 , aa , MATCH
 (a)\1 , ab , MISMATCH

@@ -179,7 +179,7 @@ class PerformanceTestCase(TestCase):
     # Confirm the visit counts indicate the expected curve
     matchedCurve = self._checkCurve(nAdjustedVisits, self.curve)
     return [
-      TestResult(matchedCurve, "Error, expected curve {} but visits {}".format(self.curve, nAdjustedVisits))
+      TestResult(matchedCurve, "{}: Error, expected curve {} but visits {}".format(self.regex, self.curve, nAdjustedVisits))
     ]
   
   def _firstRatios(self, visitCounts):
@@ -199,8 +199,8 @@ class PerformanceTestCase(TestCase):
     libLF.log("Expected {} curve -- visits {}".format(expectedCurve, visitCounts))
     firstRatios = self._firstRatios(visitCounts)
     firstDifferences  = self._firstDifferences(visitCounts)
-    print("rats: " + str(firstRatios))
-    print("diffs: " + str(firstDifferences) + " ({} unique, {} visitCounts)".format(len(set(firstDifferences)), len(visitCounts)))
+    #print("rats: " + str(firstRatios))
+    #print("diffs: " + str(firstDifferences) + " ({} unique, {} visitCounts)".format(len(set(firstDifferences)), len(visitCounts)))
     if expectedCurve == PerformanceTestCase.CURVE_EXP: 
       return min(firstRatios) >= 2
     elif expectedCurve == PerformanceTestCase.CURVE_POLY: 
@@ -277,9 +277,9 @@ class TestSuite:
 
     return nFailures
 
-def main(semanticsTestsFile, performanceTestsFile, perfOnly):
-  libLF.log('semanticsTestsFile {} performanceTestsFile {} perfOnly {}' \
-    .format(semanticsTestsFile, performanceTestsFile, perfOnly))
+def main(semanticsTestsFile, semanticOnly, performanceTestsFile, perfOnly):
+  libLF.log('semanticsTestsFile {} semanticOnly, performanceTestsFile {} perfOnly {}' \
+    .format(semanticsTestsFile, semanticOnly, performanceTestsFile, perfOnly))
 
   #### Check dependencies
   libLF.checkShellDependencies(shellDeps)
@@ -292,6 +292,8 @@ def main(semanticsTestsFile, performanceTestsFile, perfOnly):
     (TestSuite.PERF_TEST, performanceTestsFile)
   ]:
     if perfOnly and testType != TestSuite.PERF_TEST:
+      continue
+    if semanticOnly and testType != TestSuite.SEMANTIC_TEST:
       continue
 
     libLF.log("Loading {} tests from {}".format(testType, testsFile))
@@ -311,6 +313,7 @@ def main(semanticsTestsFile, performanceTestsFile, perfOnly):
 parser = argparse.ArgumentParser(description='Unit test driver for the prototype')
 parser.add_argument('--semanticsTestsFile', type=str, default=DEFAULT_SEMANTIC_TEST_SUITE, help='In: Test suite file of inputs and outputs. Format is described in the default file, {}'.format(DEFAULT_SEMANTIC_TEST_SUITE), required=False,
   dest='semanticsTestsFile')
+parser.add_argument('--semanticOnly', default=False, action='store_true', help='Skip perf tests')
 parser.add_argument('--performanceTestsFile', type=str, default=DEFAULT_PERF_TEST_SUITE, help='In: Test suite file of inputs and outputs. Format is described in the default file, {}'.format(DEFAULT_PERF_TEST_SUITE), required=False,
   dest='performanceTestsFile')
 parser.add_argument('--perfOnly', default=False, action='store_true', help='Skip semantic tests')
@@ -319,4 +322,4 @@ parser.add_argument('--perfOnly', default=False, action='store_true', help='Skip
 args = parser.parse_args()
 
 # Here we go!
-main(args.semanticsTestsFile, args.performanceTestsFile, args.perfOnly)
+main(args.semanticsTestsFile, args.semanticOnly, args.performanceTestsFile, args.perfOnly)
