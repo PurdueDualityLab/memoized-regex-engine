@@ -26,7 +26,7 @@
 
 ## Finitely ambiguous
 
-# Test uses 10 pumps, and this has 11 sets of a|a
+# Test uses 10 pumps, and this has 11 sets of a|a -- growth looks EXP
 ^(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)$  , a:a:z   , NONE     , EXP
 # The leading prefix is needed to trigger the full ambiguity at each step, otherwise we don't visit all the vertices initially and the growth rate "grows"
 ^(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)$  , aaaaaaaaaaa:a:z   , FULL     , LIN
@@ -41,6 +41,15 @@
 # E-regexes
 ##########################
 
+# E-regexes: REWLA
+^(a|a)*(?=(?:a|a)*)$  , a:a:b       , NONE     , EXP
+^(a|a)*(?=(?:a|a)*)$  , a:a:b       , FULL     , LIN
+^(a|a)*(?=(?:a|a)*)$  , a:a:b       , INDEG    , LIN
+^(a|a)*(?=(?:a|a)*)$  , a:a:b       , ANCESTOR , LIN
+
+^(?=(?:a*a*))$        , a:a:b       , NONE     , POLY
+^(?=(?:a*a*))$        , a:a:b       , FULL     , LIN
+
 # E-regexes: REWBR
 ^(a|a)*\1$          , a:a:b       , NONE     ,   EXP    # Exp ambig
 ^(a|a)*\1$          , a:a:b       , FULL     ,   LIN    # All eliminable
@@ -48,5 +57,3 @@
 ^(a*)(a*)\1$        , a:a:b       , FULL     ,   POLY   # Not eliminable, because we reach the second CG with varying CG_1
 ^(a|a)*(a*)(a*)\1$  , a:a:b       , NONE     ,   EXP    # Exp ambig
 ^(a|a)*(a*)(a*)\1$  , a:a:b       , FULL     ,   POLY   # Can reduce to poly
-
-# E-regexes: REWLA
