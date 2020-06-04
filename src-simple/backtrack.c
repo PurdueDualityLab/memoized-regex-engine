@@ -539,7 +539,7 @@ ThreadVec_realloc(ThreadVec *tv)
   Thread *newThreads = mal(newMaxThreads * sizeof(*newThreads));
 
   memcpy(newThreads, tv->threads, tv->nThreads * sizeof(*newThreads));
-  logMsg(LOG_DEBUG, "TV: realloc from %d to %d threads, %p -> %p", tv->maxThreads, newMaxThreads, tv->threads, newThreads);
+  logMsg(LOG_DEBUG, "TV %p: realloc from %d to %d threads, %p -> %p", tv, tv->maxThreads, newMaxThreads, tv->threads, newThreads);
 
   tv->maxThreads = newMaxThreads;
 
@@ -550,6 +550,7 @@ ThreadVec_realloc(ThreadVec *tv)
 static void
 ThreadVec_free(ThreadVec *tv)
 {
+  logMsg(LOG_DEBUG, "TV %p: free -- threads %p", tv, tv->threads);
   free(tv->threads);
 }
 
@@ -653,7 +654,6 @@ backtrack(Prog *prog, char *input, /* start-end pointers for each CG */ char **s
 {
   Memo memo;
   VisitTable visitTable;
-  ThreadVec ready = ThreadVec_alloc();
   int i;
   Inst *pc; /* Current position in VM (pc) */
   char *sp; /* Current position in input */
@@ -661,6 +661,11 @@ backtrack(Prog *prog, char *input, /* start-end pointers for each CG */ char **s
   char *inputEOL; /* Position of \0 terminating input */
   uint64_t startTime;
   int cg_br[MAXSUB/2];
+  ThreadVec *threads;
+
+  int inZWA = 0;
+  char *sp_save;
+  ThreadVec *threads_save;
 
   inputEOL = input + strlen(input);
 
@@ -678,19 +683,25 @@ backtrack(Prog *prog, char *input, /* start-end pointers for each CG */ char **s
   logMsg(LOG_VERBOSE, "Initializing memo table");
   memo = initMemoTable(prog, strlen(input) + 1, prog->memoMode, prog->memoEncoding);
 
-  logMsg(LOG_INFO, "Backtrack: Simulation begins");
-  startTime = now();
-
-  /* queue initial thread */
+  /* Prep sub-captures */
   sub = newsub(nsubp, input);
   for(i=0; i<nsubp; i++)
     sub->sub[i] = nil;
-  /* Initial thread state is < q0, w[0], current capture group > */
-  ThreadVec_push(&ready, thread(prog->start, input, sub));
 
-  /* run threads in stack order */
-  while(ready.nThreads > 0) {
-    Thread next = ThreadVec_pop(&ready);
+  logMsg(LOG_INFO, "Backtrack: Simulation begins");
+  startTime = now();
+
+  /* Initial thread state is < q0, w[0], current capture group > */
+  ThreadVec ready = ThreadVec_alloc();
+  ThreadVec_push(&ready, thread(prog->start, input, sub));
+  threads = &ready;
+
+  /* To recurse: save the state (sp, threads) and replace threads with the new starting point */
+
+  /* Run threads in stack order */
+BACKTRACKING_SEARCH:
+  while(threads->nThreads > 0) {
+    Thread next = ThreadVec_pop(threads);
     pc = next.pc;
     sp = next.sp;
     sub = next.sub;
@@ -752,7 +763,7 @@ backtrack(Prog *prog, char *input, /* start-end pointers for each CG */ char **s
           decref(sub);
 
           printStats(prog, &memo, &visitTable, startTime, sub);
-          ThreadVec_free(&ready);
+          ThreadVec_free(threads);
           return 1;
         }
         goto Dead;
@@ -760,12 +771,12 @@ backtrack(Prog *prog, char *input, /* start-end pointers for each CG */ char **s
         pc = pc->x;
         continue;
       case Split: /* Non-deterministic choice */
-        ThreadVec_push(&ready, thread(pc->y, sp, incref(sub)));
+        ThreadVec_push(threads, thread(pc->y, sp, incref(sub)));
         pc = pc->x;  /* continue current thread */
         continue;
       case SplitMany: /* Non-deterministic choice */
         for (i = 1; i < pc->arity; i++) {
-          ThreadVec_push(&ready, thread(pc->edges[i], sp, incref(sub)));
+          ThreadVec_push(threads, thread(pc->edges[i], sp, incref(sub)));
         }
         pc = pc->edges[0];  /* continue current thread */
         continue;
@@ -803,12 +814,55 @@ backtrack(Prog *prog, char *input, /* start-end pointers for each CG */ char **s
             logMsg(LOG_DEBUG, "Remaining string too short");
       }
         goto Dead;
+      case ZeroWidthAssertion:
+      {
+        // Save state: i, backtrack stack
+        assert(!inZWA); // No nesting
+        inZWA = 1;
+        sp_save = sp;
+        threads_save = threads;
+
+        // Override
+        Inst *newPC = pc+1;
+        ThreadVec override = ThreadVec_alloc();
+        ThreadVec_push(&override, thread(newPC, sp, sub));
+        threads = &override;
+        logMsg(LOG_DEBUG, "Overriding threads %p with %p -- a sub-simulation starting at <q%d, i%d>", threads_save, threads, (int)(newPC-prog->start), (int)(sp - input));
+        goto BACKTRACKING_SEARCH;
+      }
+        assert(!"unreachable");
+      case RecursiveMatch:
+        logMsg(LOG_DEBUG, "Made it to %d RecursiveMatch", (int)(pc-prog->start));
+        // Restore state: i, backtrack stack
+        assert(inZWA);
+        inZWA = 0;
+        sp = sp_save; // Zero-width
+        logMsg(LOG_DEBUG, "Restoring threads from %p to %p", threads, threads_save);
+        ThreadVec_free(threads);
+        threads = threads_save;
+        threads_save = nil;
+
+        pc++; // Advance beyond the ZWA
+        logMsg(LOG_DEBUG, "Resuming execution at <q%d, i%d>\n", (int)(pc-prog->start), (int)(sp-input));
+        continue; // Pick up where we left off
+
       default:
         logMsg(LOG_ERROR, "Unknown opcode %d", pc->opcode);
       }
     }
   Dead:
     decref(sub);
+  }
+  // Backtracking stack is exhausted.
+  if (inZWA) {
+    // No way to honor the ZWA from this point. Backtrack.
+    logMsg(LOG_INFO, "Could not honor ZWA");
+    inZWA = 0;
+    sp = sp_save; // Zero-width
+    ThreadVec_free(threads);
+    threads = threads_save;
+    threads_save = nil;
+    goto BACKTRACKING_SEARCH;
   }
 
   printStats(prog, &memo, &visitTable, startTime, sub);

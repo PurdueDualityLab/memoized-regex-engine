@@ -11,6 +11,8 @@ static void yyerror(char*);
 static Regexp *parsed_regexp;
 static int nparen;
 
+static int DISABLE_CAPTURES = 0; // We ignore captures during parsing of (?=lookahead)
+
 %}
 
 %union {
@@ -151,6 +153,11 @@ escape:
 		$$ = reg(CharEscape, nil, nil);
 		$$->ch = ':';
 	}
+|	'\\' '='
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = '=';
+	}
 |	'\\' '.'
 	{
 		$$ = reg(CharEscape, nil, nil);
@@ -191,12 +198,28 @@ escape:
 single:
 	'(' count alt ')'
 	{
-		$$ = reg(Paren, $3, nil);
-		$$->n = $2;
+		if (DISABLE_CAPTURES) {
+			$$ = $3;
+		}
+		else {
+			$$ = reg(Paren, $3, nil);
+			$$->n = $2;
+		}
 	}
 |	'(' '?' ':' alt ')'
 	{
 		$$ = $4;
+	}
+|	'(' '?' '='
+	{
+		printf("Lookahead a\n");
+		DISABLE_CAPTURES = 1;
+	}
+	alt ')'
+	{
+		printf("Lookahead b\n");
+		$$ = reg(Lookahead, $5, nil);
+		DISABLE_CAPTURES = 0;
 	}
 |	escape
 	{
@@ -206,6 +229,11 @@ single:
 	{
 		$$ = reg(Lit, nil, nil);
 		$$->ch = ':';
+	}
+|	'='
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = '=';
 	}
 |	ccc
 	{
@@ -306,6 +334,11 @@ charRangeChar:
 		$$ = reg(Lit, nil, nil);
 		$$->ch = ':';
 	}
+|   '='
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = '=';
+	}
 |   '*'
 	{
 		$$ = reg(Lit, nil, nil);
@@ -354,7 +387,7 @@ yylex(void)
 	if(input == NULL || *input == 0)
 		return EOL;
 	c = *input++;
-	if(strchr("^|*+?():.\\[^-]$", c))
+	if(strchr("^|*+?():=.\\[^-]$", c))
 		return c;
 	yylval.c = c;
 	return CHAR;
@@ -553,6 +586,12 @@ printre(Regexp *r)
 
 	case Backref:
 		printf("Backref(%d)", r->cgNum);
+		break;
+
+	case Lookahead:
+		printf("Lookahead(");
+		printre(r->left);
+		printf(")");
 		break;
 	}
 

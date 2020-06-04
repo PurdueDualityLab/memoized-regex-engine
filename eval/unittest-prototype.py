@@ -179,7 +179,7 @@ class PerformanceTestCase(TestCase):
     # Confirm the visit counts indicate the expected curve
     matchedCurve = self._checkCurve(nAdjustedVisits, self.curve)
     return [
-      TestResult(matchedCurve, "Error, expected curve {} but visits {}".format(self.curve, nAdjustedVisits))
+      TestResult(matchedCurve, "{}: Error, expected curve {} but visits {}".format(self.regex, self.curve, nAdjustedVisits))
     ]
   
   def _firstRatios(self, visitCounts):
@@ -199,8 +199,8 @@ class PerformanceTestCase(TestCase):
     libLF.log("Expected {} curve -- visits {}".format(expectedCurve, visitCounts))
     firstRatios = self._firstRatios(visitCounts)
     firstDifferences  = self._firstDifferences(visitCounts)
-    print("rats: " + str(firstRatios))
-    print("diffs: " + str(firstDifferences) + " ({} unique, {} visitCounts)".format(len(set(firstDifferences)), len(visitCounts)))
+    #print("rats: " + str(firstRatios))
+    #print("diffs: " + str(firstDifferences) + " ({} unique, {} visitCounts)".format(len(set(firstDifferences)), len(visitCounts)))
     if expectedCurve == PerformanceTestCase.CURVE_EXP: 
       return min(firstRatios) >= 2
     elif expectedCurve == PerformanceTestCase.CURVE_POLY: 

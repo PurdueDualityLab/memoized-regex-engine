@@ -179,7 +179,8 @@ def main(caseStudyFile):
   caseStudies = loadCaseStudies(caseStudyFile)
 
   #### Run
-  studiesToRun = ["REWBR-2", "Microsoft", "Cloudflare"]
+  studiesToRun = ["REWZWA-1", "REWZWA-2", "REWBR-2", "Microsoft", "Cloudflare"]
+  studiesToRun = ["REWZWA-1", "REWZWA-2"]
   nick2fname = {}
   for caseStudy in caseStudies:
     if caseStudy.nick in studiesToRun:

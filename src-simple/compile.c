@@ -163,6 +163,8 @@ Prog_compute_in_degrees(Prog *p)
 		case Char:
 		case Save:
 		case StringCompare:
+		case ZeroWidthAssertion:
+		case RecursiveMatch:
 			/* Always goes to next instr */
 			p->start[i+1].inDegree++;
 			break;
@@ -309,7 +311,7 @@ _transformAltGroups(Regexp *r)
 		return altList;
 	case Cat:
 		/* Binary operator -- pass the buck. */
-		logMsg(LOG_DEBUG, "  transform: Cat: passing buck");
+		logMsg(LOG_DEBUG, "  altGroups: Cat: passing buck");
 		r->left = _transformAltGroups(r->left);
 		r->right = _transformAltGroups(r->right);
 		return r;
@@ -318,8 +320,9 @@ _transformAltGroups(Regexp *r)
     case Plus:
 	case Paren:
 	case CustomCharClass:
+	case Lookahead:
 		/* Unary operators -- pass the buck. */
-		logMsg(LOG_DEBUG, "  transform: Quest/Star/Plus/Paren/CCC: passing buck");
+		logMsg(LOG_DEBUG, "  altGroups: Quest/Star/Plus/Paren/CCC/Lookahead: passing buck");
 		r->left = _transformAltGroups(r->left);
 		return r;
 	case Lit:
@@ -327,7 +330,7 @@ _transformAltGroups(Regexp *r)
 	case CharEscape:
 	case CharRange:
 		/* Terminals */
-		logMsg(LOG_DEBUG, "  transform: ignoring terminal");
+		logMsg(LOG_DEBUG, "  altGroups: ignoring terminal");
 		return r;
 	}
 	return r;
@@ -341,7 +344,7 @@ _escapedNumsToBackrefs(Regexp *r)
 	switch(r->type) {
 	default:
 		logMsg(LOG_ERROR, "type %d", r->type);
-		fatal("mergeCustomCharClassRanges: unknown type");
+		fatal("escapedNumsToBackrefs: unknown type");
 		return NULL;
 	case CharEscape:
 		s[0] = r->ch;
@@ -362,7 +365,7 @@ _escapedNumsToBackrefs(Regexp *r)
 	case Alt:
 	case Cat:
 		/* Binary operator -- pass the buck. */
-		logMsg(LOG_DEBUG, "  transform: Cat: passing buck");
+		logMsg(LOG_DEBUG, "  backrefs: Cat: passing buck");
 		r->left = _escapedNumsToBackrefs(r->left);
 		r->right = _escapedNumsToBackrefs(r->right);
 		return r;
@@ -370,15 +373,16 @@ _escapedNumsToBackrefs(Regexp *r)
 	case Star:
     case Plus:
 	case Paren:
+	case Lookahead:
 		/* Unary operators -- pass the buck. */
-		logMsg(LOG_DEBUG, "  transform: Quest/Star/Plus/Paren/CCC: passing buck");
+		logMsg(LOG_DEBUG, "  backrefs: Quest/Star/Plus/Paren/CCC/Lookahead: passing buck");
 		r->left = _escapedNumsToBackrefs(r->left);
 		return r;
 	case Lit:
 	case Dot:
 	case CustomCharClass:
 		/* Terminals */
-		logMsg(LOG_DEBUG, "  transform: ignoring terminal");
+		logMsg(LOG_DEBUG, "  backrefs: ignoring terminal");
 		return r;
 	}
 }
@@ -451,7 +455,7 @@ _mergeCustomCharClassRanges(Regexp *r)
 	case Alt:
 	case Cat:
 		/* Binary operator -- pass the buck. */
-		logMsg(LOG_DEBUG, "  transform: Cat: passing buck");
+		logMsg(LOG_DEBUG, "  mergeCCC: Cat: passing buck");
 		r->left = _mergeCustomCharClassRanges(r->left);
 		r->right = _mergeCustomCharClassRanges(r->right);
 		return r;
@@ -459,8 +463,9 @@ _mergeCustomCharClassRanges(Regexp *r)
 	case Star:
     case Plus:
 	case Paren:
+	case Lookahead:
 		/* Unary operators -- pass the buck. */
-		logMsg(LOG_DEBUG, "  transform: Quest/Star/Plus/Paren/CCC: passing buck");
+		logMsg(LOG_DEBUG, "  mergeCCC: Quest/Star/Plus/Paren/CCC/Lookahead: passing buck");
 		r->left = _mergeCustomCharClassRanges(r->left);
 		return r;
 	case Lit:
@@ -468,7 +473,7 @@ _mergeCustomCharClassRanges(Regexp *r)
 	case CharEscape:
 	case Backref:
 		/* Terminals */
-		logMsg(LOG_DEBUG, "  transform: ignoring terminal");
+		logMsg(LOG_DEBUG, "  mergeCCC: ignoring terminal");
 		return r;
 	}
 	return r;
@@ -546,6 +551,8 @@ count(Regexp *r)
 		return 2 + count(r->left);
 	case Plus:
 		return 1 +  count(r->left);
+	case Lookahead:
+		return 2 +  count(r->left); /* ZWA + RecursiveMatch */
 	}
 }
 
@@ -1137,6 +1144,15 @@ emit(Regexp *r, int memoMode)
 		pc->opcode = StringCompare;
 		pc->cgNum = r->cgNum;
 		pc++;
+		break;
+
+	case Lookahead:
+		pc->opcode = ZeroWidthAssertion;
+		pc++;
+		emit(r->left, memoMode);
+		pc->opcode = RecursiveMatch;
+		pc++;
+		break;
 	}
 }
 
@@ -1155,6 +1171,12 @@ printprog(Prog *p)
 			fatal("printprog: unknown opcode");
 		case StringCompare:
 			printf("%2d. stringcompare %d (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->cgNum, pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
+			break;
+		case ZeroWidthAssertion:
+			printf("%2d. zerowidth\n", (int)(pc-p->start));
+			break;
+		case RecursiveMatch:
+			printf("%2d. recursivematch\n", (int)(pc-p->start));
 			break;
 		case Split:
 			printf("%2d. split %d, %d (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), (int)(pc->x-p->start), (int)(pc->y-p->start), pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
@@ -1193,6 +1215,7 @@ printprog(Prog *p)
 		case Save:
 			printf("%2d. save %d (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->n, pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
 			//printf("%2d. save %d\n", (int)(pc->stateNum), pc->n);
+			break;
 		}
 	}
 }
