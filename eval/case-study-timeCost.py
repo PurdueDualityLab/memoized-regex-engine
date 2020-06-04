@@ -107,18 +107,24 @@ class CaseStudy:
 
     ret = []
     for np, mt in zip(unmemoPumps, unmemoMatchTimes):
-      ret.append({"Memoized": False, "nPumps": np, "matchTimeS": mt/1000})
+      ret.append({"Treatment": "No memoization", "nPumps": np, "matchTimeS": mt/1000})
     for np, mt in zip(memoPumps, memoMatchTimes):
-      ret.append({"Memoized": True, "nPumps": np, "matchTimeS": mt/1000})
+      ret.append({"Treatment": "Memoization", "nPumps": np, "matchTimeS": mt/1000})
     
     #### DataFrame
     df = pd.DataFrame(data=ret)
-    print(df.groupby("Memoized").describe())
+    print(df.groupby("Treatment").describe())
 
     #### Emit results
+    LINEWIDTH = 3
+
     caseStudy_fname = os.path.join('figs', 'caseStudy-{}.pdf'.format(self.nick))
     plt.figure()
-    ax = sns.lineplot(x="nPumps", y="matchTimeS", hue="Memoized", hue_order=[False, True], marker='o', data=df)
+    ax = sns.lineplot(x="nPumps", y="matchTimeS", data=df,
+      hue="Treatment",
+      #hue_order=[False, True],
+      marker='o', linewidth=LINEWIDTH, markersize=10,
+    )
     ax.set_ylim(bottom=0, top=MAX_MATCH_MS/1000)
     if self.memoBehav == "lin":
       ax.set_xlim(left=0, right=250)
@@ -126,11 +132,13 @@ class CaseStudy:
       pass
 
     plt.ylabel('Match time (s)', fontsize=22)
-    plt.yticks(fontsize=20)
+    plt.yticks(fontsize=19)
     plt.xlabel('Number of pumps (string length)', fontsize=22)
-    plt.xticks(fontsize=20)
-    plt.title(self.title, fontsize=24)
-    ax.legend(loc="lower right", fontsize=20)
+    plt.xticks(fontsize=19)
+    plt.title(self.title, fontsize=22)
+    ax.legend(loc="lower right", fontsize=16)
+    for line in ax.get_legend().get_lines():
+      line.set_linewidth(LINEWIDTH)
     print("Saving to {}".format(caseStudy_fname))
     plt.savefig(fname=caseStudy_fname, bbox_inches='tight')
 
