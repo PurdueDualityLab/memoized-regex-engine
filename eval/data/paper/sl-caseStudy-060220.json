@@ -1,6 +1,10 @@
 {"nick": "Baseline", "title": "Linear K-regexex", "unmemoBehav": "lin", "memoBehav": "lin", "pattern": "^a$", "evilInputs": [{"pumpPairs": [{"prefix": "", "pump": " "}], "suffix": "z"}]}
 {"nick": "REWBR-1", "title": "E-regex: REWBR", "unmemoBehav": "exp", "memoBehav": "lin", "pattern": "^(a)(b|b)*\\1$", "evilInputs": [{"pumpPairs": [{"prefix": "a", "pump": "b"}], "suffix": ""}]}
 {"nick": "REWBR-2", "title": "E-regex: REWBR", "unmemoBehav": "exp", "memoBehav": "poly", "pattern": "^(a|a)*(a|a)*(a|a)*\\1\\2\\3z$", "evilInputs": [{"pumpPairs": [{"prefix": "", "pump": "a"}], "suffix": ""}]}
+{"nick": "REWBR-3", "title": "E-regex: REWBR", "unmemoBehav": "exp", "memoBehav": "poly", "pattern": "^(a|a)*\\1z$", "evilInputs": [{"pumpPairs": [{"prefix": "", "pump": "a"}], "suffix": ""}]}
+{"nick": "REWBR-4", "title": "E-regex: REWBR", "unmemoBehav": "exp", "memoBehav": "lin", "pattern": "^(a*a*)\\1z$", "evilInputs": [{"pumpPairs": [{"prefix": "", "pump": "a"}], "suffix": ""}]}
+{"nick": "REWBR-5", "title": "E-regex: REWBR", "unmemoBehav": "exp", "memoBehav": "poly", "pattern": "^(a*)\\1a*z$", "evilInputs": [{"pumpPairs": [{"prefix": "", "pump": "a"}], "suffix": ""}]}
+{"nick": "REWBR-6", "title": "E-regex: REWBR", "unmemoBehav": "exp", "memoBehav": "poly", "pattern": "^(a|a)*(a|a)*\\1z$", "evilInputs": [{"pumpPairs": [{"prefix": "", "pump": "a"}], "suffix": ""}]}
 {"nick": "REWZWA-1", "title": "E-regex: REWZWA", "unmemoBehav": "exp", "memoBehav": "lin", "pattern": "^(a|a)*(?=(a|a)*z)$", "evilInputs": [{"pumpPairs": [{"prefix": "", "pump": "a"}], "suffix": "b"}]}
 {"nick": "REWZWA-2", "title": "E-regex: REWZWA", "unmemoBehav": "poly", "memoBehav": "lin", "pattern": "^(?=a*a*z)$", "evilInputs": [{"pumpPairs": [{"prefix": "", "pump": "a"}], "suffix": ""}]}
 {"nick": "Microsoft", "title": "Exponential K-regex (Microsoft)", "unmemoBehav": "exp", "memoBehav": "lin", "pattern": "^[a-zA-Z0-9]+([._]?[a-zA-Z0-9]+)*$", "evilInputs": [{"pumpPairs": [{"prefix": "", "pump": "a"}], "suffix": "!"}]}
