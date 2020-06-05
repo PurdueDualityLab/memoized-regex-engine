@@ -60,18 +60,26 @@ class EngineBehavior:
 
 class TaskConfig:
   """Describes which tasks we should perform"""
+  RunSecurityAnalysis = "Security analysis"
   QueryPrototype = "Query prototype"
   QueryProductionEngines = "Query production engines"
 
-  def __init__(self, useCSharpToFindMostEI, queryPrototype, queryProductionEngines):
+  def __init__(self, useCSharpToFindMostEI, queryPrototype, runSecurityAnalysis, queryProductionEngines):
     self.tasks = []
     self.useCSharpToFindMostEI = useCSharpToFindMostEI
+
+    if runSecurityAnalysis:
+      self.tasks.append(TaskConfig.RunSecurityAnalysis)
+      return
 
     if queryPrototype:
       self.tasks.append(TaskConfig.QueryPrototype)
     
     if queryProductionEngines:
       self.tasks.append(TaskConfig.QueryProductionEngines)
+
+  def runSecurityAnalysis(self):
+    return TaskConfig.RunSecurityAnalysis in self.tasks
   
   def queryPrototype(self):
     return TaskConfig.QueryPrototype in self.tasks
@@ -97,6 +105,10 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
 
   PERF_PUMPS_TO_TRY = [ int(PROD_ENGINE_PUMPS/10) ] # Hmm?
 
+  SECURITY_ANALYSIS_PUMPS = list(range(10000, 100000, 10000))
+  SECURITY_ANALYSIS_SELECTION = libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_Full
+  SECURITY_ANALYSIS_ENCODING = libMemo.ProtoRegexEngine.ENCODING_SCHEME.ES_None
+
   def __init__(self, regex, nTrialsPerCondition, taskConfig):
     self.regex = regex
     self.nTrialsPerCondition = nTrialsPerCondition
@@ -117,15 +129,22 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
       # Filter out non-SL regexes
       libLF.log("  TASK: Confirming that regex is SL")
       if self.taskConfig.useCSharpToFindMostEI:
+        queriedWith = "C#"
         ei = self._findAnySLInputUsingCSharp(self.regex)
       else:
+        queriedWith = "prototype"
         ei, _ = self._findMostSLInput(self.regex)
 
       if ei is None:
-        libLF.log("  Could not trigger SL behavior in C#")
+        libLF.log("  Could not trigger SL behavior using {}".format(queriedWith))
         return MyTask.NOT_SL
       else:
-        libLF.log("  Triggered SL behavior in C#")
+        libLF.log("  Triggered SL behavior using {}".format(queriedWith))
+      
+      if self.taskConfig.runSecurityAnalysis():
+        libLF.log("  TASK: Running security analysis")
+        # This violates the function API, but it's late and I'm tired
+        return self._runSecurityAnalysis(self.regex, ei)
 
       if self.taskConfig.queryPrototype():
         libLF.log("  TASK: Running analysis on SL regex")
@@ -312,6 +331,23 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
     
     return automatonSize, phiSize, time, space
   
+  def _runSecurityAnalysis(self, regex, ei):
+    # The paper says we check that the number of visits |w| grows linearly with input size
+    # Under the Full-None configuration, the prototype tests an assert that #visits <= |Q|x|w|
+    # If the program runs without error, then the test passes.
+    for nPumps in MyTask.SECURITY_ANALYSIS_PUMPS:
+      libLF.log("Trying with {} pumps".format(nPumps))
+      queryFile = libMemo.ProtoRegexEngine.buildQueryFile(regex.pattern, ei.build(nPumps))
+      try:
+        em = libMemo.ProtoRegexEngine.query(
+          MyTask.SECURITY_ANALYSIS_SELECTION, MyTask.SECURITY_ANALYSIS_ENCODING, queryFile
+        )
+      except BaseException as err: # Raises on rc != 0
+        libLF.log("Exception on {} pumps: {}".format(nPumps, str(err)))
+        return False
+    libLF.log("No crash!")
+    return True
+
   def _runSLDynamicAnalysis(self, regex, mostEI, nTrialsPerCondition):
     """Obtain MDAs for this <regex, EI> pair
     
@@ -519,15 +555,15 @@ def loadRegexFile(regexFile):
 
 ################
 
-def main(regexFile, useCSharpToFindMostEI, queryPrototype, nTrialsPerCondition, queryProductionEngines, timeSensitive, parallelism, outFile):
-  libLF.log('regexFile {} useCSharpToFindMostEI, queryPrototype {} nTrialsPerCondition {} queryProductionEngines {} timeSensitive {} parallelism {} outFile {}' \
-    .format(regexFile, useCSharpToFindMostEI, queryPrototype, nTrialsPerCondition, queryProductionEngines, timeSensitive, parallelism, outFile))
+def main(regexFile, useCSharpToFindMostEI, queryPrototype, runSecurityAnalysis, nTrialsPerCondition, queryProductionEngines, timeSensitive, parallelism, outFile):
+  libLF.log('regexFile {} useCSharpToFindMostEI, queryPrototype {} runSecurityAnalysis {} nTrialsPerCondition {} queryProductionEngines {} timeSensitive {} parallelism {} outFile {}' \
+    .format(regexFile, useCSharpToFindMostEI, queryPrototype, runSecurityAnalysis, nTrialsPerCondition, queryProductionEngines, timeSensitive, parallelism, outFile))
 
   #### Check dependencies
   libLF.checkShellDependencies(shellDeps)
 
   #### Load data
-  taskConfig = TaskConfig(useCSharpToFindMostEI, queryPrototype, queryProductionEngines) 
+  taskConfig = TaskConfig(useCSharpToFindMostEI, queryPrototype, runSecurityAnalysis, queryProductionEngines) 
   tasks = getTasks(regexFile, nTrialsPerCondition, taskConfig)
   nRegexes = len(tasks)
 
@@ -543,6 +579,13 @@ def main(regexFile, useCSharpToFindMostEI, queryPrototype, nTrialsPerCondition, 
   results = libLF.parallel.map(tasks, nWorkers,
     libLF.parallel.RateLimitEnums.NO_RATE_LIMIT, libLF.parallel.RateLimitEnums.NO_RATE_LIMIT,
     jitter=False)
+  
+  if runSecurityAnalysis:
+    allSL = [res for res in results if res != MyTask.NOT_SL]
+    nSucceeded = len([res for res in results if res])
+    nFailed = len([res for res in results if not res])
+    libLF.log("{} succeeded in sec'ty analysis, {} failed".format(nSucceeded, nFailed))
+    sys.exit(0)
   
   for t, res in zip(tasks, results):
     if type(res) is pd.DataFrame:
@@ -575,7 +618,9 @@ parser.add_argument('--useCSharpToFindMostEI', help='In: Use CSharp to find the 
   dest='useCSharpToFindMostEI')
 parser.add_argument('--queryPrototype', help='In: Query prototype?', required=False, action='store_true', default=False,
   dest='queryPrototype')
-parser.add_argument('--trials', type=int, help='In: Number of trials per experimental condition (only for prototype, and only affects time complexity)', required=False, default=20,
+parser.add_argument('--runSecurityAnalysis', action='store_true', help='In: Run the security analysis described in the paper', required=False, default=False,
+  dest='runSecurityAnalysis')
+parser.add_argument('--trials', type=int, help='In: Number of trials per experimental condition (only for prototype, and affects time costs not complexity)', required=False, default=20,
   dest='nTrialsPerCondition')
 parser.add_argument('--queryProductionEngines', help='In: Test resource cap effectiveness. Queries other engines (C\#, Perl, PHP) on the SL input to see the effectiveness of resource cap-style defenses', required=False, action='store_true', default=False,
   dest='queryProductionEngines')
@@ -589,9 +634,9 @@ parser.add_argument('--out-file', type=str, help='Out: A pickled dataframe conve
 # Parse args
 args = parser.parse_args()
 
-if not args.queryPrototype and not args.queryProductionEngines:
-  libLF.log("Error, you must request at least one of {--queryPrototype, --queryProductionEngines}")
+if not args.queryPrototype and not args.runSecurityAnalysis and not args.queryProductionEngines:
+  libLF.log("Error, you must request at least one of {--queryPrototype, --runSecurityAnalysis, --queryProductionEngines}")
   sys.exit(1)
 
 # Here we go!
-main(args.regexFile, args.useCSharpToFindMostEI, args.queryPrototype, args.nTrialsPerCondition, args.queryProductionEngines, args.timeSensitive, args.parallelism, args.outFile)
+main(args.regexFile, args.useCSharpToFindMostEI, args.queryPrototype, args.runSecurityAnalysis, args.nTrialsPerCondition, args.queryProductionEngines, args.timeSensitive, args.parallelism, args.outFile)
