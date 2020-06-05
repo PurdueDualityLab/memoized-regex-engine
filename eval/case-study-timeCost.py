@@ -126,10 +126,10 @@ class CaseStudy:
       marker='o', linewidth=LINEWIDTH, markersize=10,
     )
     ax.set_ylim(bottom=0, top=MAX_MATCH_MS/1000)
-    if self.memoBehav == "lin":
-      ax.set_xlim(left=0, right=250)
-    elif self.memoBehav == "poly":
-      pass
+    #if self.memoBehav == "lin":
+    ax.set_xlim(left=0, right=250)
+    #elif self.memoBehav == "poly":
+    #  pass
 
     plt.ylabel('Match time (s)', fontsize=22)
     plt.yticks(fontsize=19)
@@ -181,6 +181,7 @@ def main(caseStudyFile):
   #### Run
   studiesToRun = ["REWZWA-1", "REWZWA-2", "REWBR-2", "Microsoft", "Cloudflare"]
   studiesToRun = ["REWZWA-1", "REWZWA-2"]
+  studiesToRun = ["REWBR-6"]
   nick2fname = {}
   for caseStudy in caseStudies:
     if caseStudy.nick in studiesToRun:
