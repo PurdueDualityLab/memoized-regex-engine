@@ -227,13 +227,16 @@ Prog_determineMemoNodes(Prog *p, int memoMode)
 }
 
 // Transformation passes
+Regexp* _transformCurlies(Regexp *r, Regexp *parent);
 Regexp* _transformAltGroups(Regexp *r);
 Regexp* _escapedNumsToBackrefs(Regexp *r);
 Regexp* _mergeCustomCharClassRanges(Regexp *r);
 
 /* Update this Regexp AST to make it more amenable to compilation
+ *  - convert Curly to Alt-chain by expansion: A{1,3} --> (A|AA|AAA)
  *  - replace Alt-chains with a "flat" AltList with one child per Alt entity
  *  - replace a CustomCharClass's CharRange chain with a flat list of CharRange's within the CCC
+ *  - convert \1 to a backref
  */
 Regexp*
 transform(Regexp *r)
@@ -241,11 +244,137 @@ transform(Regexp *r)
 	Regexp *ret;
 
 	logMsg(LOG_INFO, "Optimizing regex");
+	logMsg(LOG_INFO, "Before:");
+	printre(r);
+	printf("\n");
 	ret = r;
+	ret = _transformCurlies(ret, NULL);
+	logMsg(LOG_INFO, "After curlies:");
+	printre(r);
+	printf("\n");
 	ret = _transformAltGroups(ret);
+	logMsg(LOG_INFO, "After altGroups:");
+	printre(r);
+	printf("\n");
 	ret = _escapedNumsToBackrefs(ret);
+	logMsg(LOG_INFO, "After nums2backrefs:");
+	printre(r);
+	printf("\n");
 	ret = _mergeCustomCharClassRanges(ret);
+	logMsg(LOG_INFO, "After classRanges:");
+	printre(r);
+	printf("\n");
 	return ret;
+}
+
+#if 0
+/* Create a shallow-ish copy of r and its children.
+ * Each Regexp in the tree is copied via alloc+memcpy.
+ * Structures besides r->left and r->right are not copied.
+ */
+static
+Regexp*
+_copyTree(Regexp *r)
+{
+	Regexp *reg = mal(sizeof(*reg));
+	memcpy(reg, r, sizeof(*reg));
+
+	reg->left = r->left == NULL ? NULL : _copyTree(r->left);
+	reg->right = r->right == NULL ? NULL : _copyTree(r->right);
+
+	return reg;
+}
+#endif
+
+void
+_replaceChild(Regexp *parent, Regexp *oldChild, Regexp *newChild)
+{
+	if (parent->left == oldChild)
+		parent->left = newChild;
+    else if (parent->right == oldChild)
+		parent->right = newChild;
+	else
+		fatal("parent had no such child");
+}
+
+/* Given A and recursively transformed A':
+ *   A{2}   ->  A'A'
+ *   A{1,2} ->  A'|A'A'
+ *   A{,2}  ->  Ques(A'|A'A')
+ *   A{2,}  ->  A'A'A'*
+ */
+Regexp*
+_transformCurlies(Regexp *r, Regexp *parent)
+{
+	int i = 0;
+
+	switch(r->type) {
+	default:
+		fatal("transformCurlies: unknown type");
+		return NULL;
+	case Curly:
+	{
+		/* Curly: Rewrite */
+		printf("Rewriting curly: min %d max %d\n", r->curlyMin, r->curlyMax);
+
+		// Obtain A'
+		Regexp *A = _transformCurlies(r->left, NULL);
+		printf("A': ");
+		printre(A);
+		printf("\n");
+
+		// We will assign this
+		Regexp *newR = NULL;
+
+		if (r->curlyMin == r->curlyMax) {
+			assert(r->curlyMin >= 0); // Ugh
+			// A{2} -> A'A'
+			if (r->curlyMin == 1) {
+				newR = A;
+			} else {
+				newR = reg(Cat, A, NULL);
+				Regexp *curr = newR;
+				for (i = 2; i < r->curlyMin; i++) { // Start at 2 because (a) we already used 0, and (b) final Cat is non-empty
+					curr->right = reg(Cat, A, NULL);
+					curr = curr->right;
+				}
+				curr->right = A;
+			}
+		} else if (r->curlyMin)
+		assert(newR != NULL);
+
+		// Update the tree
+		if (parent != NULL)
+			_replaceChild(parent, r, newR);
+		return newR;
+	}
+	case Alt:
+	case Cat:
+		/* Binary operators -- pass the buck. */
+		logMsg(LOG_DEBUG, "  curlies: Alt/Cat: passing buck");
+		r->left = _transformCurlies(r->left, r);
+		r->right = _transformCurlies(r->right, r);
+		return r;
+	case Quest:
+	case Star:
+    case Plus:
+	case Paren:
+	case CustomCharClass:
+	case Lookahead:
+		/* Unary operators -- pass the buck. */
+		logMsg(LOG_DEBUG, "  curlies: Quest/Star/Plus/Paren/CCC/Lookahead: passing buck");
+		r->left = _transformCurlies(r->left, r);
+		return r;
+	case Lit:
+	case Dot:
+	case CharEscape:
+	case CharRange:
+		/* Terminals */
+		logMsg(LOG_DEBUG, "  curlies: ignoring terminal");
+		return r;
+	}
+
+	return r;
 }
 
 int
@@ -321,8 +450,9 @@ _transformAltGroups(Regexp *r)
 	case Paren:
 	case CustomCharClass:
 	case Lookahead:
+	case Curly:
 		/* Unary operators -- pass the buck. */
-		logMsg(LOG_DEBUG, "  altGroups: Quest/Star/Plus/Paren/CCC/Lookahead: passing buck");
+		logMsg(LOG_DEBUG, "  altGroups: Quest/Star/Plus/Paren/CCC/Lookahead/Curly: passing buck");
 		r->left = _transformAltGroups(r->left);
 		return r;
 	case Lit:
@@ -374,8 +504,9 @@ _escapedNumsToBackrefs(Regexp *r)
     case Plus:
 	case Paren:
 	case Lookahead:
+	case Curly:
 		/* Unary operators -- pass the buck. */
-		logMsg(LOG_DEBUG, "  backrefs: Quest/Star/Plus/Paren/CCC/Lookahead: passing buck");
+		logMsg(LOG_DEBUG, "  backrefs: Quest/Star/Plus/Paren/CCC/Lookahead/Curly: passing buck");
 		r->left = _escapedNumsToBackrefs(r->left);
 		return r;
 	case Lit:
@@ -464,8 +595,9 @@ _mergeCustomCharClassRanges(Regexp *r)
     case Plus:
 	case Paren:
 	case Lookahead:
+	case Curly:
 		/* Unary operators -- pass the buck. */
-		logMsg(LOG_DEBUG, "  mergeCCC: Quest/Star/Plus/Paren/CCC/Lookahead: passing buck");
+		logMsg(LOG_DEBUG, "  mergeCCC: Quest/Star/Plus/Paren/CCC/Lookahead/Curly: passing buck");
 		r->left = _mergeCustomCharClassRanges(r->left);
 		return r;
 	case Lit:
