@@ -297,6 +297,27 @@ _replaceChild(Regexp *parent, Regexp *oldChild, Regexp *newChild)
 		fatal("parent had no such child");
 }
 
+static
+Regexp *
+_repeatPatternWithConcat(Regexp *r, int n)
+{
+	Regexp *repR = reg(Cat, r, NULL);
+	Regexp *curr = repR;
+	int i;
+
+	assert(n >= 1);
+	if (n == 1) {
+		return r;
+	} else {
+		for (i = 2; i < r->curlyMin; i++) { // Start at 2 because (a) we already used 0, and (b) final Cat is non-empty
+			curr->right = reg(Cat, r, NULL);
+			curr = curr->right;
+		}
+		curr->right = r;
+	}
+	return repR;
+}
+
 /* Given A and recursively transformed A':
  *   A{2}   ->  A'A'
  *   A{1,2} ->  A'|A'A'
@@ -306,8 +327,6 @@ _replaceChild(Regexp *parent, Regexp *oldChild, Regexp *newChild)
 Regexp*
 _transformCurlies(Regexp *r, Regexp *parent)
 {
-	int i = 0;
-
 	switch(r->type) {
 	default:
 		fatal("transformCurlies: unknown type");
@@ -329,18 +348,8 @@ _transformCurlies(Regexp *r, Regexp *parent)
 		if (r->curlyMin == r->curlyMax) {
 			assert(r->curlyMin >= 0); // Ugh
 			// A{2} -> A'A'
-			if (r->curlyMin == 1) {
-				newR = A;
-			} else {
-				newR = reg(Cat, A, NULL);
-				Regexp *curr = newR;
-				for (i = 2; i < r->curlyMin; i++) { // Start at 2 because (a) we already used 0, and (b) final Cat is non-empty
-					curr->right = reg(Cat, A, NULL);
-					curr = curr->right;
-				}
-				curr->right = A;
-			}
-		} else if (r->curlyMin)
+			newR = _repeatPatternWithConcat(A, r->curlyMin);
+		}
 		assert(newR != NULL);
 
 		// Update the tree
