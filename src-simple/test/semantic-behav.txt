@@ -207,4 +207,43 @@ a(?=b)b(?=c)c$ :: abc :: MATCH
 (a)(b)(c)(d)(e*)\5\4\3\2\1 :: abcdeeeeedcba :: MISMATCH
 (a)(b)(c)(d)(e*)\5\4\3\2\1 :: abcdeeeedcba :: MATCH
 # Test that any memoization is correctly applied
-^(aa|a)(a|aa)\1$ , aaaa, MATCH
+^(aa|a)(a|aa)\1$ :: aaaa    :: MATCH
+
+#### Curlies
+
+# Precise bound
+a{2}        ::   aa      ::   MATCH
+a{2}        ::   a{2}    ::   MISMATCH
+
+# Lower bound
+a{2,}       ::   a{2,}  ::   MISMATCH
+a{2,}       ::   a      ::   MISMATCH
+a{2,}       ::   aa     ::   MATCH
+a{2,}       ::   aaaaaa ::   MATCH
+
+# Upper bound
+^a{,3}       ::   a{,3}   ::   MISMATCH
+^a{,3}       ::   aa      ::   MATCH
+^a{,3}       ::   aaa     ::   MATCH
+^a{,3}$       ::   aaaa   ::   MISMATCH
+
+# Double bound
+a{1,3}      ::   a{1,3}  ::   MISMATCH
+a{1,3}      ::   b       ::   MISMATCH
+a{1,3}      ::   a       ::   MATCH
+a{1,3}      ::   aa      ::   MATCH
+a{1,3}      ::   aaa     ::   MATCH
+^a{1,3}$    ::   aaaa    ::   MISMATCH
+
+# Syntax errors
+a{          ::   a{      ::   SYNTAX
+a{          ::   a       ::   SYNTAX
+a{1         ::   a       ::   SYNTAX
+a{1,        ::   a       ::   SYNTAX
+a{,1        ::   a       ::   SYNTAX
+
+a1}         ::   a       ::   SYNTAX
+a,}         ::   a       ::   SYNTAX
+a1,}        ::   a       ::   SYNTAX
+a,1}        ::   a       ::   SYNTAX
+a}          ::   a1      ::   SYNTAX
