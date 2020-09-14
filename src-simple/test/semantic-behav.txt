@@ -4,207 +4,207 @@
 #   Empty lines are ignored
 #   A # introduces a comment
 
-# REGEX , INPUT , MATCH/MISMATCH/SYNTAX
+# REGEX :: INPUT :: MATCH/MISMATCH/SYNTAX
 # -----   -----   ---------------
 
 # R1 . R2
-a       , a               , MATCH
-a       , bab             , MATCH
-.*a.*   , bab             , MATCH
-ab      , ab              , MATCH
-abcde   , xyzabcxyzabcde  , MATCH
-abcde   , xyzabcxyz       , MISMATCH
+a       :: a               :: MATCH
+a       :: bab             :: MATCH
+.*a.*   :: bab             :: MATCH
+ab      :: ab              :: MATCH
+abcde   :: xyzabcxyzabcde  :: MATCH
+abcde   :: xyzabcxyz       :: MISMATCH
 
 # R1 | R2
-a|b     , a               , MATCH
-a|b     , b               , MATCH
-x(a|b)y , xay             , MATCH
-x(a|b)y , xby             , MATCH
-x(a|b)y , xcy             , MISMATCH
+a|b     :: a               :: MATCH
+a|b     :: b               :: MATCH
+x(a|b)y :: xay             :: MATCH
+x(a|b)y :: xby             :: MATCH
+x(a|b)y :: xcy             :: MISMATCH
 
 # R1*
-a*      , a               , MATCH
-xa*y    , xy              , MATCH
-xa*y    , xay             , MATCH
-xa*y    , xaaaay          , MATCH
-a+      , a               , MATCH
-xa+y    , xy              , MISMATCH
-xa+y    , xaaaaaay        , MATCH
+a*      :: a               :: MATCH
+xa*y    :: xy              :: MATCH
+xa*y    :: xay             :: MATCH
+xa*y    :: xaaaay          :: MATCH
+a+      :: a               :: MATCH
+xa+y    :: xy              :: MISMATCH
+xa+y    :: xaaaaaay        :: MATCH
 
 # Anchors: ^, $
-^ab     , ab              , MATCH
-^ab     , xab             , MISMATCH
-ab$     , ab              , MATCH
-ab$     , abz             , MISMATCH
-^a+b$   , ab              , MATCH
-^ab$    , xab             , MISMATCH
+^ab     :: ab              :: MATCH
+^ab     :: xab             :: MISMATCH
+ab$     :: ab              :: MATCH
+ab$     :: abz             :: MISMATCH
+^a+b$   :: ab              :: MATCH
+^ab$    :: xab             :: MISMATCH
 
 # Built-in character classes
-\wa     , aa              , MATCH
-\wa     , ba              , MATCH
-\wa     , !a              , MISMATCH
-\Wa     , !a              , MATCH
-\Wa     , ba              , MISMATCH
+\wa     :: aa              :: MATCH
+\wa     :: ba              :: MATCH
+\wa     :: !a              :: MISMATCH
+\Wa     :: !a              :: MATCH
+\Wa     :: ba              :: MISMATCH
 
-a\sa    , a a             , MATCH
-a\sa    , axa             , MISMATCH
-a\Sa    , a a             , MISMATCH
-a\Sa    , axa             , MATCH
+a\sa    :: a a             :: MATCH
+a\sa    :: axa             :: MISMATCH
+a\Sa    :: a a             :: MISMATCH
+a\Sa    :: axa             :: MATCH
 
-a\da    , a9a             , MATCH
-a\da    , axa             , MISMATCH
-a\Da    , a9a             , MISMATCH
-a\Da    , axa             , MATCH
+a\da    :: a9a             :: MATCH
+a\da    :: axa             :: MISMATCH
+a\Da    :: a9a             :: MISMATCH
+a\Da    :: axa             :: MATCH
 
 # Other meaningful escapes -- this file format doesn't support whitespace except in the middle of things,
 #   and must be line-by-line. But we can try out a tab!
-\t      , t               , MISMATCH
-\n      , n               , MISMATCH
-\r      , r               , MISMATCH
-a\tb    , a	b             , MATCH     # The space is a tab character
-a\tb    , a b             , MISMATCH  # The space is a space character
-a[\t]b  , a	b             , MATCH     # The space is a tab character
-a[^\t]b , axb             , MATCH
+\t      :: t               :: MISMATCH
+\n      :: n               :: MISMATCH
+\r      :: r               :: MISMATCH
+a\tb    :: a	b             :: MATCH     # The space is a tab character
+a\tb    :: a b             :: MISMATCH  # The space is a space character
+a[\t]b  :: a	b             :: MATCH     # The space is a tab character
+a[^\t]b :: axb             :: MATCH
 
 # Other escapes work too
-\$      , $               , MATCH
-\$      , $a              , MATCH
-\$a     , $a              , MATCH
-\$$     , $               , MATCH
-\$$     , $a              , MISMATCH
-\^      , ^               , MATCH
-a\^     , a^              , MATCH
-^\^     , ^               , MATCH
-^\^     , a^              , MISMATCH
+\$      :: $               :: MATCH
+\$      :: $a              :: MATCH
+\$a     :: $a              :: MATCH
+\$$     :: $               :: MATCH
+\$$     :: $a              :: MISMATCH
+\^      :: ^               :: MATCH
+a\^     :: a^              :: MATCH
+^\^     :: ^               :: MATCH
+^\^     :: a^              :: MISMATCH
 
 # Custom character classes
-[a]     , a               , MATCH
-[a]     , b               , MISMATCH
-[^a]    , a               , MISMATCH
-[^a]    , b               , MATCH
-[a-z]   , a               , MATCH
-[a-z]   , b               , MATCH
-[a-z]   , p               , MATCH
-[a-z]   , z               , MATCH
-[a-zA]  , A               , MATCH
-[a-zA-Z] , p              , MATCH
-[a-zA-Z] , P              , MATCH
-[a-cxyz] , y              , MATCH
-[a-c.+*()] , .            , MATCH
-[a-c.+*()] , +            , MATCH
-[a-c.+*()] , *            , MATCH
-[a-c.+*()] , (            , MATCH
-[a-c.+*()] , )            , MATCH
-[\w]       , a            , MATCH
-[\W]       , %            , MATCH
-[^\W]      , a            , MATCH
-[^\w]      , %            , MATCH
-[^a-cx-z]  , m            , MATCH
-[^a-cx-z]  , b            , MISMATCH
-[\s]       , b            , MISMATCH
+[a]     :: a               :: MATCH
+[a]     :: b               :: MISMATCH
+[^a]    :: a               :: MISMATCH
+[^a]    :: b               :: MATCH
+[a-z]   :: a               :: MATCH
+[a-z]   :: b               :: MATCH
+[a-z]   :: p               :: MATCH
+[a-z]   :: z               :: MATCH
+[a-zA]  :: A               :: MATCH
+[a-zA-Z] :: p              :: MATCH
+[a-zA-Z] :: P              :: MATCH
+[a-cxyz] :: y              :: MATCH
+[a-c.+*()] :: .            :: MATCH
+[a-c.+*()] :: +            :: MATCH
+[a-c.+*()] :: *            :: MATCH
+[a-c.+*()] :: (            :: MATCH
+[a-c.+*()] :: )            :: MATCH
+[\w]       :: a            :: MATCH
+[\W]       :: %            :: MATCH
+[^\W]      :: a            :: MATCH
+[^\w]      :: %            :: MATCH
+[^a-cx-z]  :: m            :: MATCH
+[^a-cx-z]  :: b            :: MISMATCH
+[\s]       :: b            :: MISMATCH
 
 # Escaping within CCCs
-[\[\]\-\\] , [, MATCH
-[\[\]\-\\] , ], MATCH
-[\[\]\-\\] , -, MATCH
-[\[\]\-\\] , \, MATCH
-[^\[\]\-\\] , [, MISMATCH
-[a-c.+\*()] , *           , MATCH
-[a-c.+\\*()] , \          , MATCH
-[a-c.+\\*()] , *          , MATCH
+[\[\]\-\\]      :: [        :: MATCH
+[\[\]\-\\]      :: ]        :: MATCH
+[\[\]\-\\]      :: -        :: MATCH
+[\[\]\-\\]      :: \        :: MATCH
+[^\[\]\-\\]     :: [        :: MISMATCH
+[a-c.+\*()]     :: *        :: MATCH
+[a-c.+\\*()]    :: \        :: MATCH
+[a-c.+\\*()]    :: *        :: MATCH
 
 # '-' is only special inside a CCC
-[a-z] , p   , MATCH
-a-z   , p   , MISMATCH
-a-z   , a-z , MATCH
+[a-z] :: p   :: MATCH
+a-z   :: p   :: MISMATCH
+a-z   :: a-z :: MATCH
 
 # '-' can exist as the leading or trailing element of a CCC without implying a range
-[-x],   -, MATCH
-[-x],   x, MATCH
-[-x-z], y, MATCH
-[^-x],  -, MISMATCH
+[-x]    ::   -  :: MATCH
+[-x]    ::   x  :: MATCH
+[-x-z]  ::   y  :: MATCH
+[^-x]   ::   -  :: MISMATCH
 
-[x-],        x, SYNTAX
-[a-b-x-y],   x, SYNTAX
-[^x-],       -, SYNTAX
+[x-]        ::  x  :: SYNTAX
+[a-b-x-y]   ::  x  :: SYNTAX
+[^x-]       ::  -  :: SYNTAX
 
 ###
 # Optimizations etc.
 ###
 
 # AltList / SplitMany
-a|b , a , MATCH
-a|b , b , MATCH
-a|b , c , MISMATCH
-a|b|c|d|e , a , MATCH
-a|b|c|d|e , b , MATCH
-a|b|c|d|e , c , MATCH
-a|b|c|d|e , d , MATCH
-a|b|c|d|e , e , MATCH
-a|b|c|d|e , f , MISMATCH
-x(a|b|c|d)y , xay, MATCH
-x(a|b|c|d)y , xby, MATCH
-x(a|b|c|d)y , xcy, MATCH
-x(a|b|c|d)y , xdy, MATCH
-x(a|b|c|d)y , xy, MISMATCH
-x(a|b|c|d)y , xey, MISMATCH
-(a|(b|c)|d) , a, MATCH
-(a|(b|c)|d) , b, MATCH
-(a|(b|c)|d) , c, MATCH
-(a|(b|c)|d) , d, MATCH
+a|b :: a :: MATCH
+a|b :: b :: MATCH
+a|b :: c :: MISMATCH
+a|b|c|d|e :: a :: MATCH
+a|b|c|d|e :: b :: MATCH
+a|b|c|d|e :: c :: MATCH
+a|b|c|d|e :: d :: MATCH
+a|b|c|d|e :: e :: MATCH
+a|b|c|d|e :: f :: MISMATCH
+x(a|b|c|d)y :: xay  :: MATCH
+x(a|b|c|d)y :: xby  :: MATCH
+x(a|b|c|d)y :: xcy  :: MATCH
+x(a|b|c|d)y :: xdy  :: MATCH
+x(a|b|c|d)y :: xy   :: MISMATCH
+x(a|b|c|d)y :: xey  :: MISMATCH
+(a|(b|c)|d) :: a    :: MATCH
+(a|(b|c)|d) :: b    :: MATCH
+(a|(b|c)|d) :: c    :: MATCH
+(a|(b|c)|d) :: d    :: MATCH
 
 # Interactions between optimization passes
-(a|(b|c|[def]|([a-mx-y]))|d) , d, MATCH
-(a|(b|c|[def]|([a-mx-y]))|d) , m, MATCH
-(a|(b|c|[def]|([a-mx-y]))|d) , o, MISMATCH
+(a|(b|c|[def]|([a-mx-y]))|d) :: d   :: MATCH
+(a|(b|c|[def]|([a-mx-y]))|d) :: m   :: MATCH
+(a|(b|c|[def]|([a-mx-y]))|d) :: o   :: MISMATCH
 
 # Confirm we can support unbounded thread vector stack
-.* , aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  , MATCH
+.* :: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  :: MATCH
 
 # Confirm RLE doesn't break things
-.*.*    , aaaaaaaaaaaaaa  , MATCH
-(..)*   , aaaaaaaaaaaaaa  , MATCH
-(..)*   , aaaaaaaaaaaaaaa , MATCH
+.*.*    :: aaaaaaaaaaaaaa  :: MATCH
+(..)*   :: aaaaaaaaaaaaaa  :: MATCH
+(..)*   :: aaaaaaaaaaaaaaa :: MATCH
 
 # REWZWA Lookahead assertions
-a(?=b)b     , ab , MATCH
-a(?=a|b|c)b , ab , MATCH
-a(?=a|b|c)b , ab , MATCH
-a(?=b)$ , ab , MISMATCH
-a(?=b)c , ab , MISMATCH
-a(?=b)c , ac , MISMATCH
-a(?=\w+)$ , a , MISMATCH
-a(?=\w+)bc$ , abc , MATCH
-a(?=b\w+)b$ , ab , MISMATCH
-a(?=b\w?c)bc$ , abc , MATCH
-a(?=b?b?b?b?b?)bc$ , abc , MATCH
-a(?=b)(?=b)bc$ , abc , MATCH
-a(?=b)b(?=c)c$ , abc , MATCH
+a(?=b)b     :: ab :: MATCH
+a(?=a|b|c)b :: ab :: MATCH
+a(?=a|b|c)b :: ab :: MATCH
+a(?=b)$ :: ab :: MISMATCH
+a(?=b)c :: ab :: MISMATCH
+a(?=b)c :: ac :: MISMATCH
+a(?=\w+)$ :: a :: MISMATCH
+a(?=\w+)bc$ :: abc :: MATCH
+a(?=b\w+)b$ :: ab :: MISMATCH
+a(?=b\w?c)bc$ :: abc :: MATCH
+a(?=b?b?b?b?b?)bc$ :: abc :: MATCH
+a(?=b)(?=b)bc$ :: abc :: MATCH
+a(?=b)b(?=c)c$ :: abc :: MATCH
 
 # REWLA: Cases with loads of backtracking to screw up
-^(a|a)*(?=(?:b|a)*)$  , aaaaa       , MATCH
-^(a|a)*(?=(?:aa?)*)$  , aaaaa       , MATCH
-^(a|a)*(?=(?:a?aa?)*)$  , aaaaab      , MISMATCH
-^(a|a)*(?=(?:aa?)*)b$ , aaaaa       , MISMATCH
+^(a|a)*(?=(?:b|a)*)$  :: aaaaa       :: MATCH
+^(a|a)*(?=(?:aa?)*)$  :: aaaaa       :: MATCH
+^(a|a)*(?=(?:a?aa?)*)$  :: aaaaab      :: MISMATCH
+^(a|a)*(?=(?:aa?)*)b$ :: aaaaa       :: MISMATCH
 
-(?=(?:a*a*z))        , aaaaa       , MISMATCH
-^(?=(?:a*a*))$         , aaaaaa      , MISMATCH   # The lookahead matches, but the outer pattern is just ^$
+(?=(?:a*a*z))        :: aaaaa       :: MISMATCH
+^(?=(?:a*a*))$         :: aaaaaa      :: MISMATCH   # The lookahead matches, but the outer pattern is just ^$
 
 # REWBR Backreferences (will blow up if the backref number is malformed)
-(a)\1 , a1 , MISMATCH # A MATCH implies the CharEscape is not converted to a backref
-(a)\1 , aa , MATCH
-(a)\1 , ab , MISMATCH
-(a)\1 , a  , MISMATCH
-(a*)b\1 , b , MATCH
-(a*)b\1 , aba , MATCH
-^(a*)b\1$ , aaba , MISMATCH
-^(a*)b\1$ , abaa , MISMATCH
-^(a*)b\1$ , aabaa , MATCH
-(a)?b\1$ , b , MATCH
-(a)?b\1$ , aba , MATCH
-(a)(?:b)\1 , aba , MATCH
-(a)(b)(c)(d)(e*)\5\4\3\2\1 , abcdeeeeeedcba , MATCH
-(a)(b)(c)(d)(e*)\5\4\3\2\1 , abcdeeeeedcba , MISMATCH
-(a)(b)(c)(d)(e*)\5\4\3\2\1 , abcdeeeedcba , MATCH
+(a)\1 :: a1 :: MISMATCH # A MATCH implies the CharEscape is not converted to a backref
+(a)\1 :: aa :: MATCH
+(a)\1 :: ab :: MISMATCH
+(a)\1 :: a  :: MISMATCH
+(a*)b\1 :: b :: MATCH
+(a*)b\1 :: aba :: MATCH
+^(a*)b\1$ :: aaba :: MISMATCH
+^(a*)b\1$ :: abaa :: MISMATCH
+^(a*)b\1$ :: aabaa :: MATCH
+(a)?b\1$ :: b :: MATCH
+(a)?b\1$ :: aba :: MATCH
+(a)(?:b)\1 :: aba :: MATCH
+(a)(b)(c)(d)(e*)\5\4\3\2\1 :: abcdeeeeeedcba :: MATCH
+(a)(b)(c)(d)(e*)\5\4\3\2\1 :: abcdeeeeedcba :: MISMATCH
+(a)(b)(c)(d)(e*)\5\4\3\2\1 :: abcdeeeedcba :: MATCH
 # Test that any memoization is correctly applied
 ^(aa|a)(a|aa)\1$ , aaaa, MATCH

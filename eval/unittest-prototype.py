@@ -227,25 +227,29 @@ class TestSuite:
 
     tests = []
     with open(self.testSuiteFile, 'r') as inStream:
-      for line in inStream:
+      for i, line in enumerate(inStream):
         pieces = self._parse(line)
         if not pieces:
           continue
-        tests.append(TestCase.Factory(pieces, self.type))
+        try:
+          tests.append(TestCase.Factory(pieces, self.type))
+        except:
+          libLF.log("Error parsing line {}".format(i+1))
+          sys.exit(1)
     libLF.log("Loaded {} {} test cases from {}".format(self.type, len(tests), self.testSuiteFile))
     return tests
   
   def _parse(self, line):
     """Parse line in test suite file
     
-    Returns None or a list of the stripped, comma-separated pieces"""
+    Returns None or a list of the stripped, ::-separated pieces"""
     # Skip empty lines or comment lines
     if re.match(r'^\s*$', line) or re.match(r'^\s*#', line):
       return None
     preComment = line.split("#")[0]
     return [
       piece.strip()
-      for piece in preComment.split(",")
+      for piece in preComment.split("::")
     ]
   
   def run(self):

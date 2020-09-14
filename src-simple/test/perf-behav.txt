@@ -4,64 +4,64 @@
 #   Empty lines are ignored
 #   A # introduces a comment
 
-# REGEX , PREFIX:PUMP:SUFFIX, MEMO , CURVE
-# -----   ------------------  ----   -----
+# REGEX :: PREFIX:PUMP:SUFFIX   :: MEMO :: CURVE
+# -----    ------------------      ----    -----
 
 ##########################
 # K-regexes
 ##########################
 
 # Exponential
-^(a|a)*$ , a:a:z            , NONE     ,    EXP
-^(aa*)*$ , a:a:z            , NONE     ,    EXP  # NB: (a*)* yields an infinite loop
-^(a|a)*$ , a:a:z            , FULL     ,   LIN
-^(a|a)*$ , a:a:z            , INDEG    ,    LIN
-^(a|a)*$ , a:a:z            , ANCESTOR ,    LIN
+^(a|a)*$ :: a:a:z            :: NONE     ::    EXP
+^(aa*)*$ :: a:a:z            :: NONE     ::    EXP  # NB: (a*)* yields an infinite loop
+^(a|a)*$ :: a:a:z            :: FULL     ::   LIN
+^(a|a)*$ :: a:a:z            :: INDEG    ::    LIN
+^(a|a)*$ :: a:a:z            :: ANCESTOR ::    LIN
 
 # Polynomial
-^a*a*$    , a:a:z             , NONE     ,    POLY
-^a*a*$    , a:a:z             , FULL     ,    LIN
-^a*a*$    , a:a:z             , INDEG    ,    LIN
-^a*a*$    , a:a:z             , ANCESTOR ,    LIN
+^a*a*$    :: a:a:z             :: NONE     ::    POLY
+^a*a*$    :: a:a:z             :: FULL     ::    LIN
+^a*a*$    :: a:a:z             :: INDEG    ::    LIN
+^a*a*$    :: a:a:z             :: ANCESTOR ::    LIN
 
 ## Finitely ambiguous
 
 # Test uses 10 pumps, and this has 11 sets of a|a -- growth looks EXP
-^(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)$  , a:a:z   , NONE     , EXP
+^(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)$  :: a:a:z   :: NONE     :: EXP
 # The leading prefix is needed to trigger the full ambiguity at each step, otherwise we don't visit all the vertices initially and the growth rate "grows"
-^(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)$  , aaaaaaaaaaa:a:z   , FULL     , LIN
-^(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)$  , aaaaaaaaaaa:a:z   , INDEG    , LIN
-^(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)$  , aaaaaaaaaaa:a:z   , ANCESTOR , EXP
+^(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)$  :: aaaaaaaaaaa:a:z   :: FULL     :: LIN
+^(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)$  :: aaaaaaaaaaa:a:z   :: INDEG    :: LIN
+^(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)$  :: aaaaaaaaaaa:a:z   :: ANCESTOR :: EXP
 
 # Linear
-^a*$      , a:a:a             , NONE     ,    LIN
-^a*$      , a:a:z             , NONE     ,    LIN
+^a*$      :: a:a:a             :: NONE     ::    LIN
+^a*$      :: a:a:z             :: NONE     ::    LIN
 
 ##########################
 # E-regexes
 ##########################
 
 # E-regexes: REWLA
-^(a|a)*(?=(a|a)*)$  , a:a:b       , NONE     , EXP   # Enter the REWLA many times, and it is expensive
-^(a|a)*(?=(a|a)*)$  , a:a:b       , FULL     , LIN
-^(a|a)*(?=(a|a)*)$  , a:a:b       , INDEG    , LIN
-^(a|a)*(?=(a|a)*)$  , a:a:b       , ANCESTOR , LIN
+^(a|a)*(?=(a|a)*)$  :: a:a:b       :: NONE     :: EXP   # Enter the REWLA many times, and it is expensive
+^(a|a)*(?=(a|a)*)$  :: a:a:b       :: FULL     :: LIN
+^(a|a)*(?=(a|a)*)$  :: a:a:b       :: INDEG    :: LIN
+^(a|a)*(?=(a|a)*)$  :: a:a:b       :: ANCESTOR :: LIN
 
-^(?=a*a*z)$       , a:a:b       , NONE     , POLY  # Enter the REWLA once but it is expensive
-^(?=a*a*)$        , a:a:b       , FULL     , LIN
-^(?=a*a*)$        , a:a:b       , INDEG    , LIN
-^(?=a*a*)$        , a:a:b       , ANCESTOR , LIN
+^(?=a*a*z)$       :: a:a:b       :: NONE     :: POLY  # Enter the REWLA once but it is expensive
+^(?=a*a*)$        :: a:a:b       :: FULL     :: LIN
+^(?=a*a*)$        :: a:a:b       :: INDEG    :: LIN
+^(?=a*a*)$        :: a:a:b       :: ANCESTOR :: LIN
 
-^a*(?=(aa?|a)*z)$  , a:a:b       , NONE     , EXP  # Enter the REWLA N times, but it is expensive
+^a*(?=(aa?|a)*z)$  :: a:a:b       :: NONE     :: EXP  # Enter the REWLA N times, but it is expensive
 # Pump the prefix to work out the bounded ambiguity before measuring growth
-^a*(?=(aa?a?a?a?|a)*)z$  , aaaaaaaaaaa:a:b       , FULL     , LIN
-^a*(?=(aa?a?a?)*)z$  , aaaaaaaaaaaa:a:b       , INDEG    , LIN
-^a*(?=(aa?a?a?)*)z$  , aaaaaaaaaaaa:a:b       , ANCESTOR , LIN
+^a*(?=(aa?a?a?a?|a)*)z$  :: aaaaaaaaaaa:a:b       :: FULL     :: LIN
+^a*(?=(aa?a?a?)*)z$  :: aaaaaaaaaaaa:a:b       :: INDEG    :: LIN
+^a*(?=(aa?a?a?)*)z$  :: aaaaaaaaaaaa:a:b       :: ANCESTOR :: LIN
 
 # E-regexes: REWBR
-^(a|a)*\1$          , a:a:b       , NONE     ,   EXP    # Exp ambig
-^(a|a)*\1$          , a:a:b       , FULL     ,   LIN    # All eliminable
-^(a*)(a*)\1$        , a:a:b       , NONE     ,   POLY   # Poly ambig
-^(a*)(a*)\1$        , a:a:b       , FULL     ,   POLY   # Not eliminable, because we reach the second CG with varying CG_1
-^(a|a)*(a*)(a*)\1$  , a:a:b       , NONE     ,   EXP    # Exp ambig
-^(a|a)*(a*)(a*)\1$  , a:a:b       , FULL     ,   POLY   # Can reduce to poly
+^(a|a)*\1$          :: a:a:b       :: NONE     ::   EXP    # Exp ambig
+^(a|a)*\1$          :: a:a:b       :: FULL     ::   LIN    # All eliminable
+^(a*)(a*)\1$        :: a:a:b       :: NONE     ::   POLY   # Poly ambig
+^(a*)(a*)\1$        :: a:a:b       :: FULL     ::   POLY   # Not eliminable, because we reach the second CG with varying CG_1
+^(a|a)*(a*)(a*)\1$  :: a:a:b       :: NONE     ::   EXP    # Exp ambig
+^(a|a)*(a*)(a*)\1$  :: a:a:b       :: FULL     ::   POLY   # Can reduce to poly
