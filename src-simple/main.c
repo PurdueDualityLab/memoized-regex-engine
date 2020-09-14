@@ -143,7 +143,7 @@ main(int argc, char **argv)
 	Prog *prog;
 	char *sub[MAXSUB]; /* Start and end pointers for each CG */
 
-	if(argc < 4)
+	if (argc < 4)
 		usage();
 	
 	memoMode = getMemoMode(argv[1]);
@@ -154,6 +154,8 @@ main(int argc, char **argv)
 	if (strcmp(argv[3], "-f") == 0) {
 		q = loadQuery(argv[4]);
 	} else {
+		if (argc < 5)
+  			usage();
 		q.regex = argv[3];
 		q.input = argv[4];
 	}
