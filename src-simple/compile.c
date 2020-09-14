@@ -243,27 +243,14 @@ transform(Regexp *r)
 {
 	Regexp *ret;
 
-	logMsg(LOG_INFO, "Optimizing regex");
-	logMsg(LOG_INFO, "Before:");
-	printre(r);
-	printf("\n");
+	logMsg(LOG_INFO, "Transforming regex (AST pass)");
+
 	ret = r;
 	ret = _transformCurlies(ret, NULL);
-	logMsg(LOG_INFO, "After curlies:");
-	printre(r);
-	printf("\n");
 	ret = _transformAltGroups(ret);
-	logMsg(LOG_INFO, "After altGroups:");
-	printre(r);
-	printf("\n");
 	ret = _escapedNumsToBackrefs(ret);
-	logMsg(LOG_INFO, "After nums2backrefs:");
-	printre(r);
-	printf("\n");
 	ret = _mergeCustomCharClassRanges(ret);
-	logMsg(LOG_INFO, "After classRanges:");
-	printre(r);
-	printf("\n");
+
 	return ret;
 }
 
@@ -330,7 +317,6 @@ _repeatPatternWithAlt(Regexp *r, int min, int max)
 		curr = curr->left;
 	}
 	curr->left = _repeatPatternWithConcat(_copyReg(r), min);
-	printre(curr->left);
 
 	return repR;
 }
@@ -350,14 +336,9 @@ _transformCurlies(Regexp *r, Regexp *parent)
 		return NULL;
 	case Curly:
 	{
-		/* Curly: Rewrite */
-		printf("Rewriting curly: min %d max %d\n", r->curlyMin, r->curlyMax);
-
+		logMsg(LOG_DEBUG, "  transformCurlies: Rewriting Curly");
 		// Obtain A'
 		Regexp *A = _transformCurlies(r->left, NULL);
-		printf("A': ");
-		printre(A);
-		printf("\n");
 
 		// We will assign this
 		Regexp *newR = NULL;
