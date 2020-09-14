@@ -155,13 +155,11 @@ repeat:
 	}
 |	single curly
 	{
-		printf("single curly\n");
 		$$ = $2;
 		$$->left = $1;
 	}
 |	single curly '?'
 	{
-		printf("single curly ?\n");
 		$$ = $2;
 		$$->left = $1;
 		$$->n = 1;
@@ -175,13 +173,11 @@ curly:
 	}
 	curlyString '}'
 	{
-		printf("curly");
 		_curlyString[_curlyStringIx] = '\0';
 		curlyNumbers cn = parseCurlies(_curlyString);
 		$$ = reg(Curly, nil, nil);
 		$$->curlyMin = cn.min;
 		$$->curlyMax = cn.max;
-		printf(":curly <%d,%d>", $$->curlyMin, $$->curlyMax);
 	}
 ;
 
@@ -197,35 +193,6 @@ curlyString:
 		$$ = _curlyString;
 	}
 ;
-
-/*
-curlyNumber:
-	digit
-	{
-		printf("curlyNumber: %d", $1);
-		$$ = $1;
-	}
-|	curlyNumber digit
-	{
-		printf("curlyNumber repeated");
-		$$ = 10*$1 + $2;
-	}
-;
-
-digit:
-	CHAR
-	{
-		printf("digit CHAR");
-		if ($1 < '0' || '9' < $1) {
-			printf("digit CHAR error on %c\n", $1);
-			yyerror("digit: not a number");
-		}
-		int calc = $1 - '0';
-		printf("Returning %d\n", calc);
-		$$ = $1 - '0';
-	}
-;
-*/
 
 count:
 	{
@@ -344,12 +311,12 @@ single:
 	}
 |	'(' '?' '='
 	{
-		printf("Lookahead a\n");
+		//printf("Lookahead a\n");
 		DISABLE_CAPTURES = 1;
 	}
 	alt ')'
 	{
-		printf("Lookahead b\n");
+		//printf("Lookahead b\n");
 		$$ = reg(Lookahead, $5, nil);
 		DISABLE_CAPTURES = 0;
 	}
