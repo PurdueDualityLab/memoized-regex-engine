@@ -3,6 +3,8 @@
 // license that can be found in the LICENSE file.
 
 %{
+#include <stdlib.h>
+#include <ctype.h>
 #include "regexp.h"
 #include "log.h"
 
@@ -10,6 +12,50 @@ static int yylex(void);
 static void yyerror(char*);
 static Regexp *parsed_regexp;
 static int nparen;
+
+static char _curlyString[64];
+static int _curlyStringIx = 0;
+typedef struct _curlyNumbers {
+	int min;
+	int max;
+} curlyNumbers;
+
+static void _handleCurlyChar(int chr) {
+	if (isdigit(chr) || chr == ',') {
+		_curlyString[_curlyStringIx++] = chr;
+	}
+	else {
+		printf("curlyString invalid char: %c\n", chr);
+		yyerror("curlyString: invalid char");
+	}
+}
+
+// Parse {1}, {1,2}, {,1}, and {1,} into a curlyNumbers
+static curlyNumbers parseCurlies(char *str) {
+	curlyNumbers cn;
+	int low;
+	int high;
+	char *comma;
+
+	comma = strchr(str, ',');
+	if (comma == NULL) { // {1}
+		low = high = atoi(str);
+	} else if (comma == str) { // {,1}
+		low = -1;
+		high = atoi(str+1);
+	} else if (comma == str + strlen(str) - 1) { // {1,}
+		low = atoi(str);
+		high = -1;
+	} else {
+		low = atoi(str);
+		high = atoi(comma+1);
+	}
+
+	cn.min = low;
+	cn.max = high;
+
+	return cn;
+}
 
 static int DISABLE_CAPTURES = 0; // We ignore captures during parsing of (?=lookahead)
 
@@ -19,11 +65,13 @@ static int DISABLE_CAPTURES = 0; // We ignore captures during parsing of (?=look
 	Regexp *re;
 	int c;
 	int nparen;
+	char *curlyString;
 }
 
 %token	<c> CHAR EOL
-%type	<re>	alt concat repeat single escape line ccc charRanges charRange charRangeChar
+%type	<re>	alt concat repeat curly single escape line ccc charRanges charRange charRangeChar
 %type	<nparen> count
+%type   <curlyString> curlyString
 
 %%
 
@@ -103,7 +151,79 @@ repeat:
 		$$ = reg(Quest, $1, nil);
 		$$->n = 1;
 	}
+|	single curly
+	{
+		printf("single curly\n");
+		$$ = $2;
+		$$->left = $1;
+	}
+|	single curly '?'
+	{
+		printf("single curly ?\n");
+		$$ = $2;
+		$$->left = $1;
+		$$->n = 1;
+	}
 ;
+
+curly:
+	'{'
+	{
+		_curlyStringIx = 0;
+	}
+	curlyString '}'
+	{
+		printf("curly");
+		_curlyString[_curlyStringIx] = '\0';
+		curlyNumbers cn = parseCurlies(_curlyString);
+		$$ = reg(Curly, nil, nil);
+		$$->curlyMin = cn.min;
+		$$->curlyMax = cn.max;
+		printf(":curly <%d,%d>", $$->curlyMin, $$->curlyMax);
+	}
+;
+
+curlyString:
+	CHAR
+	{
+		_handleCurlyChar($1);
+		$$ = _curlyString;
+	}
+|	curlyString CHAR
+	{
+		_handleCurlyChar($2);
+		$$ = _curlyString;
+	}
+;
+
+/*
+curlyNumber:
+	digit
+	{
+		printf("curlyNumber: %d", $1);
+		$$ = $1;
+	}
+|	curlyNumber digit
+	{
+		printf("curlyNumber repeated");
+		$$ = 10*$1 + $2;
+	}
+;
+
+digit:
+	CHAR
+	{
+		printf("digit CHAR");
+		if ($1 < '0' || '9' < $1) {
+			printf("digit CHAR error on %c\n", $1);
+			yyerror("digit: not a number");
+		}
+		int calc = $1 - '0';
+		printf("Returning %d\n", calc);
+		$$ = $1 - '0';
+	}
+;
+*/
 
 count:
 	{
@@ -147,6 +267,16 @@ escape:
 	{
 		$$ = reg(CharEscape, nil, nil);
 		$$->ch = ')';
+	}
+|	'\\' '{'
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = '{';
+	}
+|	'\\' '}'
+	{
+		$$ = reg(CharEscape, nil, nil);
+		$$->ch = '}';
 	}
 |	'\\' ':'
 	{
@@ -364,6 +494,16 @@ charRangeChar:
 		$$ = reg(Lit, nil, nil);
 		$$->ch = ')';
 	}
+|   '{'
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = '{';
+	}
+|   '}'
+	{
+		$$ = reg(Lit, nil, nil);
+		$$->ch = '}';
+	}
 |   '|'
 	{
 		$$ = reg(Lit, nil, nil);
@@ -387,7 +527,7 @@ yylex(void)
 	if(input == NULL || *input == 0)
 		return EOL;
 	c = *input++;
-	if(strchr("^|*+?():=.\\[^-]$", c))
+	if(strchr("^|*+?(){}:=.\\[^-]$", c))
 		return c;
 	yylval.c = c;
 	return CHAR;
@@ -538,6 +678,14 @@ printre(Regexp *r)
 		if(r->n)
 			printf("Ng");
 		printf("Plus(");
+		printre(r->left);
+		printf(")");
+		break;
+
+	case Curly:
+		if(r->n)
+			printf("Ng");
+		printf("Curly:<%d,%d>(", r->curlyMin, r->curlyMax);
 		printre(r->left);
 		printf(")");
 		break;

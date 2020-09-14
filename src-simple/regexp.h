@@ -61,6 +61,10 @@ struct Regexp
 	Regexp *ccLow;  /* Lit or CharEscape */
 	Regexp *ccHigh; /* Lit or CharEscape */
 
+	/* Curly */
+	int curlyMin; /* Use -1 if no lower bound */
+	int curlyMax; /* Use -1 if no upper bound */
+
 	/* Backref */
 	int cgNum;
 
@@ -83,6 +87,7 @@ enum	/* Regexp.type */
 	Quest,   /* A? */
 	Star,    /* A* */
 	Plus,    /* A+ */
+	Curly,	 /* A{} */
 	Backref, /* \1 */
 	Lookahead, /* (?=A) */
 };
