@@ -53,6 +53,8 @@ static curlyNumbers parseCurlies(char *str) {
 
 	cn.min = low;
 	cn.max = high;
+	if (cn.min > cn.max)
+		yyerror("A{M,N}: M must be <= N");
 
 	return cn;
 }
