@@ -74,6 +74,7 @@ def loadNDJSON(filepath):
     return dat
             
 allFile = os.path.join(DATA_PATH, 'LF-phiMeasurements.json')
+allFile = os.path.join(DATA_PATH, 'LF-phiMeasurements-060420.json')
 slFile = os.path.join(DATA_PATH, 'sl-phiMeasurements.json')
 
 print('Loading "all regexes" measurements from {}'.format(allFile))
