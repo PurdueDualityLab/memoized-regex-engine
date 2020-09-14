@@ -460,7 +460,6 @@ _transformAltGroups(Regexp *r)
 
 	switch(r->type) {
 	default:
-		printf("type: %d\n", r->type);
 		fatal("transformAltGroups: unknown type");
 		return NULL;
 	case Alt:
