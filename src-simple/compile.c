@@ -267,24 +267,22 @@ transform(Regexp *r)
 	return ret;
 }
 
-#if 0
 /* Create a shallow-ish copy of r and its children.
  * Each Regexp in the tree is copied via alloc+memcpy.
  * Structures besides r->left and r->right are not copied.
  */
 static
 Regexp*
-_copyTree(Regexp *r)
+_copyReg(Regexp *r)
 {
 	Regexp *reg = mal(sizeof(*reg));
 	memcpy(reg, r, sizeof(*reg));
 
-	reg->left = r->left == NULL ? NULL : _copyTree(r->left);
-	reg->right = r->right == NULL ? NULL : _copyTree(r->right);
+	reg->left = r->left == NULL ? NULL : _copyReg(r->left);
+	reg->right = r->right == NULL ? NULL : _copyReg(r->right);
 
 	return reg;
 }
-#endif
 
 void
 _replaceChild(Regexp *parent, Regexp *oldChild, Regexp *newChild)
@@ -301,7 +299,7 @@ static
 Regexp *
 _repeatPatternWithConcat(Regexp *r, int n)
 {
-	Regexp *repR = reg(Cat, r, NULL);
+	Regexp *repR = reg(Cat, _copyReg(r), NULL);
 	Regexp *curr = repR;
 	int i;
 
@@ -309,12 +307,31 @@ _repeatPatternWithConcat(Regexp *r, int n)
 	if (n == 1) {
 		return r;
 	} else {
-		for (i = 2; i < r->curlyMin; i++) { // Start at 2 because (a) we already used 0, and (b) final Cat is non-empty
-			curr->right = reg(Cat, r, NULL);
+		for (i = 2; i < n; i++) { // Start at 2 because (a) we already used 0, and (b) final Cat is non-empty
+			curr->right = reg(Cat, _copyReg(r), NULL);
 			curr = curr->right;
 		}
-		curr->right = r;
+		curr->right = _copyReg(r);
 	}
+	return repR;
+}
+
+// Construct Alt(Alt(...)) appropriately
+static
+Regexp *
+_repeatPatternWithAlt(Regexp *r, int min, int max)
+{
+	Regexp *repR = reg(Alt, NULL, _repeatPatternWithConcat(r, max));
+	Regexp *curr = repR;
+	int i;
+
+	for (i = max-1; i > min; i--) {
+		curr->left = reg(Alt, NULL, _repeatPatternWithConcat(r, i));
+		curr = curr->left;
+	}
+	curr->left = _repeatPatternWithConcat(_copyReg(r), min);
+	printre(curr->left);
+
 	return repR;
 }
 
@@ -349,6 +366,25 @@ _transformCurlies(Regexp *r, Regexp *parent)
 			assert(r->curlyMin >= 0); // Ugh
 			// A{2} -> A'A'
 			newR = _repeatPatternWithConcat(A, r->curlyMin);
+		} else if (r->curlyMin > 0 && r->curlyMax > 0) {
+			// A{1,2} -> A|AA
+			newR = _repeatPatternWithAlt(A, r->curlyMin, r->curlyMax);
+		} else if (r->curlyMin == -1) {
+			assert(r->curlyMax >= 0);
+			// A{,2} -> Ques(A{1,2})
+			Regexp *quesChild = _repeatPatternWithAlt(A, 1, r->curlyMax);
+			newR = reg(Quest, quesChild, NULL);
+		} else if (r->curlyMax == -1) {
+			// A{1,} --> AA*
+			assert(r->curlyMin >= 0);
+			if (r->curlyMin == 0) {
+				newR = reg(Star, A, NULL);
+			} else if (r->curlyMin == 1) {
+				newR = reg(Plus, A, NULL);
+			} else {
+				Regexp *prefixChild  = _repeatPatternWithConcat(A, r->curlyMin);
+				newR = reg(Cat, prefixChild, reg(Star, A, NULL));
+			}
 		}
 		assert(newR != NULL);
 
@@ -424,6 +460,7 @@ _transformAltGroups(Regexp *r)
 
 	switch(r->type) {
 	default:
+		printf("type: %d\n", r->type);
 		fatal("transformAltGroups: unknown type");
 		return NULL;
 	case Alt:
