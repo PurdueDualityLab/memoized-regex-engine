@@ -26,6 +26,11 @@
 
 ## Finitely ambiguous
 
+^a{1,500}a{1,5}a{1,5}a{1,5}a{1,2}a{1,2}a{1,2}a{1,2}a{1,2}a{1,2}a{1,2}a{1,2}a{1,2}a{1,2}$    :: a:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:z         :: FULL     ::    LIN
+^a{1,500}a{1,5}a{1,5}a{1,5}a{1,2}a{1,2}a{1,2}a{1,2}a{1,2}a{1,2}a{1,2}a{1,2}a{1,2}a{1,2}$    :: a:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:z         :: INDEG    ::    LIN
+(?:(?:a{,10}){,10}){,10}$                                                                   :: a:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:z         :: FULL     ::    LIN
+(?:(?:a{,10}){,10}){,10}$                                                                   :: a:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:z         :: INDEG    ::    LIN
+
 # Test uses 10 pumps, and this has 11 sets of a|a -- growth looks EXP
 ^(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)(?:a|a)$  :: a:a:z   :: NONE     :: EXP
 # The leading prefix is needed to trigger the full ambiguity at each step, otherwise we don't visit all the vertices initially and the growth rate "grows"
