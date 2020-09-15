@@ -11,6 +11,9 @@
 #include <string.h>
 #include <unistd.h>
 
+// Set this to 1 if you want to see regex and VM representations
+#define DEBUG 0
+
 typedef struct Query Query;
 
 struct Query
@@ -164,18 +167,26 @@ main(int argc, char **argv)
 	re = parse(q.regex);
 
 	// Optimize
+#if DEBUG
 	logMsg(LOG_INFO, "Initial re:");
 	printre(re);
 	printf("\n");
+#endif
 
 	re = transform(re);
+
+#if DEBUG
 	logMsg(LOG_INFO, "Transformed re:");
 	printre(re);
 	printf("\n");
+#endif
 
 	// Compile
 	prog = compile(re, memoMode);
+
+#if DEBUG
 	printprog(prog);
+#endif
 
 	// Simulate
 	prog->memoMode = memoMode;

@@ -9,11 +9,15 @@
 
 static Inst *pc; /* VM array */
 static int count(Regexp*);
+static void emit(Regexp*, int);
+
+#if 0
 static void Regexp_calcLLI(Regexp *r);
 static void Regexp_calcVisitInterval(Regexp *r);
-static void emit(Regexp*, int);
 static void printre_VI(Regexp *r);
+#endif
 
+#if 0
 static void
 lli_addEntry(LanguageLengthInfo *lli, int newLength)
 {
@@ -122,6 +126,7 @@ lli_smallestUniversalPeriod(LanguageLengthInfo *lli)
 	/* Find the LCM of the language lengths */
 	return leastCommonMultiple(lli->languageLengths, lli->nLanguageLengths, 64);
 }
+#endif
 
 void
 Prog_compute_in_degrees(Prog *p)
@@ -646,10 +651,13 @@ compile(Regexp *r, int memoMode)
 	Prog *p;
 
 	n = count(r) + 1;
+
+#if 0
 	Regexp_calcLLI(r);
 	Regexp_calcVisitInterval(r);
 	printre_VI(r);
 	printf("\n");
+#endif
 
 	p = mal(sizeof *p + n*sizeof p->start[0]);
 	p->start = (Inst*)(p+1);
@@ -715,6 +723,7 @@ count(Regexp *r)
 	}
 }
 
+#if 0
 // Determine size of simple languages for r
 // Recursively populates sub-patterns
 // TODO This is a WIP. Do not use this.
@@ -1014,6 +1023,7 @@ Regexp_calcVisitInterval(Regexp *r)
 		break;
 	}
 }
+#endif
 
 static void
 _emitRegexpCharEscape2InstCharRange(Regexp *r, InstCharRange *instCR)
@@ -1183,9 +1193,13 @@ emit(Regexp *r, int memoMode)
 		p2 = pc;
 		emit(r->right, memoMode);
 
+		#if 0
 		printf("cat: vi %d l->vi %d l->SUP %d r->vi %d r->SUP %d\n", r->visitInterval, r->left->visitInterval, lli_smallestUniversalPeriod(&r->left->lli), r->right->visitInterval, lli_smallestUniversalPeriod(&r->right->lli));
 		p2->visitInterval = r->right->visitInterval;
 		p2->visitInterval = r->visitInterval;
+		#endif
+		p2->visitInterval = 0;
+
 		break;
 	
 	case Lit:
@@ -1241,17 +1255,18 @@ emit(Regexp *r, int memoMode)
 	case Paren:
 		pc->opcode = Save;
 		pc->n = 2*r->n;
+		#if 0
 		printf("Save: r->VI %d r->left->VI %d r->left->smallestUniversalPeriod %d\n", r->visitInterval, r->left->visitInterval, lli_smallestUniversalPeriod(&r->left->lli));
-		//pc->visitInterval = lli_smallestUniversalPeriod(&r->left->lli);
-		pc->visitInterval = r->visitInterval;
+		pc->visitInterval = lli_smallestUniversalPeriod(&r->left->lli);
+		#endif
+
+		pc->visitInterval = 0;
 		pc++;
 		emit(r->left, memoMode);
 		pc->opcode = Save;
 		pc->n = 2*r->n + 1;
-		// pc->visitInterval = lli_smallestUniversalPeriod(&r->left->lli);
-		// pc->visitInterval = lli_smallestUniversalPeriod(&r->left->lli);
-		//pc->visitInterval = lli_smallestUniversalPeriod(&r->left->lli);
-		pc->visitInterval = r->visitInterval;
+
+		pc->visitInterval = 0;
 		pc++;
 		break;
 	
