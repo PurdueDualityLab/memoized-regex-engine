@@ -249,6 +249,7 @@ a(?=b)b(?=c)c$ :: abc :: MATCH
 # Precise bound
 a{2}        ::   aa      ::   MATCH
 a{2}        ::   a{2}    ::   MISMATCH
+[a]{2}      ::   aa      ::   MATCH
 
 # Lower bound
 a{2,}       ::   a{2,}  ::   MISMATCH
