@@ -493,10 +493,10 @@ yylex(void)
 {
 	int c;
 
-	if(input == NULL || *input == 0)
+	if (input == NULL || *input == 0)
 		return EOL;
 	c = *input++;
-	if(strchr("^|*+?(){}:=.\\[^-]$", c))
+	if (strchr("^|*+?(){}:=.\\[^-]$", c))
 		return c;
 	yylval.c = c;
 	return CHAR;

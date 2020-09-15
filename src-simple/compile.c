@@ -1057,6 +1057,14 @@ _emitRegexpCharEscape2InstCharRange(Regexp *r, InstCharRange *instCR)
 		instCR->lows[0] = '\t'; instCR->highs[0] = '\t';
 		instCR->count = 1;
 		return;
+	case 'f':
+		instCR->lows[0] = '\f'; instCR->highs[0] = '\f';
+		instCR->count = 1;
+		return;
+	case 'v':
+		instCR->lows[0] = '\v'; instCR->highs[0] = '\v';
+		instCR->count = 1;
+		return;
 	// By default, treat it as "not an escape": \a is just a literal "a"
 	default:
 		instCR->lows[0] = r->ch; instCR->highs[0] = r->ch;
