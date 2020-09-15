@@ -135,6 +135,34 @@ a-z   :: a-z :: MATCH
 [a-b-x-y]   ::  x  :: SYNTAX
 [^x-]       ::  -  :: SYNTAX
 
+# Fixed-width assertions
+^\b$    :: b        :: MISMATCH
+
+^\b$    ::          :: MATCH # Matches empty string
+\b      ::          :: MATCH # Matches empty string
+\ba     :: a        :: MATCH # Matches at beginning
+\ba     :: ba       :: MISMATCH
+a\b     :: a        :: MATCH # Matches at end
+a\b     :: az       :: MISMATCH
+a\bc    :: a        :: MISMATCH # Impossible to satisfy
+a\bc    :: ac       :: MISMATCH # Impossible to satisfy
+a\bc    :: a c      :: MISMATCH # Impossible to satisfy
+foo\b   :: foo      :: MATCH
+foo\b   :: foo bar  :: MATCH
+foo\b   :: foobar   :: MISMATCH
+
+# \B is the inverse of \b, so copy/invert the results from the previous block
+\B       ::          :: MISMATCH
+\Ba      :: a        :: MISMATCH
+\Ba      :: ba       :: MATCH
+a\B      :: a        :: MISMATCH
+a\B      :: az       :: MATCH
+a\Bc     :: ac       :: MATCH
+foo\B    :: foo      :: MISMATCH
+foo\B    :: foo bar  :: MISMATCH
+foo\B    :: foobar   :: MATCH
+foo\Bbar :: foobar   :: MATCH
+
 ###
 # Optimizations etc.
 ###

@@ -165,6 +165,7 @@ Prog_compute_in_degrees(Prog *p)
 		case StringCompare:
 		case ZeroWidthAssertion:
 		case RecursiveMatch:
+		case WordBoundary:
 			/* Always goes to next instr */
 			p->start[i+1].inDegree++;
 			break;
@@ -1217,11 +1218,17 @@ emit(Regexp *r, int memoMode)
 		break;
 
 	case CharEscape:
-		pc->opcode = CharClass;
-		pc->visitInterval = 0;
+		if (r->ch == 'b' || r->ch == 'B') {
+			pc->opcode = WordBoundary;
+			pc->visitInterval = -1;
+			pc->c = r->ch;
+		} else {
+			pc->opcode = CharClass;
+			pc->visitInterval = 0;
 
-		_emitRegexpCharRange2Inst(r, pc);
-		pc->charRangeCounts = 1;
+			_emitRegexpCharRange2Inst(r, pc);
+			pc->charRangeCounts = 1;
+		}
 
 		pc++;
 		break;
@@ -1368,6 +1375,10 @@ printprog(Prog *p)
 			break;
 		case Any:
 			printf("%2d. any (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
+			//printf("%2d. any\n", (int)(pc->stateNum));
+			break;
+		case WordBoundary:
+			printf("%2d. wordBoundary %c (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->c, pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
 			//printf("%2d. any\n", (int)(pc->stateNum));
 			break;
 		case CharClass:

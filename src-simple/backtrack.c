@@ -31,6 +31,9 @@ int nCG_BR = 0;
 #define MEMOCGID_TO_STARTP(s, memocgbr_num)     (CGID_TO_STARTP((s),    CG_BR_memo2num[(memocgbr_num)]))
 #define MEMOCGID_TO_ENDP(s, memocgbr_num)       (CGID_TO_ENDP((s),      CG_BR_memo2num[(memocgbr_num)]))
 
+/* Misc. */
+#define IS_WORD_CHAR(c) (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9'))
+
 void
 vec_strcat(char **dest, int *dAlloc, char *src)
 {
@@ -785,6 +788,41 @@ BACKTRACKING_SEARCH:
         sub = update(sub, pc->n, sp);
         pc++;
         continue;
+      case WordBoundary: // TODO This would be cleaner as "fixed-width assertions". Could support: ^, \A, $, \Z, \z, \b, \B
+      {
+        logMsg(LOG_DEBUG, "  wordBoundary");
+        int isWordBoundary = 0;
+        // Python: \b is defined as the boundary between:
+        //   (1) \w and a \W character
+        //   (2) \w and begin/end of the string
+        if (sp == input || sp == inputEOL) {
+          // Condition (2)
+          isWordBoundary = 1;
+        } else {
+          // Condition (1) -- dereference is safe because we tested Condition (2) already
+          int prev_c = *(sp-1);
+          int curr_c = *sp;
+
+          // TODO This duplicates the concept of '\w'.
+          // It would be better to have a dummy \w and \W PC handy to compare against.
+          int prev_w = IS_WORD_CHAR(prev_c);
+          int curr_w = IS_WORD_CHAR(curr_c);
+
+          isWordBoundary = (prev_w ^ curr_w);
+        } 
+
+        if (isWordBoundary && pc->c == 'b') {
+          // Boundary satisfied: Move on without updating sp
+          pc++;
+          continue;
+        } else if (!isWordBoundary && pc->c == 'B') {
+          // Boundary satisfied: Move on without updating sp
+          pc++;
+          continue;
+        }
+
+        goto Dead;
+      }
       case StringCompare:
         /* Check if appropriate sub matches */
       {

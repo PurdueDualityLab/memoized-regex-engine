@@ -123,7 +123,7 @@ struct InstCharRange
 struct Inst
 {
 	int opcode; /* Instruction. Determined by the corresponding Regex node */
-	int c; /* For Lit: The literal character to match */
+	int c; /* For Lit or Boundary: The literal character */
 	int n; /* Quant: 1 means greedy. Save: 2*n and 2*n + 1 are paired. */
 	int stateNum; /* 0 to Prog->len-1 */
 	int shouldMemo;
@@ -160,6 +160,7 @@ enum	/* Inst.opcode */
 	Split,
 	SplitMany,
 	Any,
+	WordBoundary,
 	CharClass,
 	Save,
 	StringCompare,
