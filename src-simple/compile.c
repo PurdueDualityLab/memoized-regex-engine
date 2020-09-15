@@ -233,7 +233,7 @@ Prog_determineMemoNodes(Prog *p, int memoMode)
 }
 
 // Transformation passes
-Regexp* _transformCurlies(Regexp *r, Regexp *parent);
+Regexp* _transformCurlies(Regexp *r);
 Regexp* _transformAltGroups(Regexp *r);
 Regexp* _escapedNumsToBackrefs(Regexp *r);
 Regexp* _mergeCustomCharClassRanges(Regexp *r);
@@ -252,7 +252,7 @@ transform(Regexp *r)
 	logMsg(LOG_INFO, "Transforming regex (AST pass)");
 
 	ret = r;
-	ret = _transformCurlies(ret, NULL);
+	ret = _transformCurlies(ret);
 	ret = _transformAltGroups(ret);
 	ret = _escapedNumsToBackrefs(ret);
 	ret = _mergeCustomCharClassRanges(ret);
@@ -292,21 +292,23 @@ static
 Regexp *
 _repeatPatternWithConcat(Regexp *r, int n)
 {
-	Regexp *repR = reg(Cat, _copyReg(r), NULL);
-	Regexp *curr = repR;
-	int i;
+	Regexp *ret = NULL;
 
 	assert(n >= 1);
 	if (n == 1) {
-		return r;
+		ret = _copyReg(r);
 	} else {
+		ret = reg(Cat, _copyReg(r), NULL);
+		Regexp *curr = ret;
+		int i;
 		for (i = 2; i < n; i++) { // Start at 2 because (a) we already used 0, and (b) final Cat is non-empty
 			curr->right = reg(Cat, _copyReg(r), NULL);
 			curr = curr->right;
 		}
 		curr->right = _copyReg(r);
 	}
-	return repR;
+
+	return ret;
 }
 
 // Construct Alt(Alt(...)) appropriately
@@ -314,17 +316,24 @@ static
 Regexp *
 _repeatPatternWithAlt(Regexp *r, int min, int max)
 {
-	Regexp *repR = reg(Alt, NULL, _repeatPatternWithConcat(r, max));
-	Regexp *curr = repR;
-	int i;
+	Regexp *ret = NULL;
+	assert (min <= max && min >= 0 && max >= 0);
 
-	for (i = max-1; i > min; i--) {
-		curr->left = reg(Alt, NULL, _repeatPatternWithConcat(r, i));
-		curr = curr->left;
+	if (min == max) {
+		ret = _copyReg(r);
+	} else {
+		ret = reg(Alt, NULL, _repeatPatternWithConcat(r, max));
+		Regexp *curr = ret;
+		int i;
+
+		for (i = max-1; i > min; i--) {
+			curr->left = reg(Alt, NULL, _repeatPatternWithConcat(r, i));
+			curr = curr->left;
+		}
+		curr->left = _repeatPatternWithConcat(r, min);
 	}
-	curr->left = _repeatPatternWithConcat(_copyReg(r), min);
 
-	return repR;
+	return ret;
 }
 
 /* Given A and recursively transformed A':
@@ -334,7 +343,7 @@ _repeatPatternWithAlt(Regexp *r, int min, int max)
  *   A{2,}  ->  A'A'A'*
  */
 Regexp*
-_transformCurlies(Regexp *r, Regexp *parent)
+_transformCurlies(Regexp *r)
 {
 	switch(r->type) {
 	default:
@@ -343,10 +352,10 @@ _transformCurlies(Regexp *r, Regexp *parent)
 	case Curly:
 	{
 		logMsg(LOG_DEBUG, "  transformCurlies: Rewriting Curly");
-		// Obtain A'
-		Regexp *A = _transformCurlies(r->left, NULL);
 
-		// We will assign this
+		// Obtain A'. Make a copy anywhere you use it.
+		Regexp *A = _transformCurlies(r->left);
+		// This is populated with the replacement tree
 		Regexp *newR = NULL;
 
 		if (r->curlyMin == r->curlyMax) {
@@ -360,42 +369,44 @@ _transformCurlies(Regexp *r, Regexp *parent)
 			assert(r->curlyMax >= 0);
 			// A{,2} -> Ques(A{1,2})
 			Regexp *quesChild = _repeatPatternWithAlt(A, 1, r->curlyMax);
+			printf("allocated quesChild R: %p\n", quesChild);
 			newR = reg(Quest, quesChild, NULL);
 		} else if (r->curlyMax == -1) {
 			// A{1,} --> AA*
 			assert(r->curlyMin >= 0);
 			if (r->curlyMin == 0) {
-				newR = reg(Star, A, NULL);
+				newR = reg(Star, _copyReg(A), NULL);
 			} else if (r->curlyMin == 1) {
-				newR = reg(Plus, A, NULL);
+				newR = reg(Plus, _copyReg(A), NULL);
 			} else {
 				Regexp *prefixChild  = _repeatPatternWithConcat(A, r->curlyMin);
-				newR = reg(Cat, prefixChild, reg(Star, A, NULL));
+				newR = reg(Cat, prefixChild, reg(Star, _copyReg(A), NULL));
 			}
+
 		}
 		assert(newR != NULL);
 
-		// Update the tree
-		if (parent != NULL)
-			_replaceChild(parent, r, newR);
+		freereg(A); // We no longer need this subtree
+		free(r); // We no longer need this Curly node
+
 		return newR;
 	}
 	case Alt:
 	case Cat:
 		/* Binary operators -- pass the buck. */
 		logMsg(LOG_DEBUG, "  curlies: Alt/Cat: passing buck");
-		r->left = _transformCurlies(r->left, r);
-		r->right = _transformCurlies(r->right, r);
+		r->left = _transformCurlies(r->left);
+		r->right = _transformCurlies(r->right);
 		return r;
 	case Quest:
 	case Star:
-    case Plus:
+  case Plus:
 	case Paren:
 	case CustomCharClass:
 	case Lookahead:
 		/* Unary operators -- pass the buck. */
 		logMsg(LOG_DEBUG, "  curlies: Quest/Star/Plus/Paren/CCC/Lookahead: passing buck");
-		r->left = _transformCurlies(r->left, r);
+		r->left = _transformCurlies(r->left);
 		return r;
 	case Lit:
 	case Dot:
@@ -431,6 +442,7 @@ _fillAltChildren(Regexp *r, Regexp **children, int i)
 		// Now populate right child
 		assert(r->right->type != Alt); // I think?
 		children[next] = r->right;
+		free(r); // We don't need this Reg node anymore -- the left and right have been copied out to the parent already
 		return next + 1;
 	} else {
 		// End of the recursion
