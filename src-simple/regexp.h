@@ -75,6 +75,8 @@ struct Regexp
 
 // Caller can fill in additional details
 Regexp *reg(int type, Regexp *left, Regexp *right);
+// Deep copy
+Regexp *copyreg(Regexp *r);
 // Print the AST represented by this Regexp
 void printre(Regexp *r);
 // Recursively free the AST represented by this Regexp

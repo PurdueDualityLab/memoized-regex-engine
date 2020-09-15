@@ -14,6 +14,33 @@ reg(int type, Regexp *left, Regexp *right)
 	return r;
 }
 
+/* Create a deep copy of r and its children. */
+Regexp*
+copyreg(Regexp *r)
+{
+	Regexp *reg = mal(sizeof(*reg));
+	memcpy(reg, r, sizeof(*reg));
+
+	reg->left = r->left == NULL ? NULL : copyreg(r->left);
+	reg->right = r->right == NULL ? NULL : copyreg(r->right);
+
+	if (r->children != NULL) {
+		int i;
+		reg->children = mal(sizeof(*r->children) * r->arity);
+		for (i = 0; i < r->arity; i++) {
+			reg->children[i] = copyreg(r->children[i]);
+		}
+	}
+
+	if (r->ccLow != NULL)
+		reg->ccLow = copyreg(r->ccLow);
+	// I assume there's no problem if r->ccLow != r->ccHigh (as pointers) but they are "equals"? Some regexes end up with identical pointers, see code in freereg.
+	if (r->ccHigh != NULL)
+		reg->ccHigh = copyreg(r->ccHigh);
+
+	return reg;
+}
+
 void
 freereg(Regexp *r)
 {
@@ -35,11 +62,10 @@ freereg(Regexp *r)
 		free(r->children);
 	}
 
-    int ccSame = (r->ccLow == r->ccHigh);
 	if (r->ccLow != NULL) {
-        freereg(r->ccLow);
+		freereg(r->ccLow);
 	}
-	if (r->ccHigh != NULL && !ccSame) {
+	if (r->ccHigh != NULL && r->ccHigh != r->ccLow) {
 		freereg(r->ccHigh);
 	}
 

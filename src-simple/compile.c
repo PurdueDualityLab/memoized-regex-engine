@@ -260,22 +260,6 @@ transform(Regexp *r)
 	return ret;
 }
 
-/* Create a shallow-ish copy of r and its children.
- * Each Regexp in the tree is copied via alloc+memcpy.
- * Structures besides r->left and r->right are not copied.
- */
-static
-Regexp*
-_copyReg(Regexp *r)
-{
-	Regexp *reg = mal(sizeof(*reg));
-	memcpy(reg, r, sizeof(*reg));
-
-	reg->left = r->left == NULL ? NULL : _copyReg(r->left);
-	reg->right = r->right == NULL ? NULL : _copyReg(r->right);
-
-	return reg;
-}
 
 void
 _replaceChild(Regexp *parent, Regexp *oldChild, Regexp *newChild)
@@ -296,16 +280,16 @@ _repeatPatternWithConcat(Regexp *r, int n)
 
 	assert(n >= 1);
 	if (n == 1) {
-		ret = _copyReg(r);
+		ret = copyreg(r);
 	} else {
-		ret = reg(Cat, _copyReg(r), NULL);
+		ret = reg(Cat, copyreg(r), NULL);
 		Regexp *curr = ret;
 		int i;
 		for (i = 2; i < n; i++) { // Start at 2 because (a) we already used 0, and (b) final Cat is non-empty
-			curr->right = reg(Cat, _copyReg(r), NULL);
+			curr->right = reg(Cat, copyreg(r), NULL);
 			curr = curr->right;
 		}
-		curr->right = _copyReg(r);
+		curr->right = copyreg(r);
 	}
 
 	return ret;
@@ -320,7 +304,7 @@ _repeatPatternWithAlt(Regexp *r, int min, int max)
 	assert (min <= max && min >= 0 && max >= 0);
 
 	if (min == max) {
-		ret = _copyReg(r);
+		ret = copyreg(r);
 	} else {
 		ret = reg(Alt, NULL, _repeatPatternWithConcat(r, max));
 		Regexp *curr = ret;
@@ -375,12 +359,12 @@ _transformCurlies(Regexp *r)
 			// A{1,} --> AA*
 			assert(r->curlyMin >= 0);
 			if (r->curlyMin == 0) {
-				newR = reg(Star, _copyReg(A), NULL);
+				newR = reg(Star, copyreg(A), NULL);
 			} else if (r->curlyMin == 1) {
-				newR = reg(Plus, _copyReg(A), NULL);
+				newR = reg(Plus, copyreg(A), NULL);
 			} else {
 				Regexp *prefixChild  = _repeatPatternWithConcat(A, r->curlyMin);
-				newR = reg(Cat, prefixChild, reg(Star, _copyReg(A), NULL));
+				newR = reg(Cat, prefixChild, reg(Star, copyreg(A), NULL));
 			}
 
 		}
