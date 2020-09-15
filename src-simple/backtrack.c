@@ -108,6 +108,16 @@ initVisitTable(Prog *prog, int nChars)
 }
 
 void
+freeVisitTable(VisitTable vt)
+{
+  int i;
+  for (i = 0; i < vt.nStates; i++) {
+    free(vt.visitVectors[i]);
+  }
+  free(vt.visitVectors);
+}
+
+void
 markVisit(VisitTable *visitTable, int statenum, int woffset)
 {
   logMsg(LOG_VERBOSE, "Visit: Visiting <%d, %d>", statenum, woffset);
@@ -905,6 +915,7 @@ BACKTRACKING_SEARCH:
 
   printStats(prog, &memo, &visitTable, startTime, sub);
   ThreadVec_free(&ready);
+  freeVisitTable(visitTable);
   return 0;
 }
 
