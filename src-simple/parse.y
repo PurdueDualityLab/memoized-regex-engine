@@ -176,6 +176,7 @@ curly:
 		_curlyString[_curlyStringIx] = '\0';
 		curlyNumbers cn = parseCurlies(_curlyString);
 		$$ = reg(Curly, nil, nil);
+		printf("Allocated curly reg %p\n", $$);
 		$$->curlyMin = cn.min;
 		$$->curlyMax = cn.max;
 	}
@@ -525,7 +526,7 @@ yyerror(char *s)
 Regexp*
 parse(char *s)
 {
-	Regexp *r, *bolDotstar, *eolDotstar, *combine;
+	Regexp *r, *combine;
 
 	input = s;
 	parsed_regexp = nil;
@@ -536,23 +537,25 @@ parse(char *s)
 		yyerror("parser nil");
 		
 	r = reg(Paren, parsed_regexp, nil);	// $0 parens
-	bolDotstar = reg(Star, reg(Dot, nil, nil), nil);
-	bolDotstar->n = 1;	// non-greedy
-	eolDotstar = reg(Star, reg(Dot, nil, nil), nil);
-	eolDotstar->n = 1;	// non-greedy
 
 	/* Tack on the dotstars */
 	combine = r;
 	if (!parsed_regexp->bolAnchor) {
 		logMsg(LOG_INFO, "No ^, tacking on leading .*");
+		Regexp *bolDotstar = reg(Star, reg(Dot, nil, nil), nil);
+		bolDotstar->n = 1;	// non-greedy
 		combine = reg(Cat, bolDotstar, combine);
 	}
+
 	if (!parsed_regexp->eolAnchor) {
 		logMsg(LOG_INFO, "No $, tacking on trailing .*");
+		Regexp *eolDotstar = reg(Star, reg(Dot, nil, nil), nil);
+		eolDotstar->n = 1;	// non-greedy
 		combine = reg(Cat, combine, eolDotstar);
 	}
 	combine->bolAnchor = parsed_regexp->bolAnchor;
 	combine->eolAnchor = parsed_regexp->eolAnchor;
+
 	return combine;
 }
 
@@ -583,10 +586,30 @@ reg(int type, Regexp *left, Regexp *right)
 void
 freereg(Regexp *r)
 {
-	if (r->left != NULL)
+	printf("freeing R: %p\n", r);
+	if (r->left != NULL) {
 		freereg(r->left);
-	if (r->right != NULL)
+	}
+
+	if (r->right != NULL) {
 		freereg(r->right);
+	}
+	
+	if (r->children != NULL) {
+		int i;
+		for (i = 0; i < r->arity; i++) {
+			freereg(r->children[i]);
+		}
+		free(r->children);
+	}
+
+	if (r->ccLow != NULL) {
+		freereg(r->ccLow);
+	}
+	if (r->ccHigh != NULL) {
+		freereg(r->ccHigh);
+	}
+
 	free(r);
 }
 
