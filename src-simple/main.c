@@ -221,5 +221,9 @@ main(int argc, char **argv)
 		}
 		printf("\n");
 	}
+
+	free(prog);
+	freereg(re);
+
 	return 0;
 }

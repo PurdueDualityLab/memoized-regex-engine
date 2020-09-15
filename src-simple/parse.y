@@ -581,6 +581,16 @@ reg(int type, Regexp *left, Regexp *right)
 }
 
 void
+freereg(Regexp *r)
+{
+	if (r->left != NULL)
+		freereg(r->left);
+	if (r->right != NULL)
+		freereg(r->right);
+	free(r);
+}
+
+void
 printre(Regexp *r)
 {
 	int i;

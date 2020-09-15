@@ -521,6 +521,9 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime, S
   );
 
   fprintf(stderr, "}\n");
+
+	free(csv_maxObservedCostsPerMemoizedVertex);
+	free(visitsPerVertex);
 }
 
 /* NFA simulation */
@@ -675,6 +678,7 @@ backtrack(Prog *prog, char *input, /* start-end pointers for each CG */ char **s
   uint64_t startTime;
   int cg_br[MAXSUB/2];
   ThreadVec *threads;
+	int matched = 0;
 
   int inZWA = 0;
   char *sp_save;
@@ -775,9 +779,8 @@ BACKTRACKING_SEARCH:
             subp[i] = sub->sub[i];
           decref(sub);
 
-          printStats(prog, &memo, &visitTable, startTime, sub);
-          ThreadVec_free(threads);
-          return 1;
+					matched = 1;
+					goto CleanupAndRet;
         }
         goto Dead;
       case Jmp:
@@ -912,10 +915,13 @@ BACKTRACKING_SEARCH:
     threads_save = nil;
     goto BACKTRACKING_SEARCH;
   }
+	matched = 0;
 
+CleanupAndRet:
+	//decref(&sub);
   printStats(prog, &memo, &visitTable, startTime, sub);
   ThreadVec_free(&ready);
   freeVisitTable(visitTable);
-  return 0;
+  return matched;
 }
 
