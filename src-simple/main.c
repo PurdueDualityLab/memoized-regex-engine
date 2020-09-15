@@ -137,6 +137,18 @@ getEncoding(char *arg)
 	}
 }
 
+static void
+freeprog(Prog *p)
+{
+	int i;
+	for (i = 0; i < p->len; i++) {
+		Inst *inst = p->start + i;
+		if (inst->edges != NULL)
+			free(inst->edges);
+	}
+	free(p); // This also free p->start
+}
+
 int
 main(int argc, char **argv)
 {
@@ -222,7 +234,7 @@ main(int argc, char **argv)
 		printf("\n");
 	}
 
-	free(prog);
+	freeprog(prog);
 	freereg(re);
 
 	return 0;
