@@ -677,12 +677,12 @@ backtrack(Prog *prog, char *input, /* start-end pointers for each CG */ char **s
   char *inputEOL; /* Position of \0 terminating input */
   uint64_t startTime;
   int cg_br[MAXSUB/2];
-  ThreadVec *threads;
+  ThreadVec *threads = NULL;
 	int matched = 0;
 
   int inZWA = 0;
-  char *sp_save;
-  ThreadVec *threads_save;
+  char *sp_save = NULL;
+  ThreadVec *threads_save = NULL;
 
   inputEOL = input + strlen(input);
 
