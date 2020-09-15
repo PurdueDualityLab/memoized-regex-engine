@@ -8,6 +8,7 @@ CFLAGS=-ggdb -Wall -Werror -O2
 
 TARG=re
 OFILES=\
+	regexp.o\
 	backtrack.o\
 	compile.o\
 	main.o\

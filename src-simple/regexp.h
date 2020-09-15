@@ -73,6 +73,13 @@ struct Regexp
 	int visitInterval;
 };
 
+// Caller can fill in additional details
+Regexp *reg(int type, Regexp *left, Regexp *right);
+// Print the AST represented by this Regexp
+void printre(Regexp *r);
+// Recursively free the AST represented by this Regexp
+void freereg(Regexp *r);
+
 enum	/* Regexp.type */
 {
 	Alt = 1, /* A | B -- 2-arity */
