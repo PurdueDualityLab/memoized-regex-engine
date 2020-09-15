@@ -176,7 +176,6 @@ curly:
 		_curlyString[_curlyStringIx] = '\0';
 		curlyNumbers cn = parseCurlies(_curlyString);
 		$$ = reg(Curly, nil, nil);
-		printf("Allocated curly reg %p\n", $$);
 		$$->curlyMin = cn.min;
 		$$->curlyMax = cn.max;
 	}

@@ -15,7 +15,6 @@ reg(int type, Regexp *left, Regexp *right)
 void
 freereg(Regexp *r)
 {
-	printf("freeing R: %p\n", r);
 	if (r->left != NULL) {
 		freereg(r->left);
 	}
