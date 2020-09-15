@@ -1,4 +1,5 @@
 #include "regexp.h"
+#include "log.h"
 
 Regexp*
 reg(int type, Regexp *left, Regexp *right)
@@ -9,12 +10,15 @@ reg(int type, Regexp *left, Regexp *right)
 	r->type = type;
 	r->left = left;
 	r->right = right;
+	logMsg(LOG_DEBUG, "reg: alloc %p", r);
 	return r;
 }
 
 void
 freereg(Regexp *r)
 {
+	logMsg(LOG_DEBUG, "freereg: reg %p", r);
+	
 	if (r->left != NULL) {
 		freereg(r->left);
 	}
