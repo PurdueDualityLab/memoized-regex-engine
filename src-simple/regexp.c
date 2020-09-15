@@ -31,10 +31,11 @@ freereg(Regexp *r)
 		free(r->children);
 	}
 
+    int ccSame = (r->ccLow == r->ccHigh);
 	if (r->ccLow != NULL) {
-		freereg(r->ccLow);
+        freereg(r->ccLow);
 	}
-	if (r->ccHigh != NULL) {
+	if (r->ccHigh != NULL && !ccSame) {
 		freereg(r->ccHigh);
 	}
 
