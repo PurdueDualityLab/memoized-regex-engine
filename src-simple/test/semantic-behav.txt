@@ -39,18 +39,19 @@ ab$     :: abz             :: MISMATCH
 ^a+b$   :: ab              :: MATCH
 ^a+b$   :: aaab            :: MATCH
 ^ab$    :: xab             :: MISMATCH
+\Aab\Z  :: ab              :: MATCH
+\Aab\Z  :: aab             :: MISMATCH
+\Aab\z  :: ab              :: MATCH
+\Aab\z  :: aab             :: MISMATCH
 
 # These should work at any point in the regex
-^ab)$  :: xab             :: MISMATCH
-^ab)$  :: ab              :: MATCH
-^b     :: ab              :: MISMATCH
-$b     :: ab              :: MISMATCH
-^ab$)  :: ab              :: MATCH
-^ab$)  :: aab             :: MISMATCH
-^ab$)  :: abb             :: MISMATCH
-\Aab\Z\z :: ab             :: MATCH
-\Aab\Z  :: aab             :: MISMATCH
-ab\z   :: ab              :: MATCH
+(^ab)$  :: xab             :: MISMATCH
+(^ab)$  :: ab              :: MATCH
+^b      :: ab              :: MISMATCH
+$b      :: ab              :: MISMATCH
+(^ab$)  :: ab              :: MATCH
+(^ab$)  :: aab             :: MISMATCH
+(^ab$)  :: abb             :: MISMATCH
 
 # Built-in character classes
 \wa     :: aa              :: MATCH
@@ -133,7 +134,7 @@ a\^     :: a^              :: MATCH
 [a-z]       :: p            :: MATCH
 [a-z]       :: -            :: MISMATCH
 [a\-z]      :: p            :: MISMATCH
-[a\-z]      :: p            :: MATCH
+[^a\-z]     :: p            :: MATCH
 
 # Escaping within CCCs
 [\[\]\-\\]      :: [        :: MATCH
