@@ -23,4 +23,7 @@ enum
 
 void logMsg(int level, const char* message, ...);
 
+/* True if we log such messages (e.g. to control a call to printre). */
+int shouldLog(int level);
+
 #endif

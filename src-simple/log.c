@@ -51,6 +51,14 @@ void log_init() {
 }
 
 void logMsg_format(const char* tag, const char* message, va_list args);
+int shouldLog(int logLvl)
+{
+    if (!initialized){
+        log_init();
+    }
+
+    return logLvl <= maxVerbosity;
+}
 
 void logMsg(int level, const char* message, ...) {
     va_list args;
@@ -59,7 +67,7 @@ void logMsg(int level, const char* message, ...) {
         log_init();
     }
 
-    if (level <= maxVerbosity) {
+    if (shouldLog(level)) {
         va_start(args, message);
         logMsg_format(logLevels[level], message, args);
         va_end(args);

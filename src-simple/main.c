@@ -179,26 +179,27 @@ main(int argc, char **argv)
 	re = parse(q.regex);
 
 	// Optimize
-#if DEBUG
-	logMsg(LOG_INFO, "Initial re:");
-	printre(re);
-	printf("\n");
-#endif
-
+	if (shouldLog(LOG_DEBUG)) {
+		logMsg(LOG_INFO, "Initial re:");
+		printre(re);
+		printf("\n");
+	}
 	re = transform(re);
 
-#if DEBUG
-	logMsg(LOG_INFO, "Transformed re:");
-	printre(re);
-	printf("\n");
-#endif
+	if (shouldLog(LOG_DEBUG)) {
+		logMsg(LOG_INFO, "Transformed re:");
+		printre(re);
+		printf("\n");
+	}
 
 	// Compile
 	prog = compile(re, memoMode);
+	if (shouldLog(LOG_DEBUG)) {
+		logMsg(LOG_INFO, "Compiled :");
+		printprog(prog);
+		printf("\n");
+	}
 
-#if DEBUG
-	printprog(prog);
-#endif
 
 	// Simulate
 	prog->memoMode = memoMode;
