@@ -110,6 +110,19 @@ a\^     :: a^              :: MATCH
 [^a-cx-z]  :: b            :: MISMATCH
 [\s]       :: b            :: MISMATCH
 
+# - means - at beginning or end
+[-]        :: -            :: MATCH
+[-a]       :: a            :: MATCH
+[-a]       :: -            :: MATCH
+[a-]       :: a            :: MATCH
+[a-]       :: -            :: MATCH
+
+# - can be escaped
+[a-z]       :: p            :: MATCH
+[a-z]       :: -            :: MISMATCH
+[a\-z]      :: p            :: MISMATCH
+[a\-z]      :: p            :: MATCH
+
 # Escaping within CCCs
 [\[\]\-\\]      :: [        :: MATCH
 [\[\]\-\\]      :: ]        :: MATCH
