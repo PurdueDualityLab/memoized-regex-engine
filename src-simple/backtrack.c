@@ -219,6 +219,12 @@ initMemoTable(Prog *prog, int nChars, int memoMode, int memoEncoding)
   return memo;
 }
 
+void
+freeMemoTable(Memo memo)
+{
+	//TODO (Not needed for prototype assessment).
+}
+
 static int
 woffset(char *input, char *sp)
 {
@@ -944,5 +950,6 @@ CleanupAndRet:
   printStats(prog, &memo, &visitTable, startTime, sub);
   ThreadVec_free(&ready);
   freeVisitTable(visitTable);
+  freeMemoTable(memo);
   return matched;
 }
