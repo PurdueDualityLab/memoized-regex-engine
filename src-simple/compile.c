@@ -168,9 +168,9 @@ Prog_compute_in_degrees(Prog *p)
 		case Char:
 		case Save:
 		case StringCompare:
-		case ZeroWidthAssertion:
+		case InlineZeroWidthAssertion:
+		case RecursiveZeroWidthAssertion:
 		case RecursiveMatch:
-		case WordBoundary:
 			/* Always goes to next instr */
 			p->start[i+1].inDegree++;
 			break;
@@ -1229,17 +1229,17 @@ emit(Regexp *r, int memoMode)
 
 	case CharEscape:
 		if (r->ch == 'b' || r->ch == 'B') {
-			pc->opcode = WordBoundary;
-			pc->visitInterval = -1;
+			pc->opcode = InlineZeroWidthAssertion;
 			pc->c = r->ch;
+			pc->visitInterval = -1;
 		} else {
 			pc->opcode = CharClass;
 			pc->visitInterval = 0;
 
+			// Fill in the pc details
 			_emitRegexpCharRange2Inst(r, pc);
 			pc->charRangeCounts = 1;
 		}
-
 		pc++;
 		break;
 	
@@ -1331,10 +1331,16 @@ emit(Regexp *r, int memoMode)
 		break;
 
 	case Lookahead:
-		pc->opcode = ZeroWidthAssertion;
+		pc->opcode = RecursiveZeroWidthAssertion;
 		pc++;
 		emit(r->left, memoMode);
 		pc->opcode = RecursiveMatch;
+		pc++;
+		break;
+
+	case InlineZWA:
+		pc->opcode = InlineZeroWidthAssertion;
+		pc->c = r->ch;
 		pc++;
 		break;
 	}
@@ -1355,12 +1361,6 @@ printprog(Prog *p)
 			fatal("printprog: unknown opcode");
 		case StringCompare:
 			printf("%2d. stringcompare %d (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->cgNum, pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
-			break;
-		case ZeroWidthAssertion:
-			printf("%2d. zerowidth\n", (int)(pc-p->start));
-			break;
-		case RecursiveMatch:
-			printf("%2d. recursivematch\n", (int)(pc-p->start));
 			break;
 		case Split:
 			printf("%2d. split %d, %d (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), (int)(pc->x-p->start), (int)(pc->y-p->start), pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
@@ -1388,9 +1388,15 @@ printprog(Prog *p)
 			printf("%2d. any (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
 			//printf("%2d. any\n", (int)(pc->stateNum));
 			break;
-		case WordBoundary:
-			printf("%2d. wordBoundary %c (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->c, pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
+		case InlineZeroWidthAssertion:
+			printf("%2d. inlineZWA %c \n", (int)(pc-p->start), pc->c);
 			//printf("%2d. any\n", (int)(pc->stateNum));
+			break;
+		case RecursiveZeroWidthAssertion:
+			printf("%2d. recursizeZWA \n", (int)(pc-p->start));
+			break;
+		case RecursiveMatch:
+			printf("%2d. recursivematch\n", (int)(pc-p->start));
 			break;
 		case CharClass:
 			printf("%2d. charClass (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum, pc->visitInterval);

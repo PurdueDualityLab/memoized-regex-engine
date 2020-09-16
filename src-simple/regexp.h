@@ -99,6 +99,7 @@ enum	/* Regexp.type */
 	Curly,	 /* A{} */
 	Backref, /* \1 */
 	Lookahead, /* (?=A) */
+	InlineZWA, /* ^, \A, \b, \B, $, \z, \Z */
 };
 
 Regexp *parse(char*);
@@ -169,11 +170,11 @@ enum	/* Inst.opcode */
 	Split,
 	SplitMany,
 	Any,
-	WordBoundary,
 	CharClass,
 	Save,
 	StringCompare,
-	ZeroWidthAssertion,
+	InlineZeroWidthAssertion,
+	RecursiveZeroWidthAssertion,
 };
 
 Prog *compile(Regexp*, int);
