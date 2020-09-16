@@ -172,7 +172,8 @@ printre(Regexp *r)
 			}
 		}
 		else {
-			printre(r->left);
+            if (r->left != NULL)
+    			printre(r->left);
 		}
 		printf(")");
 		break;

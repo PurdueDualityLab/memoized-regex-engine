@@ -252,9 +252,13 @@ transform(Regexp *r)
 	logMsg(LOG_INFO, "Transforming regex (AST pass)");
 
 	ret = r;
+	logMsg(LOG_DEBUG, "  Curlies");
 	ret = _transformCurlies(ret);
+	logMsg(LOG_DEBUG, "  AltGroups");
 	ret = _transformAltGroups(ret);
+	logMsg(LOG_DEBUG, "  Backrefs");
 	ret = _escapedNumsToBackrefs(ret);
+	logMsg(LOG_DEBUG, "  CustomCharClass");
 	ret = _mergeCustomCharClassRanges(ret);
 
 	return ret;
@@ -390,7 +394,8 @@ _transformCurlies(Regexp *r)
 	case Lookahead:
 		/* Unary operators -- pass the buck. */
 		logMsg(LOG_DEBUG, "  curlies: Quest/Star/Plus/Paren/CCC/Lookahead: passing buck");
-		r->left = _transformCurlies(r->left);
+		if (r->left != NULL)
+			r->left = _transformCurlies(r->left);
 		return r;
 	case Lit:
 	case Dot:
@@ -482,7 +487,8 @@ _transformAltGroups(Regexp *r)
 	case Curly:
 		/* Unary operators -- pass the buck. */
 		logMsg(LOG_DEBUG, "  altGroups: Quest/Star/Plus/Paren/CCC/Lookahead/Curly: passing buck");
-		r->left = _transformAltGroups(r->left);
+		if (r->left != NULL)
+			r->left = _transformAltGroups(r->left);
 		return r;
 	case Lit:
 	case Dot:
@@ -552,6 +558,9 @@ _escapedNumsToBackrefs(Regexp *r)
 int
 _countCCCNRanges(Regexp *r)
 {
+	if (r == NULL)
+		return 0;
+
 	if (r->type != CharRange)
 		fatal("countCCCNRanges: unexpected type");
 
@@ -568,6 +577,9 @@ _countCCCNRanges(Regexp *r)
 int
 _fillCCCChildren(Regexp *r, Regexp **children, int i)
 {
+	if (r == NULL)
+		return 0;
+
 	if (r->type != CharRange)
 		fatal("fillCCCChildren: unexpected type");
 
@@ -1218,6 +1230,7 @@ emit(Regexp *r, int memoMode)
 
 		pc->charRangeCounts = 0;
 		for (i = 0; i < r->arity; i++) {
+			// This doesn't really emit, it's actually populating pc fields
 			_emitRegexpCharRange2Inst(r->children[i], pc);
 			pc->charRangeCounts++;
 		}

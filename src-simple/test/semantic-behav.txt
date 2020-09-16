@@ -32,12 +32,24 @@ xa+y    :: xy              :: MISMATCH
 xa+y    :: xaaaaaay        :: MATCH
 
 # Anchors: ^, $
-^ab     :: ab              :: MATCH
-^ab     :: xab             :: MISMATCH
-ab$     :: ab              :: MATCH
-ab$     :: abz             :: MISMATCH
-^a+b$   :: ab              :: MATCH
-^ab$    :: xab             :: MISMATCH
+ab     :: ab              :: MATCH
+ab     :: xab             :: MISMATCH
+b$     :: ab              :: MATCH
+b$     :: abz             :: MISMATCH
+a+b$   :: ab              :: MATCH
+ab$    :: xab             :: MISMATCH
+
+ These should work at any point in the regex
+^ab)$  :: xab             :: MISMATCH
+^ab)$  :: ab              :: MATCH
+^b     :: ab              :: MISMATCH
+$b     :: ab              :: MISMATCH
+^ab$)  :: ab              :: MATCH
+^ab$)  :: aab             :: MISMATCH
+^ab$)  :: abb             :: MISMATCH
+Aab\Z\z :: ab             :: MATCH
+Aab\Z  :: aab             :: MISMATCH
+ab\z   :: ab              :: MATCH
 
 # Built-in character classes
 \wa     :: aa              :: MATCH
@@ -82,7 +94,6 @@ a\^     :: a^              :: MATCH
 \}      :: }                :: MATCH
 \{2,3\}      :: a{2,3}     :: MATCH
 \{2,3\}      :: aa         :: MISMATCH
-
 
 # Custom character classes
 [a]     :: a               :: MATCH
@@ -144,9 +155,15 @@ a-z   :: a-z :: MATCH
 [-x-z]  ::   y  :: MATCH
 [^-x]   ::   -  :: MISMATCH
 
-[x-]        ::  x  :: SYNTAX
+[-]         ::  -  :: MATCH
+[x-]        ::  x  :: MATCH
+[x-]        ::  -  :: MATCH
+[x-]        ::  a  :: MISMATCH
+[^x-]       ::  -  :: MISMATCH
+[^-x]       ::  -  :: MISMATCH
+[^-x]       ::  a  :: MATCH
+
 [a-b-x-y]   ::  x  :: SYNTAX
-[^x-]       ::  -  :: SYNTAX
 
 # Fixed-width assertions
 ^\b$    :: b        :: MISMATCH

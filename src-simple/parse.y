@@ -347,22 +347,32 @@ single:
 ;
 
 ccc:
-	'[' charRanges ']'
+	'[' '-' ']'
 	{
-		//printf("[ charRanges ]\n");
+		$$ = reg(CustomCharClass, nil, nil);
+		$$->plusDash = 1;
+	}
+|	'[' charRanges ']'
+	{
 		$$ = reg(CustomCharClass, $2, nil);
 		$$->plusDash = 1;
 		$$->ccInvert = 0;
 	}
 	// Variant with dash -- unambiguous. Cannot do "charRanges '-'" because yacc is an LR(1) -- ambiguous?
+	// (Hence we have a rewriting pass to convert [a-] into [-a])
 |	'[' '-' charRanges ']'
 	{
-		//printf("[ - charRanges ]\n");
 		$$ = reg(CustomCharClass, $3, nil);
 		$$->plusDash = 1;
 		$$->ccInvert = 0;
 	}
 	// Inverted
+|	'[' '^' '-' ']'
+	{
+		$$ = reg(CustomCharClass, nil, nil);
+		$$->plusDash = 1;
+		$$->ccInvert = 1;
+	}
 |   '[' '^' charRanges ']'
 	{
 		$$ = reg(CustomCharClass, $3, nil);
@@ -376,7 +386,7 @@ ccc:
 	}
 ;
 
-// Structure is a linked list: (CharRange 1 with details) L (CharRange 2 with details) L ...
+// Structure is a Reg linked list: (CharRange 1 with details) L (CharRange 2 with details) L ...
 charRanges:
 	charRange
 |   charRanges charRange
@@ -559,10 +569,71 @@ endsWithAnchor(Regexp *r)
 	return 0;
 }
 
+static void
+_moveDashToBeginningOfCCC(char *s)
+{
+	int len = strlen(s);
+	int i, j;
+
+	int start = 0;
+	int esc = 0;
+	int inCCC = 0;
+	int negated = 0;
+	for (i = 0; i < len; i++) {
+		if (esc) {
+			esc = 0;
+			continue;
+		}
+
+		if (s[i] == '\\') {
+			esc = 1;
+			continue;
+		}
+
+		if (inCCC && s[i] == '-' && s[i+1] == ']') {
+			// Switcheroo
+			int newLoc = negated ? start + 2 : start + 1;
+
+			// Copy rest right
+			for (j = i; j >= newLoc; j--) {
+				s[j] = s[j-1];
+			}
+
+			// Move - left
+			s[newLoc] = '-';
+		}
+
+		if (s[i] == '[') {
+			inCCC = 1;
+			negated = 0;
+			start = i;
+		}
+		if (s[i] == '^' && inCCC && start == i-1) {
+			negated = 1;
+		}
+		if (s[i] == ']') {
+			inCCC = 0;
+		}
+	}
+
+	return;
+}
+
+static void
+rewriteSyntax(char *s)
+{
+	logMsg(LOG_DEBUG, "rewriteSyntax: Before /%s/\n", s); 
+	_moveDashToBeginningOfCCC(s);
+	logMsg(LOG_DEBUG, "rewriteSyntax: After /%s/\n", s); 
+}
+
+
 Regexp*
 parse(char *s)
 {
 	Regexp *r, *combine;
+
+	rewriteSyntax(s);
 
 	input = s;
 	parsed_regexp = nil;
