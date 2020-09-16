@@ -887,10 +887,13 @@ BACKTRACKING_SEARCH:
             pc++;
             continue;
           }
+					break;
         default:
           logMsg(LOG_ERROR, "Unknown InlineZWA character %c", pc->c);
           assert(!"Unknown InlineZWA character\n");
         }
+
+				logMsg(LOG_DEBUG, "InlineZWA %c unsatisfied", pc->c);
         goto Dead;
       }
       case RecursiveZeroWidthAssertion:

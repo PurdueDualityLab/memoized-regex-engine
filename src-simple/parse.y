@@ -78,32 +78,9 @@ static int DISABLE_CAPTURES = 0; // We ignore captures during parsing of (?=look
 %%
 
 line: 
-	'^' alt '$' EOL
-	{
-		parsed_regexp = $2;
-		parsed_regexp->bolAnchor = 1;
-		parsed_regexp->eolAnchor = 1;
-		return 1;
-	}
-|	'^' alt EOL
-	{
-		parsed_regexp = $2;
-		parsed_regexp->bolAnchor = 1;
-		parsed_regexp->eolAnchor = 0;
-		return 1;
-	}
-|	alt '$' EOL
+	alt EOL
 	{
 		parsed_regexp = $1;
-		parsed_regexp->bolAnchor = 0;
-		parsed_regexp->eolAnchor = 1;
-		return 1;
-	}
-|	alt EOL
-	{
-		parsed_regexp = $1;
-		parsed_regexp->bolAnchor = 0;
-		parsed_regexp->eolAnchor = 0;
 		return 1;
 	}
 ;
@@ -204,7 +181,8 @@ count:
 escape:
 	'\\' CHAR
 	{
-		if ($2 == 'b' || $2 == 'B') {
+		// Is it a ZWA (\b \A etc.) or a normal char escape?
+		if ($2 == 'b' || $2 == 'B' || $2 == 'A' || $2 == 'Z' || $2 == 'z') {
 			$$ = reg(InlineZWA, nil, nil);
 		} else {
 			$$ = reg(CharEscape, nil, nil);
@@ -535,6 +513,51 @@ yyerror(char *s)
 	fatal("%s", s);
 }
 
+static int
+startsWithAnchor(Regexp *r)
+{
+	Regexp *curr = r;
+	while (curr != NULL) {
+		switch (curr->type) {
+		case InlineZWA:
+			if (curr->ch == '^' || curr->ch == 'A')
+				return 1;
+			else
+				return 0;
+		case Alt:
+		case Cat:
+				curr = curr->left;
+				break;
+		default:
+			return 0;
+		}
+	}
+
+	return 0;
+}
+
+static int
+endsWithAnchor(Regexp *r)
+{
+	Regexp *curr = r;
+	while (curr != NULL) {
+		switch (curr->type) {
+		case InlineZWA:
+			if (curr->ch == '$' || curr->ch == 'z' || curr->ch == 'Z')
+				return 1;
+			else
+				return 0;
+		case Alt:
+		case Cat:
+			curr = curr->right;
+			break;
+		default:
+			return 0;
+		}
+	}
+
+	return 0;
+}
 
 Regexp*
 parse(char *s)
@@ -548,19 +571,31 @@ parse(char *s)
 		yyerror("did not parse");
 	if(parsed_regexp == nil)
 		yyerror("parser nil");
+	
+	logMsg(LOG_INFO, "parsed_regexp\n"); 
+	printre(parsed_regexp);
+	printf("\n");
 		
 	r = reg(Paren, parsed_regexp, nil);	// $0 parens
 
 	/* Tack on the dotstars */
 	combine = r;
-	if (!parsed_regexp->bolAnchor) {
+	/* This is imperfect, e.g. (^...), but it should cover most regexes. */
+	logMsg(LOG_INFO, "parsed_regexp type %d\n", parsed_regexp->type);
+	int startAnchor = startsWithAnchor(parsed_regexp);
+	if (startAnchor) {
+		logMsg(LOG_INFO, "Starts with anchor\n");
+	} else {
 		logMsg(LOG_INFO, "No ^, tacking on leading .*");
 		Regexp *bolDotstar = reg(Star, reg(Dot, nil, nil), nil);
 		bolDotstar->n = 1;	// non-greedy
 		combine = reg(Cat, bolDotstar, combine);
 	}
 
-	if (!parsed_regexp->eolAnchor) {
+	int endAnchor = endsWithAnchor(parsed_regexp);
+	if (endAnchor) {
+		logMsg(LOG_INFO, "Ends with anchor\n");
+	} else {
 		logMsg(LOG_INFO, "No $, tacking on trailing .*");
 		Regexp *eolDotstar = reg(Star, reg(Dot, nil, nil), nil);
 		eolDotstar->n = 1;	// non-greedy

@@ -80,6 +80,7 @@ printre(Regexp *r)
 	switch(r->type) {
 	default:
 		printf("???");
+		fatal("Unsupported type %d\n", r->type);
 		break;
 		
 	case Alt:
@@ -201,6 +202,10 @@ printre(Regexp *r)
 		printf("Lookahead(");
 		printre(r->left);
 		printf(")");
+		break;
+	
+	case InlineZWA:
+		printf("InlineZWA(%c)", r->ch);
 		break;
 	}
 
