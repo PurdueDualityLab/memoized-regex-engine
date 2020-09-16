@@ -384,7 +384,7 @@ _transformCurlies(Regexp *r)
 		return r;
 	case Quest:
 	case Star:
-  case Plus:
+	case Plus:
 	case Paren:
 	case CustomCharClass:
 	case Lookahead:
@@ -396,6 +396,7 @@ _transformCurlies(Regexp *r)
 	case Dot:
 	case CharEscape:
 	case CharRange:
+	case InlineZWA:
 		/* Terminals */
 		logMsg(LOG_DEBUG, "  curlies: ignoring terminal");
 		return r;
@@ -487,6 +488,7 @@ _transformAltGroups(Regexp *r)
 	case Dot:
 	case CharEscape:
 	case CharRange:
+	case InlineZWA:
 		/* Terminals */
 		logMsg(LOG_DEBUG, "  altGroups: ignoring terminal");
 		return r;
@@ -540,6 +542,7 @@ _escapedNumsToBackrefs(Regexp *r)
 	case Lit:
 	case Dot:
 	case CustomCharClass:
+	case InlineZWA:
 		/* Terminals */
 		logMsg(LOG_DEBUG, "  backrefs: ignoring terminal");
 		return r;
@@ -632,6 +635,7 @@ _mergeCustomCharClassRanges(Regexp *r)
 	case Dot:
 	case CharEscape:
 	case Backref:
+	case InlineZWA:
 		/* Terminals */
 		logMsg(LOG_DEBUG, "  mergeCCC: ignoring terminal");
 		return r;
@@ -705,6 +709,7 @@ count(Regexp *r)
 	case CharEscape:
 	case CustomCharClass:
 	case Backref:
+	case InlineZWA:
 		return 1;
 	case Paren:
 		return 2 + count(r->left);
@@ -1228,18 +1233,12 @@ emit(Regexp *r, int memoMode)
 		break;
 
 	case CharEscape:
-		if (r->ch == 'b' || r->ch == 'B') {
-			pc->opcode = InlineZeroWidthAssertion;
-			pc->c = r->ch;
-			pc->visitInterval = -1;
-		} else {
-			pc->opcode = CharClass;
-			pc->visitInterval = 0;
+		pc->opcode = CharClass;
+		pc->visitInterval = 0;
 
-			// Fill in the pc details
-			_emitRegexpCharRange2Inst(r, pc);
-			pc->charRangeCounts = 1;
-		}
+		// Fill in the pc details
+		_emitRegexpCharRange2Inst(r, pc);
+		pc->charRangeCounts = 1;
 		pc++;
 		break;
 	

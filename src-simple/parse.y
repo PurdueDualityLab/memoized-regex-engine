@@ -204,7 +204,11 @@ count:
 escape:
 	'\\' CHAR
 	{
-		$$ = reg(CharEscape, nil, nil);
+		if ($2 == 'b' || $2 == 'B') {
+			$$ = reg(InlineZWA, nil, nil);
+		} else {
+			$$ = reg(CharEscape, nil, nil);
+		}
 		$$->ch = $2;
 	}
 |	'\\' '|'
@@ -352,6 +356,16 @@ single:
 		$$ = reg(Lit, nil, nil);
 		$$->ch = '-';
 	}
+|   '^'
+	{
+		$$ = reg(InlineZWA, nil, nil);
+		$$->ch = '^';
+	}
+|   '$'
+	{
+		$$ = reg(InlineZWA, nil, nil);
+		$$->ch = '$';
+	}
 ;
 
 ccc:
@@ -422,7 +436,7 @@ charRangeChar:
 		$$ = reg(Lit, nil, nil);
 		$$->ch = $1;
 	}
-|   escape
+|   escape /* TODO For perfect accuracy, in many regex engines, eg [\b] denotes a backspace character. We ignore context so it means a boundary. */
 |   '.'
 	{
 		$$ = reg(Lit, nil, nil);
