@@ -355,7 +355,7 @@ ccc:
 |	'[' charRanges ']'
 	{
 		$$ = reg(CustomCharClass, $2, nil);
-		$$->plusDash = 1;
+		$$->plusDash = 0;
 		$$->ccInvert = 0;
 	}
 	// Variant with dash -- unambiguous. Cannot do "charRanges '-'" because yacc is an LR(1) -- ambiguous?
