@@ -59,10 +59,10 @@ _testhelper:
 	$(CC) -o rle-test rle-test.c $(RLE_TEST_OFILES)
 
 semtests: _testhelper
-	MEMOIZATION_LOGLVL=debug ./rle-test && cd ../eval; MEMOIZATION_LOGLVL=debug ./unittest-prototype.py --semanticOnly
+	MEMOIZATION_LOGLVL=debug ./rle-test && cd ../eval; MEMOIZATION_LOGLVL=silent ./unittest-prototype.py --semanticOnly
 
 perftests: _testhelper
-	MEMOIZATION_LOGLVL=debug ./rle-test && cd ../eval; MEMOIZATION_LOGLVL=debug ./unittest-prototype.py --perfOnly
+	MEMOIZATION_LOGLVL=debug ./rle-test && cd ../eval; MEMOIZATION_LOGLVL=silent ./unittest-prototype.py --perfOnly
 
 tests: _testhelper
-	MEMOIZATION_LOGLVL=debug ./rle-test && cd ../eval; MEMOIZATION_LOGLVL=debug ./unittest-prototype.py
+	MEMOIZATION_LOGLVL=debug ./rle-test && cd ../eval; MEMOIZATION_LOGLVL=silent ./unittest-prototype.py

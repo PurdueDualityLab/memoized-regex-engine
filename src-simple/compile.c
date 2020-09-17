@@ -239,7 +239,7 @@ Regexp* _escapedNumsToBackrefs(Regexp *r);
 Regexp* _mergeCustomCharClassRanges(Regexp *r);
 
 /* Update this Regexp AST to make it more amenable to compilation
- *  - convert Curly to Alt-chain by expansion: A{1,3} --> (A|AA|AAA)
+ *  - convert Curly to Alt-chain by expansion: A{1,3} --> A(A(A)?)?
  *  - replace Alt-chains with a "flat" AltList with one child per Alt entity
  *  - replace a CustomCharClass's CharRange chain with a flat list of CharRange's within the CCC
  *  - convert \1 to a backref
@@ -299,7 +299,34 @@ _repeatPatternWithConcat(Regexp *r, int n)
 	return ret;
 }
 
-// Construct Alt(Alt(...)) appropriately
+static
+Regexp *
+_repeatPatternWithNestedQuest(Regexp *r, int max)
+{
+	assert(r != NULL);
+	assert(max > 0);
+	Regexp *ret = NULL;
+
+	// max may be large, e.g. x{1,4096}.
+	// To avoid recursion, we'll start with the innermost and work our way outward.
+	// max > 0, so we know there's at least an innermost node
+	Regexp *innermost = reg(Quest, copyreg(r), NULL);
+
+	int i;
+	Regexp *prev = innermost;
+	for (i = 1; i < max; i++) {
+		// Given prev, the next layer is (X prev)?
+		Regexp *nextInnermost = reg(Quest, reg(Cat, copyreg(r), prev), NULL);
+		prev = nextInnermost;
+	}
+	ret = prev;
+
+	return ret;
+}
+
+#if 0
+// A{min,max} -> A|AA|AAA|...
+// This works but it's not smart. You create |m-n|^2 copies of A, even worse for nesting.
 static
 Regexp *
 _repeatPatternWithAlt(Regexp *r, int min, int max)
@@ -323,11 +350,12 @@ _repeatPatternWithAlt(Regexp *r, int min, int max)
 
 	return ret;
 }
+#endif
 
 /* Given A and recursively transformed A':
  *   A{2}   ->  A'A'
- *   A{1,2} ->  A'|A'A'
- *   A{,2}  ->  Ques(A'|A'A')
+ *   A{1,2} ->  A'(A')?
+ *   A{,2}  ->  (A'(A')?)?
  *   A{2,}  ->  A'A'A'*
  */
 Regexp*
@@ -339,44 +367,60 @@ _transformCurlies(Regexp *r)
 		return NULL;
 	case Curly:
 	{
-		logMsg(LOG_DEBUG, "  transformCurlies: Rewriting Curly");
+		logMsg(LOG_DEBUG, "  transformCurlies: Rewriting Curly: (min %d, max %d)", r->curlyMin, r->curlyMax);
+		assert(!(r->curlyMin == -1 && r->curlyMax == -1)); // reject r = a{,} 
+		// r is of the form {m,n} where at most one of m and n is undefined
 
 		// Obtain A'. Make a copy anywhere you use it.
 		Regexp *A = _transformCurlies(r->left);
 		// This is populated with the replacement tree
 		Regexp *newR = NULL;
 
-		if (r->curlyMin == r->curlyMax) {
-			assert(r->curlyMin >= 0); // Ugh
-			// A{2} -> A'A'
-			newR = _repeatPatternWithConcat(A, r->curlyMin);
-		} else if (r->curlyMin > 0 && r->curlyMax > 0) {
-			// A{1,2} -> A|AA
-			newR = _repeatPatternWithAlt(A, r->curlyMin, r->curlyMax);
-		} else if (r->curlyMin == -1) {
-			assert(r->curlyMax >= 0);
-			// A{,2} -> Ques(A{1,2})
-			Regexp *quesChild = _repeatPatternWithAlt(A, 1, r->curlyMax);
-			printf("allocated quesChild R: %p\n", quesChild);
-			newR = reg(Quest, quesChild, NULL);
-		} else if (r->curlyMax == -1) {
-			// A{1,} --> AA*
-			assert(r->curlyMin >= 0);
-			if (r->curlyMin == 0) {
-				newR = reg(Star, copyreg(A), NULL);
-			} else if (r->curlyMin == 1) {
-				newR = reg(Plus, copyreg(A), NULL);
-			} else {
-				Regexp *prefixChild  = _repeatPatternWithConcat(A, r->curlyMin);
-				newR = reg(Cat, prefixChild, reg(Star, copyreg(A), NULL));
-			}
+		Regexp *prefix = NULL;
+		Regexp *suffix = NULL;
 
+		// TODO: 
+		//   2. Express A'{,n} as either A' (if n == -1) or Ques(A'.Ques(...))
+		//      NB: (?:A(?:A(...)?)?)? is "tail recursive" so all of the jumps point to the same place. in-deg>1 just covers that one place.
+		//      In our implementation, if capture groups are used instead, we lose this desirable property because of how in-deg is calculated.
+		//   3. Re-measure |Q| etc.
+
+		// 1. Factor out any prefix to reduce to A'{,n} 
+		int prefixLen = 0;
+		if (r->curlyMin > 0) {
+			logMsg(LOG_DEBUG, "  transformCurlies: Factoring out prefix of length %d", r->curlyMin);
+			prefixLen = r->curlyMin;
+			prefix = _repeatPatternWithConcat(A, r->curlyMin);
 		}
-		assert(newR != NULL);
+
+		// 2. Express A'{,n} as either A'* (if n == -1) or Ques(A'.Ques(...))
+		if (r->curlyMax == -1) {
+			logMsg(LOG_DEBUG, "  transformCurlies: Suffix is A*");
+			suffix = reg(Star, copyreg(A), NULL);
+		} else {
+			int remainder = r->curlyMax - prefixLen;
+			if (remainder > 0) {
+				// A{,7}: Express with nested Quest
+				logMsg(LOG_DEBUG, "  transformCurlies: Suffix is A{,%d}", remainder);
+				suffix = _repeatPatternWithNestedQuest(A, remainder);
+			} else {
+				// A{5,5} == A{5}
+				logMsg(LOG_DEBUG, "  transformCurlies: No suffix");
+				suffix = NULL;
+			}
+		}
+
+		assert(prefix != NULL || suffix != NULL);
+		if (prefix == NULL) {
+			newR = suffix;
+		} else if (suffix == NULL) {
+			newR = prefix;
+		} else {
+			newR = reg(Cat, prefix, suffix);
+		}
 
 		freereg(A); // We no longer need this subtree
-		free(r); // We no longer need this Curly node
-
+		free(r); // We no longer need this Curly node -- should this be freereg now that copyreg is deep?
 		return newR;
 	}
 	case Alt:
@@ -1401,7 +1445,7 @@ printprog(Prog *p)
 			//printf("%2d. any\n", (int)(pc->stateNum));
 			break;
 		case InlineZeroWidthAssertion:
-			printf("%2d. inlineZWA %c \n", (int)(pc-p->start), pc->c);
+			printf("%2d. inlineZWA %c (memo? %d -- state %d)\n", (int)(pc-p->start), pc->c, pc->shouldMemo, pc->memoStateNum);
 			//printf("%2d. any\n", (int)(pc->stateNum));
 			break;
 		case RecursiveZeroWidthAssertion:
