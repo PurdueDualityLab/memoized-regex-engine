@@ -100,6 +100,9 @@ enum	/* Regexp.type */
 	InlineZWA, /* ^, \A, \b, \B, $, \z, \Z */
 };
 
+// Used to support InlineZWA: \b \B 
+#define IS_WORD_CHAR(c) (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9'))
+
 Regexp *parse(char*);
 Regexp *reg(int type, Regexp *left, Regexp *right);
 void printre(Regexp*);
@@ -165,6 +168,7 @@ struct Inst
 
 	InstInfoForMemoSelPolicy memoInfo;
 };
+
 
 enum	/* Inst.opcode */
 {

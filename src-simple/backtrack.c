@@ -12,7 +12,6 @@
 #include <assert.h>
 
 /* Misc. */
-#define IS_WORD_CHAR(c) (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9'))
 
 typedef struct Thread Thread;
 
@@ -332,6 +331,8 @@ BACKTRACKING_SEARCH:
             int prev_c = *(sp-1);
             int curr_c = *sp;
 
+            // TODO This re-defines \w and \W in terms of IS_WORD_CHAR instead of in terms of ranges
+            // It would be cleaner to have a static compiled version of '\w' and '\W' nodes, and apply those nodes here.
             int prev_w = IS_WORD_CHAR(prev_c);
             int curr_w = IS_WORD_CHAR(curr_c);
 
