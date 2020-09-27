@@ -407,7 +407,25 @@ markMemo(Memo *memo, int statenum, int woffset, Sub *sub)
 
 void freeMemoTable(Memo memo)
 {
-	//TODO (Not needed for prototype assessment).
+    int i;
+
+    if (memo.mode == MEMO_NONE)
+        return;
+
+    switch(memo.encoding) {
+    case ENCODING_NONE:
+        for (i = 0; i < memo.nStates; i++) {
+            free(memo.visitVectors[i]);
+        }
+        free(memo.visitVectors);
+        break;
+    case ENCODING_NEGATIVE:
+        // TODO
+        break;
+    case ENCODING_RLE:
+        // TODO
+        break;
+    }
 }
 
 static int
