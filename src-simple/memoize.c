@@ -420,10 +420,13 @@ void freeMemoTable(Memo memo)
         free(memo.visitVectors);
         break;
     case ENCODING_NEGATIVE:
-        // TODO
+        HASH_CLEAR(hh, memo.simPosTable);
         break;
     case ENCODING_RLE:
-        // TODO
+        for (i = 0; i < memo.nStates; i++) {
+            RLEVector_destroy(memo.rleVectors[i]);
+        }
+        free(memo.rleVectors);
         break;
     }
 }

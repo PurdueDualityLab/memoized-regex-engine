@@ -1058,6 +1058,10 @@ do {                                                                            
   }                                                                              \
 } while (0)
 
+// Just the buckets -- suitable if you are counting the items yourself
+#define UT_TABLE_OVERHEAD(hh) ((hh)->tbl->num_buckets * sizeof(UT_hash_bucket))
+
+// Buckets + items -- total cost
 #define HASH_OVERHEAD(hh,head)                                                   \
  (((head) != NULL) ? (                                                           \
  (size_t)(((head)->hh.tbl->num_items   * sizeof(UT_hash_handle))   +             \
@@ -1135,8 +1139,6 @@ typedef struct UT_hash_table {
 #endif
 
 } UT_hash_table;
-
-#define UT_TABLE_OVERHEAD(hh) ((hh)->tbl->num_buckets * sizeof(UT_hash_bucket))
 
 typedef struct UT_hash_handle {
    struct UT_hash_table *tbl;
