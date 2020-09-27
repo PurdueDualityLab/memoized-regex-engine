@@ -54,11 +54,14 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime, S
   char memoConfig_vertexSelection[64];
   char memoConfig_encoding[64];
   char numBufForSprintf[128];
-  int csv_maxObservedCostsPerMemoizedVertex_len = 2;
-  char *csv_maxObservedAsymptoticCostsPerMemoizedVertex = mal(csv_maxObservedCostsPerMemoizedVertex_len * sizeof(char));
-  char *csv_maxObservedMemoryBytesPerMemoizedVertex = mal(csv_maxObservedCostsPerMemoizedVertex_len * sizeof(char));
-  vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, "");
-  vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, "");
+
+  int csv_asymptoteLen = 2;
+  char *csv_maxObservedAsymptoticCostsPerMemoizedVertex = mal(csv_asymptoteLen * sizeof(char));
+  vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_asymptoteLen, "");
+
+  int csv_memoryBytesLen = 2;
+  char *csv_maxObservedMemoryBytesPerMemoizedVertex = mal(csv_memoryBytesLen * sizeof(char));
+  vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_memoryBytesLen, "");
 
   switch (memo->mode) {
   case MEMO_NONE:
@@ -145,18 +148,18 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime, S
 
       // Asymptotically, cost of 1 (bit or byte) * |w|
       sprintf(numBufForSprintf, "%d", memo->nChars);
-      vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
+      vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_asymptoteLen, numBufForSprintf);
       if (i + 1 != memo->nStates) {
-        vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
+        vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_asymptoteLen, ",");
       }
 
       // In our actual implementation, we use one byte for each record.
       // We actually need only one bit, not one byte.
       // So we divide by 8 to indicate an optimal bit-based implementation.
       sprintf(numBufForSprintf, "%d", (memo->nChars + 7) / 8);
-      vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
+      vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_memoryBytesLen, numBufForSprintf);
       if (i + 1 != memo->nStates) {
-        vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
+        vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_memoryBytesLen, ",");
       }
     }
 
@@ -178,16 +181,16 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime, S
 
         // Asymptotically, 1 per entry
         sprintf(numBufForSprintf, "%d", visitsPerVertex[i]);
-        vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
+        vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_asymptoteLen, numBufForSprintf);
         if (prog->start[i].memoInfo.memoStateNum + 1 != memo->nStates) {
-          vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
+          vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_asymptoteLen, ",");
         }
 
         // In implementation, count the cost of each sim table entry associated with this vertex
         sprintf(numBufForSprintf, "%ld", UT_overheadPerVertex + (visitsPerVertex[i] * sizeof(SimPosTable)) );
-        vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
+        vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_memoryBytesLen, numBufForSprintf);
         if (prog->start[i].memoInfo.memoStateNum + 1 != memo->nStates) {
-          vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
+          vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_memoryBytesLen, ",");
         }
       }
     }
@@ -224,16 +227,16 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime, S
 
       // Asymptotically, 1 per RLE entry
       sprintf(numBufForSprintf, "%d", RLEVector_maxObservedSize(memo->rleVectors[i]));
-      vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
+      vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_asymptoteLen, numBufForSprintf);
       if (i + 1 != memo->nStates) {
-        vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
+        vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_asymptoteLen, ",");
       }
 
       // In the implementation, count the cost of the RLE entries
       sprintf(numBufForSprintf, "%d", RLEVector_maxBytes(memo->rleVectors[i]));
-      vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
+      vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_memoryBytesLen, numBufForSprintf);
       if (i + 1 != memo->nStates) {
-        vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
+        vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_memoryBytesLen, ",");
       }
 
     }
