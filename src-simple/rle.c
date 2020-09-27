@@ -413,6 +413,7 @@ RLEVector_destroy(RLEVector *vec)
   RLENode *node = NULL;
   avl_tree_for_each_in_postorder(node, vec->root, RLENode, node)
     free(node);
+  free(vec);
 
   return;
 }
