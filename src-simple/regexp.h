@@ -20,10 +20,8 @@ typedef struct Regexp Regexp;
 typedef struct Prog Prog;
 typedef struct Inst Inst;
 typedef struct InstCharRange InstCharRange;
-typedef struct Memo Memo;
-typedef struct SimPos SimPos;
-typedef struct SimPosTable SimPosTable;
 typedef struct LanguageLengthInfo LanguageLengthInfo;
+typedef struct InstInfoForMemoSelPolicy InstInfoForMemoSelPolicy;
 
 /* Possible lengths of "simple" strings in the language of this regex.
  * "simple" strings correspond to simple paths in the corresponding automaton. */
@@ -130,15 +128,26 @@ struct InstCharRange
 	int invert; // For \W, \S, \D
 };
 
+struct InstInfoForMemoSelPolicy
+{
+	int shouldMemo;
+	int inDegree;
+	int isAncestorLoopDestination;
+	int memoStateNum; /* -1 if "don't memo", else 0 to |Phi_memo| */
+
+	/*  (NOT WORKING). These are the intervals at which this vertex may be visited
+	 *    during the automaton simulation.
+	 *  Use to determine RLE lengths if we memoize this Inst.
+	 */
+	int visitInterval;
+};
+
 struct Inst
 {
 	int opcode; /* Instruction. Determined by the corresponding Regex node */
 	int c; /* For Lit or Boundary: The literal character */
 	int n; /* Quant: 1 means greedy. Save: 2*n and 2*n + 1 are paired. */
 	int stateNum; /* 0 to Prog->len-1 */
-	int shouldMemo;
-	int inDegree;
-	int memoStateNum; /* -1 if "don't memo", else 0 to |Phi_memo| */
 	Inst *x; /* Outgoing edge -- destination 1 (default option) */
 	Inst *y; /* Outgoing edge -- destination 2 (backup) */
 	int gen;	// global state, oooh!
@@ -154,11 +163,7 @@ struct Inst
 	/* For StringCompare */
 	int cgNum;
 
-	/*  These are the intervals at which this vertex may be visited
-	 *    during the automaton simulation.
-	 *  Use to determine RLE lengths if we memoize this Inst.
-	 */
-	int visitInterval;
+	InstInfoForMemoSelPolicy memoInfo;
 };
 
 enum	/* Inst.opcode */

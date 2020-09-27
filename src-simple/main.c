@@ -201,11 +201,13 @@ main(int argc, char **argv)
 		printf("\n");
 	}
 
-
-	// Simulate
+	// Memoization settings
 	prog->memoMode = memoMode;
 	prog->memoEncoding = memoEncoding;
+	Prog_determineMemoNodes(prog, memoMode);
+	logMsg(LOG_INFO, "Will memoize %d states", prog->nMemoizedStates);
 
+	// Simulate
 	logMsg(LOG_INFO, "Candidate string: %s", q.input);
 	for(j=0; j<nelem(tab); j++) { /* Go through all matchers */
 		if (strcmp(tab[j].name, "backtrack") != 0) { /* We just care about backtrack */

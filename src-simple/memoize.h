@@ -6,8 +6,11 @@
 #define MEMOIZE_H
 
 #include "regexp.h"
+#include "rle.h"
 
 /* Memoization-related compilation phase. */
+
+void Prog_determineMemoNodes(Prog *p, int memoMode);
 
 /* Memoization-related simulation. */
 
@@ -68,6 +71,5 @@ enum /* Memo.encoding */
 	ENCODING_RLE,       /* Run-length encoding */
 	ENCODING_RLE_TUNED, /* DO NOT USE -- RLE, tuned for language lengths -- DO NOT USE */
 };
-
 
 #endif /* MEMOIZE_H */

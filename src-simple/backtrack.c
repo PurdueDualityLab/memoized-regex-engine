@@ -198,8 +198,8 @@ initMemoTable(Prog *prog, int nChars, int memoMode, int memoEncoding)
         /* Find the corresponding states so we know the run lengths to use */
         while (j < prog->len) {
           j++;
-          if (prog->start[j].shouldMemo) {
-            int visitInterval = (memo.encoding == ENCODING_RLE_TUNED) ? prog->start[j].visitInterval : 1;
+          if (prog->start[j].memoInfo.shouldMemo) {
+            int visitInterval = (memo.encoding == ENCODING_RLE_TUNED) ? prog->start[j].memoInfo.visitInterval : 1;
             if (visitInterval < 1)
               visitInterval = 1;
             //visitInterval = 60;
@@ -239,6 +239,7 @@ isMarked(Memo *memo, int statenum /* PC's memoStateNum */, int woffset, Sub *sub
 
   switch(memo->encoding){
   case ENCODING_NONE:
+    logMsg(LOG_VERBOSE, "  isMarked: visitVectors[%i] = %p\n", statenum, memo->visitVectors[statenum]);
     return memo->visitVectors[statenum][woffset] == 1;
   case ENCODING_NEGATIVE:
   {
@@ -470,12 +471,12 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime, S
       /* Memoized state costs vary by number of visits to each node. */
       count = 0;
       for (i = 0; i < prog->len; i++) {
-        if (prog->start[i].shouldMemo) {
+        if (prog->start[i].memoInfo.shouldMemo) {
           count += visitsPerVertex[i];
 
           sprintf(numBufForSprintf, "%d", visitsPerVertex[i]);
           vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
-          if (prog->start[i].memoStateNum + 1 != memo->nStates) {
+          if (prog->start[i].memoInfo.memoStateNum + 1 != memo->nStates) {
             vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
           }
         }
@@ -731,11 +732,11 @@ BACKTRACKING_SEARCH:
     sub = next.sub;
     assert(sub->ref > 0);
     for(;;) { /* Run thread to completion */
-      logMsg(LOG_VERBOSE, "  search state: <%d (M: %d), %d>", pc->stateNum, pc->memoStateNum, woffset(input, sp));
+      logMsg(LOG_VERBOSE, "  search state: <%d (M: %d), %d>", pc->stateNum, pc->memoInfo.memoStateNum, woffset(input, sp));
 
-      if (prog->memoMode != MEMO_NONE && pc->memoStateNum >= 0) {
+      if (prog->memoMode != MEMO_NONE && pc->memoInfo.memoStateNum >= 0) {
         /* Check if we've been here. */
-        if (isMarked(&memo, pc->memoStateNum, woffset(input, sp), sub)) {
+        if (isMarked(&memo, pc->memoInfo.memoStateNum, woffset(input, sp), sub)) {
           /* Since we return on first match, the prior visit failed.
            * Short-circuit thread */
           logMsg(LOG_VERBOSE, "marked, short-circuiting thread");
@@ -744,7 +745,7 @@ BACKTRACKING_SEARCH:
         }
 
         /* Mark that we've been here */
-        markMemo(&memo, pc->memoStateNum, woffset(input, sp), sub);
+        markMemo(&memo, pc->memoInfo.memoStateNum, woffset(input, sp), sub);
       }
 
       /* "Visit" means that we evaluate pc appropriately. */

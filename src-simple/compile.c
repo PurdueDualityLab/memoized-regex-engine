@@ -129,56 +129,6 @@ lli_smallestUniversalPeriod(LanguageLengthInfo *lli)
 }
 #endif
 
-void
-Prog_compute_in_degrees(Prog *p)
-{
-	int i, j;
-
-	/* Initialize */
-	for (i = 0; i < p->len; i++) {
-		p->start[i].inDegree = 0;
-	}
-	/* q0 has an in-edge */
-	p->start[0].inDegree = 1;
-
-	/* Increment */
-	for (i = 0; i < p->len; i++) {
-		switch(p->start[i].opcode) {
-		default:
-			fatal("in-degree: unknown type");
-		case Match:
-			/* Terminates search */
-			break;
-		case Jmp:
-			/* Goes to X */
-			p->start[i].x->inDegree++;
-			break;
-		case Split:
-			/* Goes to X or Y */
-			p->start[i].x->inDegree++;
-			p->start[i].y->inDegree++;
-			break;
-		case SplitMany:
-			/* Goes to each child */
-			for (j = 0; j < p->start[i].arity; j++) {
-				p->start[i].edges[j]->inDegree++;
-			}
-			break;
-		case Any:
-		case CharClass:
-		case Char:
-		case Save:
-		case StringCompare:
-		case InlineZeroWidthAssertion:
-		case RecursiveZeroWidthAssertion:
-		case RecursiveMatch:
-			/* Always goes to next instr */
-			p->start[i+1].inDegree++;
-			break;
-		}
-	}
-}
-
 static void
 Prog_assignStateNumbers(Prog *p)
 {
@@ -186,51 +136,6 @@ Prog_assignStateNumbers(Prog *p)
 	for (i = 0; i < p->len; i++) {
 		p->start[i].stateNum = i;
 	}
-}
-
-static void
-Prog_determineMemoNodes(Prog *p, int memoMode)
-{
-	int i, nextStateNum;
-
-	/* Determine which nodes to memoize based on memo mode. */
-	switch (memoMode) {
-	case MEMO_FULL:
-		for (i = 0; i < p->len; i++){
-			p->start[i].shouldMemo = 1;
-		}
-		break;
-	case MEMO_IN_DEGREE_GT1:
-		Prog_compute_in_degrees(p);
-		for (i = 0; i < p->len; i++) {
-			if (p->start[i].inDegree > 1) {
-				p->start[i].shouldMemo = 1;
-			}
-		}
-		break;
-	case MEMO_LOOP_DEST:
-		/* This is done in emit(). */
-		break;
-	case MEMO_NONE:
-		for (i = 0; i < p->len; i++) {
-			p->start[i].shouldMemo = 0;
-		}
-		break;
-	default:
-		assert(!"Unknown memoMode\n");
-	}
-
-	/* Assign memoStateNum to the shouldMemo nodes */
-	nextStateNum = 0;
-	for (i = 0; i < p->len; i++) {
-		if (p->start[i].shouldMemo) {
-			p->start[i].memoStateNum = nextStateNum;
-			nextStateNum++;
-		} else {
-			p->start[i].memoStateNum = -1;
-		}
-	}
-	p->nMemoizedStates = nextStateNum;
 }
 
 // Transformation passes
@@ -709,18 +614,11 @@ compile(Regexp *r, int memoMode)
 
 	n = count(r) + 1;
 
-#if 0
-	Regexp_calcLLI(r);
-	Regexp_calcVisitInterval(r);
-	printre_VI(r);
-	printf("\n");
-#endif
-
 	p = mal(sizeof *p + n*sizeof p->start[0]);
 	p->start = (Inst*)(p+1);
 	pc = p->start;
 	for (i = 0; i < n; i++) {
-		p->start[i].visitInterval = 1; /* A good default */
+		p->start[i].memoInfo.visitInterval = 1; /* A good default */
 	}
 	emit(r, memoMode);
 	pc->opcode = Match;
@@ -728,16 +626,7 @@ compile(Regexp *r, int memoMode)
 	p->len = pc - p->start;
 	p->eolAnchor = r->eolAnchor;
 
-	/*
-	for (i = 0; i < n; i++) {
-		if (p->start[i] == 
-	}
-	*/
-
 	Prog_assignStateNumbers(p);
-	Prog_determineMemoNodes(p, memoMode);
-	logMsg(LOG_INFO, "Will memoize %d states", p->nMemoizedStates);
-
 	return p;
 }
 
@@ -1204,7 +1093,6 @@ emit(Regexp *r, int memoMode)
 
 	case Alt:
 		pc->opcode = Split;
-		pc->visitInterval = r->visitInterval;
 		p1 = pc++;
 		p1->x = pc;
 		emit(r->left, memoMode);
@@ -1251,18 +1139,10 @@ emit(Regexp *r, int memoMode)
 		p2 = pc;
 		emit(r->right, memoMode);
 
-		#if 0
-		printf("cat: vi %d l->vi %d l->SUP %d r->vi %d r->SUP %d\n", r->visitInterval, r->left->visitInterval, lli_smallestUniversalPeriod(&r->left->lli), r->right->visitInterval, lli_smallestUniversalPeriod(&r->right->lli));
-		p2->visitInterval = r->right->visitInterval;
-		p2->visitInterval = r->visitInterval;
-		#endif
-		p2->visitInterval = 0;
-
 		break;
 	
 	case Lit:
 		pc->opcode = Char;
-		pc->visitInterval = 0;
 		pc->c = r->ch;
 		pc++;
 		break;
@@ -1292,7 +1172,6 @@ emit(Regexp *r, int memoMode)
 
 	case CharEscape:
 		pc->opcode = CharClass;
-		pc->visitInterval = 0;
 
 		// Fill in the pc details
 		_emitRegexpCharRange2Inst(r, pc);
@@ -1302,30 +1181,22 @@ emit(Regexp *r, int memoMode)
 	
 	case Dot:
 		pc++->opcode = Any;
-		pc->visitInterval = 0;
 		break;
 
 	case Paren:
 		pc->opcode = Save;
 		pc->n = 2*r->n;
-		#if 0
-		printf("Save: r->VI %d r->left->VI %d r->left->smallestUniversalPeriod %d\n", r->visitInterval, r->left->visitInterval, lli_smallestUniversalPeriod(&r->left->lli));
-		pc->visitInterval = lli_smallestUniversalPeriod(&r->left->lli);
-		#endif
 
-		pc->visitInterval = 0;
 		pc++;
 		emit(r->left, memoMode);
 		pc->opcode = Save;
 		pc->n = 2*r->n + 1;
 
-		pc->visitInterval = 0;
 		pc++;
 		break;
 	
 	case Quest:
 		pc->opcode = Split;
-		pc->visitInterval = r->visitInterval;
 		p1 = pc++;
 		p1->x = pc;
 		emit(r->left, memoMode);
@@ -1339,18 +1210,11 @@ emit(Regexp *r, int memoMode)
 
 	case Star:
 		pc->opcode = Split;
-		pc->visitInterval = r->visitInterval;
-		// pc->visitInterval = lli_smallestUniversalPeriod(&r->lli);
 		p1 = pc++;
 		p1->x = pc;
 		emit(r->left, memoMode);
 		pc->opcode = Jmp;
 		pc->x = p1; /* Back-edge */
-		pc->visitInterval = r->visitInterval;
-		// pc->visitInterval = lli_smallestUniversalPeriod(&r->lli);
-		if (memoMode == MEMO_LOOP_DEST) {
-			pc->x->shouldMemo = 1;
-		}
 		pc++;
 		p1->y = pc;
 		if(r->n) {	// non-greedy
@@ -1365,12 +1229,6 @@ emit(Regexp *r, int memoMode)
 		emit(r->left, memoMode);
 		pc->opcode = Split;
 		pc->x = p1; /* Back-edge */
-		p1->visitInterval = r->visitInterval;
-		pc->visitInterval = r->visitInterval;
-		// pc->visitInterval = lli_smallestUniversalPeriod(&r->left->lli);
-		if (memoMode == MEMO_LOOP_DEST) {
-			pc->x->shouldMemo = 1;
-		}
 		p2 = pc;
 		pc++;
 		p2->y = pc;
@@ -1417,10 +1275,10 @@ printprog(Prog *p)
 		default:
 			fatal("printprog: unknown opcode");
 		case StringCompare:
-			printf("%2d. stringcompare %d (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->cgNum, pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
+			printf("%2d. stringcompare %d (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->cgNum, pc->memoInfo.shouldMemo, pc->memoInfo.memoStateNum, pc->memoInfo.visitInterval);
 			break;
 		case Split:
-			printf("%2d. split %d, %d (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), (int)(pc->x-p->start), (int)(pc->y-p->start), pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
+			printf("%2d. split %d, %d (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), (int)(pc->x-p->start), (int)(pc->y-p->start), pc->memoInfo.shouldMemo, pc->memoInfo.memoStateNum, pc->memoInfo.visitInterval);
 			//printf("%2d. split %d, %d\n", (int)(pc->stateNum), (int)(pc->x->stateNum), (int)(pc->y->stateNum));
 			break;
 		case SplitMany:
@@ -1430,23 +1288,23 @@ printprog(Prog *p)
 				if (i + 1 < pc->arity)
 					printf(",");
 			}
-			printf(" (memo? %d -- state %d, visitInterval %d)\n", pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
+			printf(" (memo? %d -- state %d, visitInterval %d)\n", pc->memoInfo.shouldMemo, pc->memoInfo.memoStateNum, pc->memoInfo.visitInterval);
 			//printf("%2d. split %d, %d\n", (int)(pc->stateNum), (int)(pc->x->stateNum), (int)(pc->y->stateNum));
 			break;
 		case Jmp:
-			printf("%2d. jmp %d (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), (int)(pc->x-p->start), pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
+			printf("%2d. jmp %d (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), (int)(pc->x-p->start), pc->memoInfo.shouldMemo, pc->memoInfo.memoStateNum, pc->memoInfo.visitInterval);
 			//printf("%2d. jmp %d\n", (int)(pc->stateNum), (int)(pc->x->stateNum));
 			break;
 		case Char:
-			printf("%2d. char %c (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->c, pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
+			printf("%2d. char %c (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->c, pc->memoInfo.shouldMemo, pc->memoInfo.memoStateNum, pc->memoInfo.visitInterval);
 			//printf("%2d. char %c\n", (int)(pc->stateNum), pc->c);
 			break;
 		case Any:
-			printf("%2d. any (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
+			printf("%2d. any (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->memoInfo.shouldMemo, pc->memoInfo.memoStateNum, pc->memoInfo.visitInterval);
 			//printf("%2d. any\n", (int)(pc->stateNum));
 			break;
 		case InlineZeroWidthAssertion:
-			printf("%2d. inlineZWA %c (memo? %d -- state %d)\n", (int)(pc-p->start), pc->c, pc->shouldMemo, pc->memoStateNum);
+			printf("%2d. inlineZWA %c (memo? %d -- state %d)\n", (int)(pc-p->start), pc->c, pc->memoInfo.shouldMemo, pc->memoInfo.memoStateNum);
 			//printf("%2d. any\n", (int)(pc->stateNum));
 			break;
 		case RecursiveZeroWidthAssertion:
@@ -1456,15 +1314,15 @@ printprog(Prog *p)
 			printf("%2d. recursivematch\n", (int)(pc-p->start));
 			break;
 		case CharClass:
-			printf("%2d. charClass (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
+			printf("%2d. charClass (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->memoInfo.shouldMemo, pc->memoInfo.memoStateNum, pc->memoInfo.visitInterval);
 			//printf("%2d. any\n", (int)(pc->stateNum));
 			break;
 		case Match:
-			printf("%2d. match (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
+			printf("%2d. match (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->memoInfo.shouldMemo, pc->memoInfo.memoStateNum, pc->memoInfo.visitInterval);
 			//printf("%2d. match\n", (int)(pc->stateNum));
 			break;
 		case Save:
-			printf("%2d. save %d (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->n, pc->shouldMemo, pc->memoStateNum, pc->visitInterval);
+			printf("%2d. save %d (memo? %d -- state %d, visitInterval %d)\n", (int)(pc-p->start), pc->n, pc->memoInfo.shouldMemo, pc->memoInfo.memoStateNum, pc->memoInfo.visitInterval);
 			//printf("%2d. save %d\n", (int)(pc->stateNum), pc->n);
 			break;
 		}
