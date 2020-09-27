@@ -399,20 +399,16 @@ backtrack(Prog *prog, char *input, /* start-end pointers for each CG */ char **s
 
   inputEOL = input + strlen(input);
 
-  /* The use of backreferences affects the memoization policy. */
-
-  /* Prep visit table */
-  logMsg(LOG_VERBOSE, "Initializing visit table");
-  visitTable = initVisitTable(prog, strlen(input) + 1);
-
-  /* Prep memo table */
-  logMsg(LOG_VERBOSE, "Initializing memo table");
-  memo = initMemoTable(prog, strlen(input) + 1);
-
   /* Prep sub-captures */
   sub = newsub(nsubp, input);
   for(i=0; i<nsubp; i++)
     sub->sub[i] = nil;
+
+  /* Prep memo structures */
+  logMsg(LOG_VERBOSE, "Initializing visit table");
+  visitTable = initVisitTable(prog, strlen(input) + 1);
+  logMsg(LOG_VERBOSE, "Initializing memo table");
+  memo = initMemoTable(prog, strlen(input) + 1);
 
   logMsg(LOG_INFO, "Backtrack: Simulation begins");
   startTime = now();
@@ -540,8 +536,9 @@ BACKTRACKING_SEARCH:
 
         goto Dead;
       }
-      case InlineZeroWidthAssertion: // TODO This would be cleaner as "fixed-width assertions". Could support: ^, \A, $, \Z, \z, \b, \B
+      case InlineZeroWidthAssertion:
       {
+        int satisfied = 0;
         switch (pc->c) {
         case 'b':
         case 'B':
@@ -558,8 +555,6 @@ BACKTRACKING_SEARCH:
             int prev_c = *(sp-1);
             int curr_c = *sp;
 
-            // TODO This duplicates the concept of '\w'.
-            // It would be better to have a dummy \w and \W PC handy to compare against.
             int prev_w = IS_WORD_CHAR(prev_c);
             int curr_w = IS_WORD_CHAR(curr_c);
 
@@ -567,28 +562,22 @@ BACKTRACKING_SEARCH:
           } 
 
           if (isWordBoundary && pc->c == 'b') {
-            // Boundary satisfied: Move on without updating sp
-            pc++;
-            continue;
+            satisfied = 1;
           } else if (!isWordBoundary && pc->c == 'B') {
-            // Boundary satisfied: Move on without updating sp
-            pc++;
-            continue;
+            satisfied = 1;
           }
           break;
         case '^':
         case 'A':
           if (sp == input) {
-            pc++;
-            continue;
+            satisfied = 1;
           }
           break;
         case '$':
         case 'Z':
         case 'z':
           if (sp == inputEOL) {
-            pc++;
-            continue;
+            satisfied = 1;
           }
 					break;
         default:
@@ -596,6 +585,10 @@ BACKTRACKING_SEARCH:
           assert(!"Unknown InlineZWA character\n");
         }
 
+        if (satisfied) {
+          pc++;
+          continue;
+        }
 				logMsg(LOG_DEBUG, "InlineZWA %c unsatisfied", pc->c);
         goto Dead;
       }
