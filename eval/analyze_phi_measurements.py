@@ -75,7 +75,14 @@ def loadNDJSON(filepath):
             
 allFile = os.path.join(DATA_PATH, 'LF-phiMeasurements.json')
 allFile = os.path.join(DATA_PATH, 'LF-phiMeasurements-060420.json')
+allFile = os.path.join(DATA_PATH, 'LF-phiMeasurements-091520.json')
+allFile = os.path.join(DATA_PATH, 'LF-phiMeasurements-091620.json')
+allFile = os.path.join(DATA_PATH, 'LF-phiMeasurements-091620-AZz.json')
+allFile = os.path.join(DATA_PATH, 'LF-phiMeasurements-091720.json')
+
 slFile = os.path.join(DATA_PATH, 'sl-phiMeasurements.json')
+slFile = os.path.join(DATA_PATH, 'SL-phiMeasurements-091620-AZz.json')
+slFile = os.path.join(DATA_PATH, 'SL-phiMeasurements-091720.json')
 
 print('Loading "all regexes" measurements from {}'.format(allFile))
 allReg = loadNDJSON(allFile)
@@ -98,7 +105,7 @@ if INCLUDE_MEMO_LOOP:
   measure2name['selective: loop'] = r'$|Q_{ancestor}|$'
 
 rows = []
-for regexType, measurements in [("All", allReg), ("SL", slReg)]:
+for regexType, measurements in [("All", allReg), ("Super-linear", slReg)]:
   for dat in measurements:
     for measure, name in measure2name.items():
       rows += [
@@ -143,7 +150,7 @@ print(dfRatios.groupby(['Regex type', 'Measure']).describe(percentiles=[0.01, 0.
 
 """## Plot"""
 
-DISTINGUISH_SL = False
+DISTINGUISH_SL = True
 
 font = {'family' : 'normal',
         'weight' : 'normal',
