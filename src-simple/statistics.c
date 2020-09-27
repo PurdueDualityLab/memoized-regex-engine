@@ -54,9 +54,9 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime, S
   char memoConfig_vertexSelection[64];
   char memoConfig_encoding[64];
   char numBufForSprintf[128];
-  int csv_maxObservedCostsPerMemoizedVertex_len = 2*sizeof(char);
-  char *csv_maxObservedAsymptoticCostsPerMemoizedVertex = mal(csv_maxObservedCostsPerMemoizedVertex_len);
-  char *csv_maxObservedMemoryBytesPerMemoizedVertex = mal(csv_maxObservedCostsPerMemoizedVertex_len);
+  int csv_maxObservedCostsPerMemoizedVertex_len = 2;
+  char *csv_maxObservedAsymptoticCostsPerMemoizedVertex = mal(csv_maxObservedCostsPerMemoizedVertex_len * sizeof(char));
+  char *csv_maxObservedMemoryBytesPerMemoizedVertex = mal(csv_maxObservedCostsPerMemoizedVertex_len * sizeof(char));
   vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, "");
   vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, "");
 
