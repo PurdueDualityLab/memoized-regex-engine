@@ -428,6 +428,8 @@ void freeMemoTable(Memo memo)
         }
         free(memo.rleVectors);
         break;
+    default:
+        assert(!"free table: Unknown encoding");
     }
 }
 
