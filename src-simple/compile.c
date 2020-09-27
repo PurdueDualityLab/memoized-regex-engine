@@ -1261,6 +1261,21 @@ emit(Regexp *r, int memoMode)
 	}
 }
 
+// This function is used in simulation, but is most appropriately defined here.
+int
+usesBackreferences(Prog *prog)
+{
+  Inst *pc;
+  int i;
+
+  for (i = 0, pc = prog->start; i < prog->len; i++, pc++) {
+    if (pc->opcode == StringCompare) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 void
 printprog(Prog *p)
 {

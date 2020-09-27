@@ -49,6 +49,10 @@ struct ThreadVec
   int nThreads;
 };
 
+/****** Backtracking stack ("ThreadVec") ********/
+
+/* Supports arbitrary input length instead of max of 1K -- dynamic stack reallocation. */
+
 static ThreadVec
 ThreadVec_alloc()
 {
@@ -64,6 +68,7 @@ ThreadVec_alloc()
 static void
 ThreadVec_realloc(ThreadVec *tv)
 {
+  // Doubling strategy
   int newMaxThreads = 2 * tv->maxThreads;
   Thread *newThreads = mal(newMaxThreads * sizeof(*newThreads));
 
@@ -109,6 +114,8 @@ ThreadVec_push(ThreadVec *tv, Thread t)
   assert(tv->nThreads <= tv->maxThreads);
 }
 
+/***** Helpers for evaluating complex Instructions *****/
+
 static int
 _inCharClass(Inst *pc, char c)
 {
@@ -140,20 +147,91 @@ _inCharClass(Inst *pc, char c)
   return 0;
 }
 
-int
-usesBackreferences(Prog *prog)
+static int
+_stringCompare(Inst *pc, Sub *sub, char *sp, char *inputEOL)
 {
-  Inst *pc;
-  int i;
+  static char msg[128];
 
-  for (i = 0, pc = prog->start; i < prog->len; i++, pc++) {
-    if (pc->opcode == StringCompare) {
-      return 1;
+  // CG is not set -- match the empty string
+  if (sub->sub[CGID_TO_SUB_STARTP_IX(pc->cgNum)] == nil || sub->sub[CGID_TO_SUB_ENDP_IX(pc->cgNum)] == nil) {
+    logMsg(LOG_DEBUG, "CG %d not set yet (startpix %d endpix %d). We match the empty string", pc->cgNum, CGID_TO_SUB_STARTP_IX(pc->cgNum), CGID_TO_SUB_ENDP_IX(pc->cgNum));
+    return 0;
+  }
+
+  logMsg(LOG_DEBUG, "CG %d set, checking match", pc->cgNum);
+
+  char *begin = CGID_TO_STARTP(sub, pc->cgNum);
+  char *end = CGID_TO_ENDP(sub, pc->cgNum);
+  int charsRemaining = inputEOL - sp;
+  logMsg(LOG_DEBUG, "charsRemaining %d end-begin %d", charsRemaining, end-begin);
+
+  if (charsRemaining >= end - begin) {
+    if (memcmp(begin, sp, end - begin) == 0) {
+      logMsg(LOG_DEBUG, "StringCompare matched (%d chars)", end - begin);
+      return end - begin;
+    }
+    else {
+      sprintf(msg, "mismatch (%ld chars)", end - begin);
     }
   }
-  return 0;
+  else {
+      sprintf(msg, "Remaining string too short");
+  }
+
+  logMsg(LOG_DEBUG, "Backref mismatch: %s", msg);
+  return -1;
 }
 
+static int
+_testInlineZeroWidthAssertion(Inst *pc, char *sp, int isBegin, int isEnd)
+{
+  int satisfied = 0;
+  switch (pc->c) {
+  case 'b':
+  case 'B':
+    logMsg(LOG_DEBUG, "  wordBoundary");
+    int isWordBoundary = 0;
+    // Python: \b is defined as the boundary between:
+    //   (1) \w and a \W character
+    //   (2) \w and begin/end of the string
+    if (isBegin || isEnd) {
+      // Condition (2)
+      isWordBoundary = 1;
+    } else {
+      // Condition (1) -- dereference is safe because we tested Condition (2) already
+      int prev_c = *(sp-1);
+      int curr_c = *sp;
+
+      // TODO This re-defines \w and \W in terms of IS_WORD_CHAR instead of in terms of ranges
+      // It would be cleaner to have a static compiled version of '\w' and '\W' nodes, and apply those nodes here.
+      int prev_w = IS_WORD_CHAR(prev_c);
+      int curr_w = IS_WORD_CHAR(curr_c);
+
+      isWordBoundary = (prev_w ^ curr_w);
+    } 
+
+    if (isWordBoundary && pc->c == 'b') {
+      satisfied = 1;
+    } else if (!isWordBoundary && pc->c == 'B') {
+      satisfied = 1;
+    }
+    break;
+  case '^':
+  case 'A':
+    satisfied = isBegin;
+    break;
+  case '$':
+  case 'Z':
+  case 'z':
+    satisfied = isEnd;
+    break;
+  default:
+    logMsg(LOG_ERROR, "Unknown InlineZWA character %c", pc->c);
+    assert(!"Unknown InlineZWA character\n");
+  }
+
+  return satisfied;
+}
 
 int
 backtrack(Prog *prog, char *input, /* start-end pointers for each CG */ char **subp, /* Length of subp */ int nsubp)
@@ -283,90 +361,25 @@ BACKTRACKING_SEARCH:
         pc++;
         continue;
       case StringCompare:
-        /* Check if appropriate sub matches */
       {
-        // CG is not set -- match the empty string
-        if (sub->sub[CGID_TO_SUB_STARTP_IX(pc->cgNum)] == nil || sub->sub[CGID_TO_SUB_ENDP_IX(pc->cgNum)] == nil) {
-          logMsg(LOG_DEBUG, "CG %d not set yet (startpix %d endpix %d). We match the empty string", pc->cgNum, CGID_TO_SUB_STARTP_IX(pc->cgNum), CGID_TO_SUB_ENDP_IX(pc->cgNum));
+        /* Check if appropriate sub matches */
+        logMsg(LOG_DEBUG, "  StringCompare on %d at %p", pc->cgNum, sp);
+        int nCharsMatched = _stringCompare(pc, sub, sp, inputEOL);
+        if (nCharsMatched > -1) {
+          sp += nCharsMatched;
           pc++;
           continue;
         }
-        logMsg(LOG_DEBUG, "CG %d set, checking match", pc->cgNum);
-
-        char *begin = CGID_TO_STARTP(sub, pc->cgNum);
-        char *end = CGID_TO_ENDP(sub, pc->cgNum);
-        int charsRemaining = inputEOL - sp;
-          logMsg(LOG_DEBUG, "charsRemaining %d end-begin %d", charsRemaining, end-begin);
-        if (charsRemaining >= end - begin) {
-          if (memcmp(begin, sp, end-begin) == 0) {
-            logMsg(LOG_DEBUG, "StringCompare matched (%d chars)", end - begin);
-            sp += end-begin;
-            pc++;
-            continue;
-          }
-          else
-            logMsg(LOG_DEBUG, "Backref mismatch (%d chars)", end - begin);
-        }
-        else
-            logMsg(LOG_DEBUG, "Remaining string too short");
 
         goto Dead;
       }
       case InlineZeroWidthAssertion:
       {
-        int satisfied = 0;
-        switch (pc->c) {
-        case 'b':
-        case 'B':
-          logMsg(LOG_DEBUG, "  wordBoundary");
-          int isWordBoundary = 0;
-          // Python: \b is defined as the boundary between:
-          //   (1) \w and a \W character
-          //   (2) \w and begin/end of the string
-          if (sp == input || sp == inputEOL) {
-            // Condition (2)
-            isWordBoundary = 1;
-          } else {
-            // Condition (1) -- dereference is safe because we tested Condition (2) already
-            int prev_c = *(sp-1);
-            int curr_c = *sp;
-
-            // TODO This re-defines \w and \W in terms of IS_WORD_CHAR instead of in terms of ranges
-            // It would be cleaner to have a static compiled version of '\w' and '\W' nodes, and apply those nodes here.
-            int prev_w = IS_WORD_CHAR(prev_c);
-            int curr_w = IS_WORD_CHAR(curr_c);
-
-            isWordBoundary = (prev_w ^ curr_w);
-          } 
-
-          if (isWordBoundary && pc->c == 'b') {
-            satisfied = 1;
-          } else if (!isWordBoundary && pc->c == 'B') {
-            satisfied = 1;
-          }
-          break;
-        case '^':
-        case 'A':
-          if (sp == input) {
-            satisfied = 1;
-          }
-          break;
-        case '$':
-        case 'Z':
-        case 'z':
-          if (sp == inputEOL) {
-            satisfied = 1;
-          }
-					break;
-        default:
-          logMsg(LOG_ERROR, "Unknown InlineZWA character %c", pc->c);
-          assert(!"Unknown InlineZWA character\n");
-        }
-
-        if (satisfied) {
+        if (_testInlineZeroWidthAssertion(pc, sp, sp == input, sp == inputEOL)) {
           pc++;
           continue;
         }
+
 				logMsg(LOG_DEBUG, "InlineZWA %c unsatisfied", pc->c);
         goto Dead;
       }
