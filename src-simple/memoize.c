@@ -423,6 +423,7 @@ void freeMemoTable(Memo memo)
         HASH_CLEAR(hh, memo.simPosTable);
         break;
     case ENCODING_RLE:
+        logMsg(LOG_DEBUG, "Freeing %d vectors", memo.nStates);
         for (i = 0; i < memo.nStates; i++) {
             RLEVector_destroy(memo.rleVectors[i]);
         }

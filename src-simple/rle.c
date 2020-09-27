@@ -410,7 +410,10 @@ RLEVector_maxBytes(RLEVector *vec)
 void
 RLEVector_destroy(RLEVector *vec)
 {
-  /* TODO - not needed for prototype */
+  RLENode *node = NULL;
+  avl_tree_for_each_in_postorder(node, vec->root, RLENode, node)
+    free(node);
+
   return;
 }
 
