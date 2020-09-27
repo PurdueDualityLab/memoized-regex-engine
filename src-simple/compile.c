@@ -3,6 +3,7 @@
 // license that can be found in the LICENSE file.
 
 #include "regexp.h"
+#include "memoize.h"
 #include "log.h"
 
 #include <ctype.h>

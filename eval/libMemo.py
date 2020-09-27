@@ -132,9 +132,9 @@ class ProtoRegexEngine:
         def _unpackSimulationInfo(self, dict):
             self.si_nTotalVisits = int(dict['nTotalVisits'])
             self.si_simTimeUS = int(dict['simTimeUS'])
-            self.si_visitsToMostVisitedSearchState = int(dict['visitsToMostVisitedSearchState'])
+            self.si_visitsToMostVisitedSimPos = int(dict['visitsToMostVisitedSimPos'])
             self.si_nPossibleTotalVisitsWithMemoization = int(dict['nPossibleTotalVisitsWithMemoization'])
-            self.si_visitsToMostVisitedSearchState = int(dict['visitsToMostVisitedSearchState'])
+            self.si_visitsToMostVisitedSimPos = int(dict['visitsToMostVisitedSimPos'])
 
 ###
 # Input classes

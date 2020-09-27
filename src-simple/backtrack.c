@@ -5,6 +5,7 @@
 // Annotations, statistics, and memoization by James Davis, 2020.
 
 #include "regexp.h"
+#include "memoize.h"
 #include "log.h"
 
 #include <sys/time.h>
@@ -78,7 +79,7 @@ thread(Inst *pc, char *sp, Sub *sub)
   return t;
 }
 
-/* Visit table */
+/* Visit table. Used to evaluate whether memoization guarantees have failed. */
 
 struct VisitTable
 {
@@ -241,10 +242,10 @@ isMarked(Memo *memo, int statenum /* PC's memoStateNum */, int woffset, Sub *sub
     return memo->visitVectors[statenum][woffset] == 1;
   case ENCODING_NEGATIVE:
   {
-    SearchStateTable entry;
-    SearchStateTable *p;
+    SimPosTable entry;
+    SimPosTable *p;
 
-    memset(&entry, 0, sizeof(SearchStateTable));
+    memset(&entry, 0, sizeof(SimPosTable));
     entry.key.stateNum = statenum;
     entry.key.stringIndex = woffset;
     if (memo->backrefs) {
@@ -274,7 +275,7 @@ isMarked(Memo *memo, int statenum /* PC's memoStateNum */, int woffset, Sub *sub
       }
     }
 
-    HASH_FIND(hh, memo->searchStateTable, &entry.key, sizeof(SearchState), p);
+    HASH_FIND(hh, memo->searchStateTable, &entry.key, sizeof(SimPos), p);
     return p != NULL;
   }
   case ENCODING_RLE:
@@ -303,7 +304,7 @@ markMemo(Memo *memo, int statenum, int woffset, Sub *sub)
     break;
   case ENCODING_NEGATIVE:
   {
-    SearchStateTable *entry = mal(sizeof(*entry));
+    SimPosTable *entry = mal(sizeof(*entry));
     memset(entry, 0, sizeof(*entry));
     entry->key.stateNum = statenum;
     entry->key.stringIndex = woffset;
@@ -320,7 +321,7 @@ markMemo(Memo *memo, int statenum, int woffset, Sub *sub)
       }
     }
 
-    HASH_ADD(hh, memo->searchStateTable, key, sizeof(SearchState), entry);
+    HASH_ADD(hh, memo->searchStateTable, key, sizeof(SimPos), entry);
     break;
   }
   case ENCODING_RLE:
@@ -352,8 +353,8 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime, S
   uint64_t elapsed_US = endTime - startTime;
 
   /* Per-search state */
-  int maxVisitsPerSearchState = -1;
-  int vertexWithMostVisitedSearchState = -1;
+  int maxVisitsPerSimPos = -1;
+  int vertexWithMostVisitedSimPos = -1;
   int mostVisitedOffset = -1;
 
   /* Sum over all offsets */
@@ -421,9 +422,9 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime, S
       nTotalVisits += visitTable->visitVectors[i][j];
 
       /* Largest individual visits over all search states? */
-      if (visitTable->visitVectors[i][j] > maxVisitsPerSearchState) {
-        maxVisitsPerSearchState = visitTable->visitVectors[i][j];
-        vertexWithMostVisitedSearchState = i;
+      if (visitTable->visitVectors[i][j] > maxVisitsPerSimPos) {
+        maxVisitsPerSimPos = visitTable->visitVectors[i][j];
+        vertexWithMostVisitedSimPos = i;
         mostVisitedOffset = j;
       }
     }
@@ -435,14 +436,14 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime, S
     }
   }
 
-  logMsg(LOG_INFO, "%s: Most-visited search state: <%d, %d> (%d visits)", prefix, vertexWithMostVisitedSearchState, mostVisitedOffset, maxVisitsPerSearchState);
+  logMsg(LOG_INFO, "%s: Most-visited search state: <%d, %d> (%d visits)", prefix, vertexWithMostVisitedSimPos, mostVisitedOffset, maxVisitsPerSimPos);
   logMsg(LOG_INFO, "%s: Most-visited vertex: %d (%d visits over all its search states)", prefix, mostVisitedVertex, maxVisitsPerVertex);
   /* Info about simulation */
-  fprintf(stderr, ", \"simulationInfo\": { \"nTotalVisits\": %d, \"nPossibleTotalVisitsWithMemoization\": %d, \"visitsToMostVisitedSearchState\": %d, \"visitsToMostVisitedVertex\": %d, \"simTimeUS\": %llu }",
-    nTotalVisits, visitTable->nStates * visitTable->nChars, maxVisitsPerSearchState, maxVisitsPerVertex, elapsed_US);
+  fprintf(stderr, ", \"simulationInfo\": { \"nTotalVisits\": %d, \"nPossibleTotalVisitsWithMemoization\": %d, \"visitsToMostVisitedSimPos\": %d, \"visitsToMostVisitedVertex\": %d, \"simTimeUS\": %llu }",
+    nTotalVisits, visitTable->nStates * visitTable->nChars, maxVisitsPerSimPos, maxVisitsPerVertex, elapsed_US);
 
   if (memo->mode == MEMO_FULL || memo->mode == MEMO_IN_DEGREE_GT1) {
-    if (maxVisitsPerSearchState > 1 && !usesBackrefs(prog)) {
+    if (maxVisitsPerSimPos > 1 && !usesBackrefs(prog)) {
       /* I have proved this is impossible. */
       assert(!"Error, too many visits per search state\n");
     }

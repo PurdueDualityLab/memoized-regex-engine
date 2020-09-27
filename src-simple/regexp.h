@@ -21,8 +21,8 @@ typedef struct Prog Prog;
 typedef struct Inst Inst;
 typedef struct InstCharRange InstCharRange;
 typedef struct Memo Memo;
-typedef struct SearchState SearchState;
-typedef struct SearchStateTable SearchStateTable;
+typedef struct SimPos SimPos;
+typedef struct SimPosTable SimPosTable;
 typedef struct LanguageLengthInfo LanguageLengthInfo;
 
 /* Possible lengths of "simple" strings in the language of this regex.
@@ -182,12 +182,12 @@ void printprog(Prog*);
 
 extern int gen;
 
+/* Support for captures -- this covers \0-\9 */
 enum {
 	MAXSUB = 20
 };
 
 typedef struct Sub Sub;
-
 struct Sub
 {
 	int ref;
@@ -203,59 +203,7 @@ Sub *update(Sub*, int, char*);
 void decref(Sub*);
 int isgroupset(Sub*, int);
 
-struct SearchState
-{
-	int stateNum;
-	int stringIndex;
-	/* Used for backrefs */
-	int cgStarts[MAXSUB/2];
-	int cgEnds[MAXSUB/2];
-};
-
-struct SearchStateTable
-{
-	SearchState key;
-	UT_hash_handle hh; /* Makes this structure hashable */
-};
-
-/* Declare here so visible for selecting vertices during compilation */
-struct Memo
-{
-	int nStates; /* |Phi| */
-	int nChars;  /* |w| */
-	int mode;
-	int encoding;
-	int backrefs; /* Backrefs present? */
-
-	/* Carries structures for use under the various supported encodings.
-     * I suppose this could be a union ;-) */
-
-	/* ENCODING_NONE */
-	int **visitVectors; /* Booleans: vv[q][i] */
-
-	/* ENCODING_NEGATIVE */
-	SearchStateTable *searchStateTable; /* < q, i [, backrefs ] > */
-
-	/* ENCODING_RLE, ENCODING_RLE_TUNED */
-	RLEVector **rleVectors;
-};
-
-enum /* Memo.mode */
-{
-	MEMO_NONE,
-	MEMO_FULL,
-	MEMO_IN_DEGREE_GT1,
-	MEMO_LOOP_DEST,
-};
-
-enum /* Memo.encoding */
-{
-	ENCODING_NONE,
-	ENCODING_NEGATIVE,  /* Hash table */
-	ENCODING_RLE,       /* Run-length encoding */
-	ENCODING_RLE_TUNED, /* DO NOT USE -- RLE, tuned for language lengths -- DO NOT USE */
-};
-
+/* (Extended-)NFA simulations */
 int backtrack(Prog*, char*, char**, int);
 int pikevm(Prog*, char*, char**, int);
 int recursiveloopprog(Prog*, char*, char**, int);
