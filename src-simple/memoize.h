@@ -14,9 +14,18 @@ void Prog_determineMemoNodes(Prog *p, int memoMode);
 
 /* Memoization-related simulation. */
 
+typedef struct VisitTable VisitTable;
 typedef struct Memo Memo;
 typedef struct SimPos SimPos;
 typedef struct SimPosTable SimPosTable;
+
+// Used to evaluate whether memoization guarantees have failed.
+struct VisitTable
+{
+  int **visitVectors; /* Counters */
+  int nStates; /* |Q| */
+  int nChars;  /* |w| */
+};
 
 struct SimPos
 {
@@ -71,5 +80,14 @@ enum /* Memo.encoding */
 	ENCODING_RLE,       /* Run-length encoding */
 	ENCODING_RLE_TUNED, /* DO NOT USE -- RLE, tuned for language lengths -- DO NOT USE */
 };
+
+VisitTable initVisitTable(Prog *prog, int nChars);
+void markVisit(VisitTable *visitTable, int statenum, int woffset);
+void freeVisitTable(VisitTable vt);
+
+Memo initMemoTable(Prog *prog, int nChars);
+int isMarked(Memo *memo, int statenum /* PC's memoStateNum */, int woffset, Sub *sub);
+void markMemo(Memo *memo, int statenum, int woffset, Sub *sub);
+void freeMemoTable(Memo memo);
 
 #endif /* MEMOIZE_H */

@@ -208,6 +208,16 @@ Sub *update(Sub*, int, char*);
 void decref(Sub*);
 int isgroupset(Sub*, int);
 
+/* Backreference helpers */
+int usesBackreferences(Prog *p);
+
+// Given a CGID, which sub are we looking at?
+#define CGID_TO_SUB_STARTP_IX(cgid) (2*(cgid))
+#define CGID_TO_SUB_ENDP_IX(cgid) (2*(cgid) + 1)
+// Given a CGID, get string start/end pointers
+#define CGID_TO_STARTP(s, cgid)   ((s)->sub[ CGID_TO_SUB_STARTP_IX( (cgid) )])
+#define CGID_TO_ENDP(s, cgid)   ((s)->sub[ CGID_TO_SUB_ENDP_IX( (cgid) )])
+
 /* (Extended-)NFA simulations */
 int backtrack(Prog*, char*, char**, int);
 int pikevm(Prog*, char*, char**, int);

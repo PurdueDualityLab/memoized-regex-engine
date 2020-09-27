@@ -11,27 +11,6 @@
 #include <sys/time.h>
 #include <assert.h>
 
-static int usesBackrefs(Prog *prog);
-static int backrefdCGs(Prog *prog, int *list);
-
-static int CG_BR[MAXSUB];
-static int CG_BR_num2memo[MAXSUB]; /* CG number to memo vertex ix -- only populated for the CGBR's */
-static int CG_BR_memo2num[MAXSUB]; /* Memo vertex ix to CG number */
-int nCG_BR = 0;
-
-/* Given a CGID, extract elements from sub
- * This encodes the to/from mapping from CG to sub index */
-#define CGID_TO_SUB_STARTP_IX(cgid) (2*(cgid))
-#define CGID_TO_SUB_ENDP_IX(cgid) (2*(cgid) + 1)
-#define CGID_TO_STARTP(s, cgid)   ((s)->sub[ CGID_TO_SUB_STARTP_IX( (cgid) )])
-#define CGID_TO_ENDP(s, cgid)   ((s)->sub[ CGID_TO_SUB_ENDP_IX( (cgid) )])
-
-/* Turn back to a CGID, then call into that family */
-#define MEMOCGID_TO_SUB_STARTP_IX(memocgbr_num) (CGID_TO_SUB_STARTP_IX( CG_BR_memo2num[memocgbr_num] ))
-#define MEMOCGID_TO_SUB_ENDP_IX(memocgbr_num)   (CGID_TO_SUB_ENDP_IX(   CG_BR_memo2num[memocgbr_num] ))
-#define MEMOCGID_TO_STARTP(s, memocgbr_num)     (CGID_TO_STARTP((s),    CG_BR_memo2num[(memocgbr_num)]))
-#define MEMOCGID_TO_ENDP(s, memocgbr_num)       (CGID_TO_ENDP((s),      CG_BR_memo2num[(memocgbr_num)]))
-
 /* Misc. */
 #define IS_WORD_CHAR(c) (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9'))
 
@@ -61,7 +40,6 @@ vec_strcat(char **dest, int *dAlloc, char *src)
 }
 
 typedef struct Thread Thread;
-typedef struct VisitTable VisitTable;
 
 /* Introduced whenever we make a non-deterministic choice.
  * The current thread proceeds, and the other is saved to try later. */
@@ -79,259 +57,10 @@ thread(Inst *pc, char *sp, Sub *sub)
   return t;
 }
 
-/* Visit table. Used to evaluate whether memoization guarantees have failed. */
-
-struct VisitTable
-{
-  int **visitVectors; /* Counters */
-  int nStates; /* |Q| */
-  int nChars;  /* |w| */
-};
-
-VisitTable 
-initVisitTable(Prog *prog, int nChars)
-{
-  VisitTable visitTable;
-  int nStates = prog->len;
-  int i, j;
-
-  visitTable.nStates = nStates;
-  visitTable.nChars = nChars;
-  visitTable.visitVectors = mal(sizeof(int*) * nStates);
-  for (i = 0; i < nStates; i++) {
-    visitTable.visitVectors[i] = mal(sizeof(int) * nChars);
-    for (j = 0; j < nChars; j++) {
-      visitTable.visitVectors[i][j] = 0;
-    }
-  }
-
-  return visitTable;
-}
-
-void
-freeVisitTable(VisitTable vt)
-{
-  int i;
-  for (i = 0; i < vt.nStates; i++) {
-    free(vt.visitVectors[i]);
-  }
-  free(vt.visitVectors);
-}
-
-void
-markVisit(VisitTable *visitTable, int statenum, int woffset)
-{
-  logMsg(LOG_VERBOSE, "Visit: Visiting <%d, %d>", statenum, woffset);
-  
-  if (visitTable->visitVectors[statenum][woffset] > 0)
-    logMsg(LOG_WARN, "Hmm, already visited <%d, %d>", statenum, woffset);
-
-  assert(statenum < visitTable->nStates);
-  assert(woffset < visitTable->nChars);
-  
-  visitTable->visitVectors[statenum][woffset]++;
-}
-
-/* Memo table */
-
-Memo
-initMemoTable(Prog *prog, int nChars, int memoMode, int memoEncoding)
-{
-  Memo memo;
-  int cardQ = prog->len;
-  int nStatesToTrack = prog->nMemoizedStates;
-  int i, j;
-  char *prefix = "MEMO_TABLE";
-
-  memo.mode = memoMode;
-  memo.encoding = memoEncoding;
-  memo.nStates = nStatesToTrack;
-  memo.nChars = nChars;
-  memo.backrefs = usesBackrefs(prog);
-
-  if (memo.backrefs) {
-    /* Create CG <-> Memo Ix mappings for accessing the table later */
-    nCG_BR = backrefdCGs(prog, CG_BR);
-    for (i = 0; i < nCG_BR; i++) {
-      logMsg(LOG_DEBUG, "i %d CG_BR[i] %d", i, CG_BR[i]);
-      CG_BR_num2memo[ CG_BR[i] ] = i;
-      CG_BR_memo2num[ i ] = CG_BR[i];
-      logMsg(LOG_DEBUG, "CG num %d memo %d", CG_BR[i], i);
-    }
-  }
-  
-  if (memoMode != MEMO_NONE) {
-    switch(memo.encoding){
-    case ENCODING_NONE:
-      assert(!memo.backrefs);
-      logMsg(LOG_INFO, "%s: Initializing with encoding NONE", prefix);
-      logMsg(LOG_INFO, "%s: cardQ = %d, Phi_memo = %d", prefix, cardQ, nStatesToTrack);
-
-      /* Visit vectors */
-      memo.visitVectors = mal(sizeof(*memo.visitVectors) * nStatesToTrack);
-
-      logMsg(LOG_INFO, "%s: %d visit vectors x %d chars for each", prefix, nStatesToTrack, nChars);
-      for (i = 0; i < nStatesToTrack; i++) {
-        memo.visitVectors[i] = mal(sizeof(int) * nChars);
-        for (j = 0; j < nChars; j++) {
-          memo.visitVectors[i][j] = 0;
-        }
-      }
-      break;
-    case ENCODING_NEGATIVE:
-      logMsg(LOG_INFO, "%s: Initializing with encoding NEGATIVE", prefix);
-      memo.searchStateTable = NULL;
-      break;
-    case ENCODING_RLE:
-    case ENCODING_RLE_TUNED:
-      assert(!memo.backrefs);
-      if (memo.encoding == ENCODING_RLE_TUNED)
-        logMsg(LOG_INFO, "%s: Initializing with encoding RLE_TUNED", prefix);
-      else
-        logMsg(LOG_INFO, "%s: Initializing with encoding RLE", prefix);
-
-      memo.rleVectors = mal(sizeof(*memo.rleVectors) * nStatesToTrack);
-
-      logMsg(LOG_INFO, "%s: %d RLE-encoded visit vectors", prefix, nStatesToTrack);
-      j = -1;
-      for (i = 0; i < nStatesToTrack; i++) {
-        /* Find the corresponding states so we know the run lengths to use */
-        while (j < prog->len) {
-          j++;
-          if (prog->start[j].memoInfo.shouldMemo) {
-            int visitInterval = (memo.encoding == ENCODING_RLE_TUNED) ? prog->start[j].memoInfo.visitInterval : 1;
-            if (visitInterval < 1)
-              visitInterval = 1;
-            //visitInterval = 60;
-            logMsg(LOG_INFO, "%s: state %d (memo state %d) will use visitInterval %d", prefix, j, i, visitInterval);
-            memo.rleVectors[i] = RLEVector_create(visitInterval, 0 /* Do not auto-validate */);
-            break;
-          }
-        }
-      }
-      break;
-    default:
-      logMsg(LOG_INFO, "%s: Unexpected encoding %d", prefix, memo.encoding);
-      assert(0);
-    }
-  }
-
-  logMsg(LOG_INFO, "%s: initialized", prefix);
-  return memo;
-}
-
-void
-freeMemoTable(Memo memo)
-{
-	//TODO (Not needed for prototype assessment).
-}
-
 static int
 woffset(char *input, char *sp)
 {
   return (int) (sp - input);
-}
-
-static int
-isMarked(Memo *memo, int statenum /* PC's memoStateNum */, int woffset, Sub *sub)
-{
-  logMsg(LOG_VERBOSE, "  isMarked: querying <%d, %d>", statenum, woffset);
-
-  switch(memo->encoding){
-  case ENCODING_NONE:
-    logMsg(LOG_VERBOSE, "  isMarked: visitVectors[%i] = %p\n", statenum, memo->visitVectors[statenum]);
-    return memo->visitVectors[statenum][woffset] == 1;
-  case ENCODING_NEGATIVE:
-  {
-    SimPosTable entry;
-    SimPosTable *p;
-
-    memset(&entry, 0, sizeof(SimPosTable));
-    entry.key.stateNum = statenum;
-    entry.key.stringIndex = woffset;
-    if (memo->backrefs) {
-      char printStr[256];
-      printStr[0] = '\0';
-      sprintf(printStr + strlen(printStr), "isMarked: marking < <%d, %d> -> [", statenum, woffset);
-      int cgIx;
-      for (cgIx = 0; cgIx < nCG_BR; cgIx++) {
-        logMsg(LOG_DEBUG, "cgIx %d CG%d startp %p start %p", cgIx, CG_BR_memo2num[cgIx], MEMOCGID_TO_STARTP(sub, cgIx), sub->start);
-        if (isgroupset(sub, CG_BR_memo2num[cgIx])) {
-          entry.key.cgStarts[cgIx] = (int) (MEMOCGID_TO_STARTP(sub, cgIx) - sub->start);
-          entry.key.cgEnds[cgIx] = (int) (MEMOCGID_TO_ENDP(sub, cgIx) - sub->start);
-        } else {
-          entry.key.cgStarts[cgIx] = 0;
-          entry.key.cgEnds[cgIx] = 0;
-        }
-        sprintf(printStr + strlen(printStr), "CG%d (%d, %d), ", CG_BR_memo2num[cgIx], entry.key.cgStarts[cgIx], entry.key.cgEnds[cgIx]);
-      }
-      sprintf(printStr + strlen(printStr), "]");
-      logMsg(LOG_DEBUG, printStr);
-
-      /* Sanity check */
-      for (cgIx = 0; cgIx < nCG_BR; cgIx++) {
-        assert(0 <= entry.key.cgStarts[cgIx]);
-        assert(entry.key.cgStarts[cgIx] <= entry.key.cgEnds[cgIx]);
-        assert(entry.key.cgEnds[cgIx] <= strlen(sub->start));
-      }
-    }
-
-    HASH_FIND(hh, memo->searchStateTable, &entry.key, sizeof(SimPos), p);
-    return p != NULL;
-  }
-  case ENCODING_RLE:
-  case ENCODING_RLE_TUNED:
-    return RLEVector_get(memo->rleVectors[statenum], woffset) != 0;
-  }
-
-  assert(!"Unreachable");
-  return -1;
-}
-
-static void
-markMemo(Memo *memo, int statenum, int woffset, Sub *sub)
-{
-  logMsg(LOG_VERBOSE, "Memo: Marking <%d, %d>", statenum, woffset);
-
-  if (isMarked(memo, statenum, woffset, sub)) {
-    logMsg(LOG_WARN, "\n****\n\n   Hmm, already marked s%d c%d\n\n*****\n\n", statenum, woffset);
-  }
-
-  switch(memo->encoding) {
-  case ENCODING_NONE:
-    assert(statenum < memo->nStates);
-    assert(woffset < memo->nChars);
-    memo->visitVectors[statenum][woffset] = 1;
-    break;
-  case ENCODING_NEGATIVE:
-  {
-    SimPosTable *entry = mal(sizeof(*entry));
-    memset(entry, 0, sizeof(*entry));
-    entry->key.stateNum = statenum;
-    entry->key.stringIndex = woffset;
-    if (memo->backrefs) {
-      int cgIx;
-      for (cgIx = 0; cgIx < nCG_BR; cgIx++) {
-        if (isgroupset(sub, CG_BR_memo2num[cgIx])) {
-          entry->key.cgStarts[cgIx] = (int) (MEMOCGID_TO_STARTP(sub, cgIx) - sub->start);
-          entry->key.cgEnds[cgIx] = (int) (MEMOCGID_TO_ENDP(sub, cgIx) - sub->start);
-        } else {
-          entry->key.cgStarts[cgIx] = 0;
-          entry->key.cgEnds[cgIx] = 0;
-        }
-      }
-    }
-
-    HASH_ADD(hh, memo->searchStateTable, key, sizeof(SimPos), entry);
-    break;
-  }
-  case ENCODING_RLE:
-  case ENCODING_RLE_TUNED:
-    RLEVector_set(memo->rleVectors[statenum], woffset);
-    break;
-  default:
-    assert(!"Unknown encoding\n");
-  }
 }
 
 /* Summary statistics */
@@ -444,7 +173,7 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime, S
     nTotalVisits, visitTable->nStates * visitTable->nChars, maxVisitsPerSimPos, maxVisitsPerVertex, elapsed_US);
 
   if (memo->mode == MEMO_FULL || memo->mode == MEMO_IN_DEGREE_GT1) {
-    if (maxVisitsPerSimPos > 1 && !usesBackrefs(prog)) {
+    if (maxVisitsPerSimPos > 1 && !usesBackreferences(prog)) {
       /* I have proved this is impossible. */
       assert(!"Error, too many visits per search state\n");
     }
@@ -635,43 +364,20 @@ _inCharClass(Inst *pc, char c)
   return 0;
 }
 
-static int
-usesBackrefs(Prog *prog)
+int
+usesBackreferences(Prog *prog)
 {
-  int list[MAXSUB];
-  return backrefdCGs(prog, list) > 0;
-}
-
-/* Record the cgNum for the groups referenced in a StringCompare (backreference Inst).
- * Updates list, returns the number of distinct referenced groups (|CG_{BR}|). */
-static int
-backrefdCGs(Prog *prog, int *list)
-{
-  int i, j, n, newCG;
   Inst *pc;
+  int i;
 
-  /* Check each StringCompare */
-  n = 0;
   for (i = 0, pc = prog->start; i < prog->len; i++, pc++) {
     if (pc->opcode == StringCompare) {
-      /* Is it a new CG or one we've already seen? */
-      newCG = 1;
-      for (j = 0; j < n; j++) {
-        if (pc->cgNum == list[j]) {
-          newCG = 0;
-        }
-      }
-
-      if (newCG) {
-        list[n] = pc->cgNum;
-        logMsg(LOG_DEBUG, "backrefdCGs: CG %d has CGBR ix %d (%d)", pc->cgNum, n, list[n]);
-        n++;
-      }
+      return 1;
     }
   }
-
-  return n;
+  return 0;
 }
+
 
 int
 backtrack(Prog *prog, char *input, /* start-end pointers for each CG */ char **subp, /* Length of subp */ int nsubp)
@@ -684,7 +390,6 @@ backtrack(Prog *prog, char *input, /* start-end pointers for each CG */ char **s
   Sub *sub; /* submatch (capture group) */
   char *inputEOL; /* Position of \0 terminating input */
   uint64_t startTime;
-  int cg_br[MAXSUB/2];
   ThreadVec *threads = NULL;
 	int matched = 0;
 
@@ -695,10 +400,6 @@ backtrack(Prog *prog, char *input, /* start-end pointers for each CG */ char **s
   inputEOL = input + strlen(input);
 
   /* The use of backreferences affects the memoization policy. */
-  if (backrefdCGs(prog, cg_br) && prog->memoMode != MEMO_NONE) {
-    logMsg(LOG_INFO, "Backreferences present and memo enabled -- configuring memo to negative encoding");
-    prog->memoEncoding = ENCODING_NEGATIVE;
-  }
 
   /* Prep visit table */
   logMsg(LOG_VERBOSE, "Initializing visit table");
@@ -706,7 +407,7 @@ backtrack(Prog *prog, char *input, /* start-end pointers for each CG */ char **s
 
   /* Prep memo table */
   logMsg(LOG_VERBOSE, "Initializing memo table");
-  memo = initMemoTable(prog, strlen(input) + 1, prog->memoMode, prog->memoEncoding);
+  memo = initMemoTable(prog, strlen(input) + 1);
 
   /* Prep sub-captures */
   sub = newsub(nsubp, input);
