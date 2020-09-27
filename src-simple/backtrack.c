@@ -31,15 +31,9 @@ thread(Inst *pc, char *sp, Sub *sub)
   return t;
 }
 
-static int
-woffset(char *input, char *sp)
-{
-  return (int) (sp - input);
-}
+/****** Backtracking stack ("ThreadVec") ********/
+/* Supports arbitrary input length instead of max of 1K -- dynamic stack reallocation. */
 
-/* Summary statistics */
-
-/* NFA simulation */
 typedef struct ThreadVec ThreadVec;
 struct ThreadVec
 {
@@ -48,10 +42,6 @@ struct ThreadVec
 
   int nThreads;
 };
-
-/****** Backtracking stack ("ThreadVec") ********/
-
-/* Supports arbitrary input length instead of max of 1K -- dynamic stack reallocation. */
 
 static ThreadVec
 ThreadVec_alloc()
@@ -231,6 +221,15 @@ _testInlineZeroWidthAssertion(Inst *pc, char *sp, int isBegin, int isEnd)
   }
 
   return satisfied;
+}
+
+/***** Backtracking core *****/
+
+// Offset of sp relative to start of string ("w").
+static int
+woffset(char *input, char *sp)
+{
+  return (int) (sp - input);
 }
 
 int
