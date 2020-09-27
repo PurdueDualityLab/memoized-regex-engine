@@ -10,6 +10,7 @@ TARG=re
 OFILES=\
 	regexp.o\
 	memoize.o\
+	statistics.o\
 	backtrack.o\
 	compile.o\
 	main.o\
