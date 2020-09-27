@@ -258,7 +258,7 @@ initMemoTable(Prog *prog, int nChars)
       break;
     case ENCODING_NEGATIVE:
       logMsg(LOG_INFO, "%s: Initializing with encoding NEGATIVE", prefix);
-      memo.searchStateTable = NULL;
+      memo.simPosTable = NULL;
       break;
     case ENCODING_RLE:
     case ENCODING_RLE_TUNED:
@@ -344,7 +344,7 @@ isMarked(Memo *memo, int statenum /* PC's memoStateNum */, int woffset, Sub *sub
       }
     }
 
-    HASH_FIND(hh, memo->searchStateTable, &entry.key, sizeof(SimPos), p);
+    HASH_FIND(hh, memo->simPosTable, &entry.key, sizeof(SimPos), p);
     return p != NULL;
   }
   case ENCODING_RLE:
@@ -392,7 +392,7 @@ markMemo(Memo *memo, int statenum, int woffset, Sub *sub)
       }
     }
 
-    HASH_ADD(hh, memo->searchStateTable, key, sizeof(SimPos), entry);
+    HASH_ADD(hh, memo->simPosTable, key, sizeof(SimPos), entry);
     break;
   }
   case ENCODING_RLE:

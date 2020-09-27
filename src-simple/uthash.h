@@ -1136,6 +1136,8 @@ typedef struct UT_hash_table {
 
 } UT_hash_table;
 
+#define UT_TABLE_OVERHEAD(hh) ((hh)->tbl->num_buckets * sizeof(UT_hash_bucket))
+
 typedef struct UT_hash_handle {
    struct UT_hash_table *tbl;
    void *prev;                       /* prev element in app order      */

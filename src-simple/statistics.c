@@ -1,14 +1,15 @@
 #include "statistics.h"
 #include "log.h"
+#include "uthash.h"
 
 #include <stdio.h>
 #include <sys/time.h>
+#include <math.h>
 
 static void
 vec_strcat(char **dest, int *dAlloc, char *src)
 {
   int combinedLen = strlen(*dest) + strlen(src) + 5;
-  // logMsg(LOG_INFO, "vec_strcat: dest %p *dest %p *dAlloc %d; string <%s>\n", dest, *dest, *dAlloc, *dest);
 
   if (combinedLen > *dAlloc) {
     /* Re-alloc */
@@ -25,7 +26,6 @@ vec_strcat(char **dest, int *dAlloc, char *src)
   }
   
   strcat(*dest, src);
-  // logMsg(LOG_INFO, "vec_strcat: dest %p *dest %p *dAlloc %d; string <%s>\n", dest, *dest, *dAlloc, *dest);
   return;
 }
 
@@ -55,8 +55,10 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime, S
   char memoConfig_encoding[64];
   char numBufForSprintf[128];
   int csv_maxObservedCostsPerMemoizedVertex_len = 2*sizeof(char);
-  char *csv_maxObservedCostsPerMemoizedVertex = mal(csv_maxObservedCostsPerMemoizedVertex_len);
-  vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, "");
+  char *csv_maxObservedAsymptoticCostsPerMemoizedVertex = mal(csv_maxObservedCostsPerMemoizedVertex_len);
+  char *csv_maxObservedMemoryBytesPerMemoizedVertex = mal(csv_maxObservedCostsPerMemoizedVertex_len);
+  vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, "");
+  vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, "");
 
   switch (memo->mode) {
   case MEMO_NONE:
@@ -135,88 +137,123 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime, S
     }
   }
 
-  if (memo->backrefs) {
-    switch (memo->encoding) {
-    case ENCODING_NONE:
-      /* All memoized states cost |w| */
-      logMsg(LOG_INFO, "%s: No encoding, so all memoized vertices paid the full cost of |w| = %d slots", prefix, memo->nChars);
-      for (i = 0; i < memo->nStates; i++) {
-        sprintf(numBufForSprintf, "%d", memo->nChars);
-        vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
-        if (i + 1 != memo->nStates) {
-          vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
-        }
-      }
-      break;
-    case ENCODING_NEGATIVE:
-      logMsg(LOG_DEBUG, "C");
-      logMsg(LOG_INFO, "%s: %d slots used (out of %d possible)",
-        prefix, HASH_COUNT(memo->searchStateTable), memo->nStates * memo->nChars);
+  switch (memo->encoding) {
+  case ENCODING_NONE:
+    /* All memoized states cost |w| */
+    logMsg(LOG_INFO, "%s: No encoding, so all memoized vertices paid the full cost of |w| = %d slots", prefix, memo->nChars);
+    for (i = 0; i < memo->nStates; i++) {
 
-      /* Memoized state costs vary by number of visits to each node. */
-      count = 0;
-      for (i = 0; i < prog->len; i++) {
-        if (prog->start[i].memoInfo.shouldMemo) {
-          count += visitsPerVertex[i];
-
-          sprintf(numBufForSprintf, "%d", visitsPerVertex[i]);
-          vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
-          if (prog->start[i].memoInfo.memoStateNum + 1 != memo->nStates) {
-            vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
-          }
-        }
+      // Asymptotically, cost of 1 (bit or byte) * |w|
+      sprintf(numBufForSprintf, "%d", memo->nChars);
+      vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
+      if (i + 1 != memo->nStates) {
+        vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
       }
 
-      if (!memo->backrefs) {
-        /* Sanity check: HASH_COUNT does correspond to the number of marked search states
-        * This count will be inaccurate if backrefs are enabled, because we don't know all of the subs that we encountered.
-        * TODO We could enumerate them another way. */
-        n = 0;
-        for (i = 0; i < memo->nStates; i++) {
-          for (j = 0; j < memo->nChars; j++) {
-            if (isMarked(memo, i, j, sub)) {
-              n++;
-            }
-          }
-        }
-        logMsg(LOG_DEBUG, "HASH_COUNT %d n %d count %d", HASH_COUNT(memo->searchStateTable), n, count);
-        assert(n == HASH_COUNT(memo->searchStateTable));
-        assert(n == count);
+      // In our actual implementation, we use one byte for each record.
+      // We actually need only one bit, not one byte.
+      // So we divide by 8 to indicate an optimal bit-based implementation.
+      sprintf(numBufForSprintf, "%d", (memo->nChars + 7) / 8);
+      vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
+      if (i + 1 != memo->nStates) {
+        vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
       }
-
-      break;
-    case ENCODING_RLE:
-    case ENCODING_RLE_TUNED:
-      logMsg(LOG_INFO, "%s: |w| = %d", prefix, memo->nChars);
-      for (i = 0; i < memo->nStates; i++) {
-        logMsg(LOG_INFO, "%s: memo vector %d (RL %d) has %d runs (max observed during execution: %d, max possible: %d)",
-          prefix, i, RLEVector_runSize(memo->rleVectors[i]),
-          RLEVector_currSize(memo->rleVectors[i]),
-          RLEVector_maxObservedSize(memo->rleVectors[i]),
-          (memo->nChars / RLEVector_runSize(memo->rleVectors[i])) + 1
-          );
-
-        sprintf(numBufForSprintf, "%d", RLEVector_maxObservedSize(memo->rleVectors[i]));
-        vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
-        if (i + 1 != memo->nStates) {
-          vec_strcat(&csv_maxObservedCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
-        }
-      }
-      break;
-      default:
-        assert(!"Unexpected encoding\n");
     }
+
+    break;
+  case ENCODING_NEGATIVE:
+  {
+    logMsg(LOG_INFO, "%s: %d slots used (out of %d possible)",
+      prefix, HASH_COUNT(memo->simPosTable), memo->nStates * memo->nChars);
+
+    /* Memoized state costs vary by number of visits to each node. */
+    int UT_overheadPerVertex = UT_TABLE_OVERHEAD(&memo->simPosTable->hh) / memo->nStates;
+    logMsg(LOG_INFO, "%s: distributing the table overhead of %d over the %d memo states",
+      prefix, UT_TABLE_OVERHEAD(&memo->simPosTable->hh), memo->nStates);
+
+    count = 0;
+    for (i = 0; i < prog->len; i++) {
+      if (prog->start[i].memoInfo.shouldMemo) {
+        count += visitsPerVertex[i];
+
+        // Asymptotically, 1 per entry
+        sprintf(numBufForSprintf, "%d", visitsPerVertex[i]);
+        vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
+        if (prog->start[i].memoInfo.memoStateNum + 1 != memo->nStates) {
+          vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
+        }
+
+        // In implementation, count the cost of each sim table entry associated with this vertex
+        sprintf(numBufForSprintf, "%ld", UT_overheadPerVertex + (visitsPerVertex[i] * sizeof(SimPosTable)) );
+        vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
+        if (prog->start[i].memoInfo.memoStateNum + 1 != memo->nStates) {
+          vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
+        }
+      }
+    }
+
+    if (!memo->backrefs) {
+      /* Sanity check: HASH_COUNT does correspond to the number of marked search states
+      * This count will be inaccurate if backrefs are enabled, because we don't know all of the subs that we encountered.
+      * TODO We could enumerate them another way. */
+      n = 0;
+      for (i = 0; i < memo->nStates; i++) {
+        for (j = 0; j < memo->nChars; j++) {
+          if (isMarked(memo, i, j, sub)) {
+            n++;
+          }
+        }
+      }
+      logMsg(LOG_DEBUG, "HASH_COUNT %d n %d count %d", HASH_COUNT(memo->simPosTable), n, count);
+      assert(n == HASH_COUNT(memo->simPosTable));
+      assert(n == count);
+    }
+
+    break;
   }
-  fprintf(stderr, ", \"memoizationInfo\": { \"config\": { \"vertexSelection\": %s, \"encoding\": %s }, \"results\": { \"nSelectedVertices\": %d, \"lenW\": %d, \"maxObservedCostPerMemoizedVertex\": [%s]}}",
+  case ENCODING_RLE:
+  case ENCODING_RLE_TUNED:
+    logMsg(LOG_INFO, "%s: |w| = %d", prefix, memo->nChars);
+    for (i = 0; i < memo->nStates; i++) {
+      logMsg(LOG_INFO, "%s: memo vector %d (RL %d) has %d runs (max observed during execution: %d, max possible: %d)",
+        prefix, i, RLEVector_runSize(memo->rleVectors[i]),
+        RLEVector_currSize(memo->rleVectors[i]),
+        RLEVector_maxObservedSize(memo->rleVectors[i]),
+        (memo->nChars / RLEVector_runSize(memo->rleVectors[i])) + 1
+        );
+
+      // Asymptotically, 1 per RLE entry
+      sprintf(numBufForSprintf, "%d", RLEVector_maxObservedSize(memo->rleVectors[i]));
+      vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
+      if (i + 1 != memo->nStates) {
+        vec_strcat(&csv_maxObservedAsymptoticCostsPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
+      }
+
+      // In the implementation, count the cost of the RLE entries
+      sprintf(numBufForSprintf, "%d", RLEVector_maxBytes(memo->rleVectors[i]));
+      vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, numBufForSprintf);
+      if (i + 1 != memo->nStates) {
+        vec_strcat(&csv_maxObservedMemoryBytesPerMemoizedVertex, &csv_maxObservedCostsPerMemoizedVertex_len, ",");
+      }
+
+    }
+    break;
+    default:
+      assert(!"Unexpected encoding\n");
+  }
+
+  fprintf(stderr, ", \"memoizationInfo\": { \"config\": { \"vertexSelection\": %s, \"encoding\": %s }, \"results\": { \"nSelectedVertices\": %d, \"lenW\": %d, \"maxObservedAsymptoticCostsPerMemoizedVertex\": [%s], \"maxObservedMemoryBytesPerMemoizedVertex\": [%s]}}",
     memoConfig_vertexSelection, memoConfig_encoding,
     memo->nStates, memo->nChars,
-    csv_maxObservedCostsPerMemoizedVertex
+    csv_maxObservedAsymptoticCostsPerMemoizedVertex,
+    csv_maxObservedMemoryBytesPerMemoizedVertex
   );
 
   fprintf(stderr, "}\n");
 
-	free(csv_maxObservedCostsPerMemoizedVertex);
-	free(visitsPerVertex);
+  free(csv_maxObservedAsymptoticCostsPerMemoizedVertex);
+  free(csv_maxObservedMemoryBytesPerMemoizedVertex);
+  free(visitsPerVertex);
 }
 
 uint64_t

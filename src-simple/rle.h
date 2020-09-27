@@ -50,6 +50,10 @@ RLEVector_currSize(RLEVector *vec);
 int 
 RLEVector_maxObservedSize(RLEVector *vec);
 
+// How many bytes to represent this RLE vector at its peak? 
+int
+RLEVector_maxBytes(RLEVector *vec);
+
 void
 RLEVector_destroy(RLEVector *vec);
 

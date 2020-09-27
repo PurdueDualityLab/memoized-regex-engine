@@ -59,7 +59,7 @@ struct Memo
 	int **visitVectors; /* Booleans: visitVector[q][i] */
 
 	/* ENCODING_NEGATIVE */
-	SimPosTable *searchStateTable; /* Tuples: < q, i [, backrefs ] > */
+	SimPosTable *simPosTable; /* Tuples: < q, i [, backrefs ] > */
 
 	/* ENCODING_RLE, ENCODING_RLE_TUNED */
 	RLEVector **rleVectors;

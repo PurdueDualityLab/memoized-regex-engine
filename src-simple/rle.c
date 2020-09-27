@@ -399,10 +399,18 @@ RLEVector_maxObservedSize(RLEVector *vec)
   return vec->mostNEntries;
 }
 
+int
+RLEVector_maxBytes(RLEVector *vec)
+{
+  return sizeof(RLEVector) /* Internal overhead */ \
+    + sizeof(RLENode) * RLEVector_maxObservedSize(vec) /* Cost per node */ \
+    ;
+}
+
 void
 RLEVector_destroy(RLEVector *vec)
 {
-  /* TODO */
+  /* TODO - not needed for prototype */
   return;
 }
 
