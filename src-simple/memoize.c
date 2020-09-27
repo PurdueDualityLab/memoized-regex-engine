@@ -420,8 +420,15 @@ void freeMemoTable(Memo memo)
         free(memo.visitVectors);
         break;
     case ENCODING_NEGATIVE:
+    {
+        SimPosTable *n, *tmp = NULL;
+        HASH_ITER(hh, memo.simPosTable, n, tmp) {
+          HASH_DEL(memo.simPosTable, n);
+          free(n);
+        }
         HASH_CLEAR(hh, memo.simPosTable);
         break;
+    }
     case ENCODING_RLE:
         logMsg(LOG_DEBUG, "Freeing %d vectors", memo.nStates);
         for (i = 0; i < memo.nStates; i++) {
