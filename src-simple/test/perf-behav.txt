@@ -18,7 +18,7 @@
 ^(a|a)*$ :: a:a:z            :: INDEG    ::    LIN
 ^(a|a)*$ :: a:a:z            :: ANCESTOR ::    LIN
 
-^(a+)+$  :: a:a:z            :: NONE     ::    EXP
+^((aaaaa)+)+$  :: a:a:z      :: NONE     ::    EXP
 ^(a+)+$  :: a:a:z            :: INDEG    ::    LIN
 ^(a+)+$  :: a:a:z            :: ANCESTOR ::    LIN
 
