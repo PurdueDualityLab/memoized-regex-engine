@@ -44,8 +44,6 @@ copyreg(Regexp *r)
 void
 freereg(Regexp *r)
 {
-	logMsg(LOG_DEBUG, "freereg: reg %p", r);
-	
 	if (r->left != NULL) {
 		freereg(r->left);
 	}

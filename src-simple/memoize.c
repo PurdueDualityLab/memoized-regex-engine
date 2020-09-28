@@ -67,12 +67,36 @@ Prog_find_ancestor_nodes(Prog *p)
 
 	/* Observe back-edges */
 	for (i = 0; i < p->len; i++) {
-		if (p->start[i].opcode == Jmp) {
-            logMsg(LOG_DEBUG, "  Jmp: from %d to %d", p->start[i].stateNum, p->start[i].x->stateNum);
-            if (p->start[i].stateNum > p->start[i].x->stateNum) {
-                p->start[i].x->memoInfo.isAncestorLoopDestination = 1;
-            }
-		}
+    int stateNum = p->start[i].stateNum;
+    switch (p->start[i].opcode) {
+    default: break; // Not a branch type, cannot create a back-edge
+		case Jmp:
+      logMsg(LOG_DEBUG, "  Jmp: from %d to %d", stateNum, p->start[i].x->stateNum);
+      if (stateNum > p->start[i].x->stateNum) {
+          p->start[i].x->memoInfo.isAncestorLoopDestination = 1;
+      }
+      break;
+    case Split:
+      logMsg(LOG_DEBUG, "  Split option: from %d to %d or %d", stateNum, p->start[i].x->stateNum, p->start[i].y->stateNum);
+      if (stateNum > p->start[i].x->stateNum) {
+          p->start[i].x->memoInfo.isAncestorLoopDestination = 1;
+      } 
+      if (stateNum > p->start[i].y->stateNum) {
+          p->start[i].y->memoInfo.isAncestorLoopDestination = 1;
+      } 
+      break;
+    case SplitMany:
+      {
+        int j;
+        for (j = 0; j < p->start[i].arity; j++) {
+          logMsg(LOG_DEBUG, "  SplitMany: from %d to %d", stateNum, p->start[i].edges[j]->stateNum);
+          if (stateNum > p->start[i].edges[j]->stateNum) {
+            p->start[i].edges[j]->memoInfo.isAncestorLoopDestination = 1;
+          }
+        }
+      }
+      break;
+    }
 	}
 }
 
@@ -304,8 +328,8 @@ isMarked(Memo *memo, int statenum /* PC's memoStateNum */, int woffset, Sub *sub
   logMsg(LOG_VERBOSE, "  isMarked: querying <%d, %d>", statenum, woffset);
 
   switch(memo->encoding){
+  default: assert(!"isMarked: Unexpected encoding");
   case ENCODING_NONE:
-    logMsg(LOG_VERBOSE, "  isMarked: visitVectors[%i] = %p\n", statenum, memo->visitVectors[statenum]);
     return memo->visitVectors[statenum][woffset] == 1;
   case ENCODING_NEGATIVE:
   {

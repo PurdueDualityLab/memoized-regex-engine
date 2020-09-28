@@ -207,6 +207,12 @@ main(int argc, char **argv)
 	Prog_determineMemoNodes(prog, memoMode);
 	logMsg(LOG_INFO, "Will memoize %d states", prog->nMemoizedStates);
 
+	if (shouldLog(LOG_DEBUG)) {
+		logMsg(LOG_INFO, "Compiled and memo-marked:");
+		printprog(prog);
+		printf("\n");
+	}
+
 	// Simulate
 	logMsg(LOG_INFO, "Candidate string: %s", q.input);
 	for(j=0; j<nelem(tab); j++) { /* Go through all matchers */
