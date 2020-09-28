@@ -37,6 +37,9 @@ class ProtoRegexEngine:
             SS_Loop: "loop",
         }
 
+        all = scheme2cox.keys()
+        allMemo = [ SS_Full, SS_InDeg, SS_Loop ]
+
     class ENCODING_SCHEME:
         ES_None = "no encoding"
         ES_Negative = "negative encoding"
@@ -49,6 +52,8 @@ class ProtoRegexEngine:
             ES_RLE: "rle",
             # ES_RLE_TUNED: "rle-tuned", # TODO Work out the right math here
         }
+
+        all = scheme2cox.keys()
 
     @staticmethod
     def buildQueryFile(pattern, input, filePrefix="protoRegexEngineQueryFile-"):
@@ -123,8 +128,11 @@ class ProtoRegexEngine:
             self.mi_config_encoding = dict['config']['encoding']
             self.mi_config_vertexSelection = dict['config']['vertexSelection']
 
-            self.mi_results_maxObservedCostPerVertex = [
-              int(cost) for cost in dict['results']['maxObservedCostPerMemoizedVertex']
+            self.mi_results_maxObservedAsymptoticCostsPerVertex = [
+              int(cost) for cost in dict['results']['maxObservedAsymptoticCostsPerMemoizedVertex']
+            ]
+            self.mi_results_maxObservedMemoryBytesPerVertex = [
+              int(cost) for cost in dict['results']['maxObservedMemoryBytesPerMemoizedVertex']
             ]
             self.mi_results_nSelectedVertices = int(dict['results']['nSelectedVertices'])
             self.mi_results_lenW = int(dict['results']['lenW'])
