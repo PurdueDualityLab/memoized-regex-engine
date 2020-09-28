@@ -14,9 +14,13 @@
 # Exponential
 ^(a|a)*$ :: a:a:z            :: NONE     ::    EXP
 ^(aa*)*$ :: a:a:z            :: NONE     ::    EXP  # NB: (a*)* yields an infinite loop
-^(a|a)*$ :: a:a:z            :: FULL     ::   LIN
+^(a|a)*$ :: a:a:z            :: FULL     ::    LIN
 ^(a|a)*$ :: a:a:z            :: INDEG    ::    LIN
 ^(a|a)*$ :: a:a:z            :: ANCESTOR ::    LIN
+
+^(a+)+$  :: a:a:z            :: NONE     ::    EXP
+^(a+)+$  :: a:a:z            :: INDEG    ::    LIN
+^(a+)+$  :: a:a:z            :: ANCESTOR ::    LIN
 
 # Polynomial
 ^a*a*$    :: a:a:z             :: NONE     ::    POLY
