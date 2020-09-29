@@ -1059,7 +1059,11 @@ do {                                                                            
 } while (0)
 
 // Just the buckets -- suitable if you are counting the items yourself
-#define UT_TABLE_OVERHEAD(hh) ((hh)->tbl->num_buckets * sizeof(UT_hash_bucket))
+#define UT_TABLE_OVERHEAD(hh,head)                                               \
+ (((head) != NULL) ? (                                                           \
+ (size_t)(((head)->hh.tbl->num_buckets * sizeof(UT_hash_bucket))   +                  \
+           sizeof(UT_hash_table)                              +                  \
+           (HASH_BLOOM_BYTELEN))) : 0U)
 
 // Buckets + items -- total cost
 #define HASH_OVERHEAD(hh,head)                                                   \

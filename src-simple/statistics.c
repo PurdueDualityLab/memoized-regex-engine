@@ -170,9 +170,9 @@ printStats(Prog *prog, Memo *memo, VisitTable *visitTable, uint64_t startTime, S
       prefix, HASH_COUNT(memo->simPosTable), memo->nStates * memo->nChars);
 
     /* Memoized state costs vary by number of visits to each node. */
-    int UT_overheadPerVertex = UT_TABLE_OVERHEAD(&memo->simPosTable->hh) / memo->nStates;
+    int UT_overheadPerVertex = UT_TABLE_OVERHEAD(hh, memo->simPosTable) / memo->nStates;
     logMsg(LOG_INFO, "%s: distributing the table overhead of %d over the %d memo states",
-      prefix, UT_TABLE_OVERHEAD(&memo->simPosTable->hh), memo->nStates);
+      prefix, UT_TABLE_OVERHEAD(hh, memo->simPosTable), memo->nStates);
 
     count = 0;
     for (i = 0; i < prog->len; i++) {
