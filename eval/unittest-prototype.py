@@ -165,7 +165,7 @@ class PerformanceTestCase(TestCase):
 
     # Collect visit counts as we increase pump
     for nPumps in range(1, maxPumps):
-      input = self.evilInput.build(nPumps)
+      input = self.evilInput.build(nPumps)[0]
       rawCmd, validRegex, em = self._queryEngine(self.memoSS, libMemo.ProtoRegexEngine.ENCODING_SCHEME.ES_None, self.regex, input)
       assert(validRegex)
 
