@@ -11,8 +11,8 @@ Research paper is available [here](https://davisjam.github.io/publications/).
 | Item | Description | Location |
 |------|-------------|----------|
 | Simple regex engine | Source code for Cox's simple Thompson regex engine (baseline and variants)       | src-simple/ |
-| Evaluation (semantics / performance) | Prototype evaluation. Test suite, benchmark suite               | eval/ |
-| Prototype size measurements          | For reporting in paper                                          | measure-prototype-size/ |
+| Evaluation          | Prototype evaluation. Test suite, benchmark suite                                | eval/ |
+| Prototype size measurements          | Broken down by engine extensions, memoization, and test         | measure-prototype-size/ |
 
 ## Configuration
 
@@ -21,6 +21,30 @@ Set the following environment variables:
 - `ECOSYSTEM_REGEXP_PROJECT_ROOT`: Set this to anything. It's referenced in `eval/`, but not actually used in this project. Needs to be cleaned up...
 
 The file `.sample_config` has examples. You might run `. .sample_config`.
+
+## Tests
+
+Run the tests as follows:
+
+```
+cd src-simple;
+make tests
+```
+
+You can run semantic and performance tests separately. Use `make semtests` and `make perftests`.
+
+## Using the engine
+
+```
+cd src-simple;
+./re [your args here]
+```
+
+The usage message gives details.
+
+The engine is instrumented.
+- You can watch progress by running the engine with the environment variable `MEMOIZATION_LOGLVL=debug`.
+- A JSON object is printed at the end with time and space measurements.
 
 ## Running evaluation
 
