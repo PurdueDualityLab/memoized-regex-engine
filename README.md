@@ -33,7 +33,7 @@ make tests
 
 You can run semantic and performance tests separately. Use `make semtests` and `make perftests`.
 
-The tests are defined in `src-simple/test/[perf|semantic]-behav.txt`.
+The tests are defined in `src-simple/test`: `semantic-behav.txt` and `perf-behav.txt`.
 
 ## Using the engine
 
