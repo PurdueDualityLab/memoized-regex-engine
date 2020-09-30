@@ -1,6 +1,8 @@
 # memoized-regex-engine
 
-Prototype of memoized regex engine. Demonstrates selective memoization and various encoding schemes for the memo table. Includes benchmarking for large-scale evaluation on real-world regexes.
+Prototype of memoized backtracking regex engine. Novelty:
+- Demonstrates selective memoization and various encoding schemes for the memo table.
+- Includes benchmarking for large-scale evaluation on real-world regexes.
 
 Research paper is available [here](https://davisjam.github.io/publications/).
 
