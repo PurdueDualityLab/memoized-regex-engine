@@ -12,12 +12,13 @@ Research paper is available [here](https://davisjam.github.io/publications/).
 |------|-------------|----------|
 | Simple regex engine | Source code for Cox's simple Thompson regex engine (baseline and variants)       | src-simple/ |
 | Evaluation (semantics / performance) | Prototype evaluation. Test suite, benchmark suite               | eval/ |
+| Prototype size measurements                                                                            | measure-prototype-size/ |
 
 ## Configuration
 
 Set the following environment variables:
 - `MEMOIZATION_PROJECT_ROOT`: The directory to which you cloned this
-- `ECOSYSTEM_REGEXP_PROJECT_ROOT`: The directory to which you cloned the EcosystemRegexps project (TODO No, the artifact!)
+- `ECOSYSTEM_REGEXP_PROJECT_ROOT`: Set this to anything. It's referenced in `eval/`, but not actually used in this project. Needs to be cleaned up...
 
 The file `.sample_config` has examples. You might run `. .sample_config`.
 
