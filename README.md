@@ -28,3 +28,5 @@ The simple and full regex engines are extensions of existing engines.
   - The JSON library used for the CLI is [cJSON](https://github.com/DaveGamble/cJSON), by D. Gamble (and their collaborators).
 
 The memoization extensions, test suite, and benchmark suite are my own.
+
+FYI: Most data in the paper was generated on a 10-node compute cluster. On a standard desktop it would take several days/weeks(?) to replicate.
