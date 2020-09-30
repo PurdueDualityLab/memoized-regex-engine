@@ -91,8 +91,9 @@ def mergeDFs(splitDir):
 #######
 #######
 #slFile = os.path.join(DATA_PATH, 'export-060220-1')
-slFile = os.path.join(DATA_PATH, 'export-060220-2')
-slFile = '/users/jamiedavis/Downloads/x.pkl.bz2'
+#slFile = os.path.join(DATA_PATH, 'export-060220-2')
+#slFile = '/users/jamiedavis/Downloads/x.pkl.bz2'
+slFile = os.path.join(DATA_PATH, 'exp-092920')
 
 slDF = loadDF(slFile)
 uniqRegexes = slDF['pattern'].unique()
@@ -172,14 +173,28 @@ matplotlib.rc('font', **font)
 matplotlib.rc('text.latex', preamble=r'\usepackage{sfmath}')
 matplotlib.rc('mathtext', fontset='stix')
 
+print("\n********\n")
+print('slDF results (space bytes) grouped by encoding policy')
+print('\n')
+print(slDF.groupby(['Encoding policy', 'selectionPolicy'])['spaceCostBytes'].describe(percentiles=[0.01, 0.05, 0.1, .25, .5, .75, 0.8, 0.85, 0.87, 0.89, 0.9, 0.95, 0.99]))
+print('\n')
+print("\n********\n")
+
+print("\n********\n")
+print('slDF results (algo cxty) grouped by encoding policy')
+print('\n')
+print(slDF.groupby(['Encoding policy', 'selectionPolicy'])['spaceCostAlgo'].describe(percentiles=[0.01, 0.05, 0.1, .25, .5, .75, 0.8, 0.85, 0.87, 0.89, 0.9, 0.95, 0.99]))
+print('\n')
+print("\n********\n")
+
 plt.figure(1,
-           #figsize=(8,11)
+           figsize=(8,11)
            )
-rawSpacePlt_whis = [5,95]
-rawSpacePlt_showfliers = False
+rawSpacePlt_whis = [5,90]
+rawSpacePlt_showfliers = True
 rawSpacePlt_fname = os.path.join(FIG_PATH, 'raw-space-cost-whis{}-{}-fliers{}.{}'.format(
     rawSpacePlt_whis[0], rawSpacePlt_whis[1], rawSpacePlt_showfliers, FIG_FILE_FORMAT))
-ax = sns.boxplot(x="selectionPolicy", y="spaceCostAlgo", hue="Encoding policy",
+ax = sns.boxplot(x="selectionPolicy", y="spaceCostBytes", hue="Encoding policy",
                  data=slDF[
                     (slDF['Encoding policy'] != "RLE-tuned") # Not a success story
                   ], 
@@ -189,29 +204,32 @@ ax = sns.boxplot(x="selectionPolicy", y="spaceCostAlgo", hue="Encoding policy",
                  whis=rawSpacePlt_whis, showfliers=rawSpacePlt_showfliers
                  )
 kb = ax.axhline(1024, color='blue', linestyle='--')
-plt.text(0.8, 1024 + 250, '1 KB', fontstyle='italic')
+plt.text(2.32, 1024 + 250, '1 KB', fontstyle='italic', fontsize=14)
 
-mb = ax.axhline(1024*1024, color='red', linestyle='--')
-plt.text(0.8, 1024*1024 + 250000, '1 MB', fontstyle='italic')
+mb = ax.axhline(1024*1024, color='green', linestyle='--')
+plt.text(2.32, 1024*1024 + 250000, '1 MB', fontstyle='italic', fontsize=14)
+
+mb = ax.axhline(1024*1024*1024, color='red', linestyle='--')
+plt.text(2.32, 1024*1024*1024 + 75000000, '1 GB', fontstyle='italic', fontsize=14)
 
 ax.set_yscale("log")
-plt.title(r'Raw space costs (bytes)', fontsize=20)
-plt.xticks(fontsize=20)
-plt.xlabel("Selection scheme")
+plt.title(r'Space cost for Stack Overflow scenario', fontsize=20)
+plt.xticks(fontsize=22)
+plt.xlabel("")#"Selection scheme")
 plt.yticks(fontsize=20)
 #locs, labels = plt.yticks()
 #plt.yticks(locs, [], **kwargs)
-plt.ylabel("Raw cost (bytes)")
-#plt.legend(fontsize='small')
+plt.ylabel("Space cost (bytes)", fontsize=16)
 leg = ax.legend(
-    loc='lower left',
-    bbox_to_anchor= (0.665, 0.825), ncol=1,
+    loc='upper right',
+    framealpha=0.5,
+    #bbox_to_anchor= (0.52, 0.86), ncol=1,
     borderaxespad=0, 
     frameon=True,
     title='Encoding scheme',
-    prop={'size': 7},
+    prop={'size': 14},
 )
-leg.set_title("Encoding scheme", prop = {'size': 10})
+leg.set_title("Encoding scheme", prop = {'size': 16})
 #plt.tight_layout()
 print("Saving to {}".format(rawSpacePlt_fname))
 plt.savefig(fname=rawSpacePlt_fname, bbox_inches='tight')
@@ -276,39 +294,40 @@ if False:
 
 """### The relative costliness of RLE and RLE-TUNED"""
 
-selectionPolicies = [r'$Q_{in-deg > 1}$', r'$Q_{ancestor}$']
+if False:
+  selectionPolicies = [r'$Q_{in-deg > 1}$', r'$Q_{ancestor}$']
 
-# Pick a fairly arbitrary cost measure
-for selectionPolicy in selectionPolicies:
-  print("Considering selectionPolicy {}".format(selectionPolicy))
-  nPatterns = len(slDF['pattern'].unique())
-  costThreshold = 1000
-  rows = slDF[(slDF['encodingPolicy'] == 'RLE') &
-              (slDF['selectionPolicy'] == selectionPolicy) &
-              (slDF['spaceCostAlgo'] > costThreshold) ]
-  print("{}/{} ({}%) were costly patterns for Phi_quant under RLE".format(len(rows), nPatterns, int(100*len(rows)/nPatterns)))
-  
-  #for p in rows['pattern']:
-  #  print("Costly pattern: /{}/".format(p))
-  
-  # Which became more costly?
-  print(slDF.columns)
-  print(slDF.head(12))
-  pattern2costs = {}
-  anyItem = None
-  # TODO This should be a groupby...
-  print("Building pattern2costs by, ahem, iterating over the DF")
-  for i, row in slDF.iterrows():
-    if row['pattern'] not in pattern2costs:
-      pattern2costs[row['pattern']] = { 'pattern': row['pattern'] }
-    if row['selectionPolicy'] == selectionPolicy and row['encodingPolicy'] == 'RLE':
-      pattern2costs[row['pattern']]['spaceCost-RLE'] = row['spaceCostAlgo']
-      anyItem = pattern2costs[row['pattern']]
-    elif row['selectionPolicy'] == selectionPolicy and row['encodingPolicy'] == 'RLE-tuned':
-      pattern2costs[row['pattern']]['spaceCost-RLE-tuned'] = row['spaceCostAlgo']
-      anyItem = pattern2costs[row['pattern']]
-  
-  print("\n\n*******\n\nDescribing the space costs for RLE under the {} scheme\n\n********\n\n".format(selectionPolicy))
-  compDF = pd.DataFrame(columns=anyItem.keys(), data=pattern2costs.values())
-  print(compDF.columns)
-  print(compDF.describe(percentiles=[0.01, 0.05, 0.1, .25, .5, .75, 0.9, 0.95, 0.99]))
+  # Pick a fairly arbitrary cost measure
+  for selectionPolicy in selectionPolicies:
+    print("Considering selectionPolicy {}".format(selectionPolicy))
+    nPatterns = len(slDF['pattern'].unique())
+    costThreshold = 1000
+    rows = slDF[(slDF['encodingPolicy'] == 'RLE') &
+                (slDF['selectionPolicy'] == selectionPolicy) &
+                (slDF['spaceCostAlgo'] > costThreshold) ]
+    print("{}/{} ({}%) were costly patterns for Phi_quant under RLE".format(len(rows), nPatterns, int(100*len(rows)/nPatterns)))
+    
+    #for p in rows['pattern']:
+    #  print("Costly pattern: /{}/".format(p))
+    
+    # Which became more costly?
+    print(slDF.columns)
+    print(slDF.head(12))
+    pattern2costs = {}
+    anyItem = None
+    # TODO This should be a groupby...
+    print("Building pattern2costs by, ahem, iterating over the DF")
+    for i, row in slDF.iterrows():
+      if row['pattern'] not in pattern2costs:
+        pattern2costs[row['pattern']] = { 'pattern': row['pattern'] }
+      if row['selectionPolicy'] == selectionPolicy and row['encodingPolicy'] == 'RLE':
+        pattern2costs[row['pattern']]['spaceCost-RLE'] = row['spaceCostAlgo']
+        anyItem = pattern2costs[row['pattern']]
+      elif row['selectionPolicy'] == selectionPolicy and row['encodingPolicy'] == 'RLE-tuned':
+        pattern2costs[row['pattern']]['spaceCost-RLE-tuned'] = row['spaceCostAlgo']
+        anyItem = pattern2costs[row['pattern']]
+    
+    print("\n\n*******\n\nDescribing the space costs for RLE under the {} scheme\n\n********\n\n".format(selectionPolicy))
+    compDF = pd.DataFrame(columns=anyItem.keys(), data=pattern2costs.values())
+    print(compDF.columns)
+    print(compDF.describe(percentiles=[0.01, 0.05, 0.1, .25, .5, .75, 0.9, 0.95, 0.99]))

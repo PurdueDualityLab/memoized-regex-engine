@@ -79,10 +79,12 @@ allFile = os.path.join(DATA_PATH, 'LF-phiMeasurements-091520.json')
 allFile = os.path.join(DATA_PATH, 'LF-phiMeasurements-091620.json')
 allFile = os.path.join(DATA_PATH, 'LF-phiMeasurements-091620-AZz.json')
 allFile = os.path.join(DATA_PATH, 'LF-phiMeasurements-091720.json')
+allFile = os.path.join(DATA_PATH, 'LF-phiMeasurements-092920.json')
 
 slFile = os.path.join(DATA_PATH, 'sl-phiMeasurements.json')
 slFile = os.path.join(DATA_PATH, 'SL-phiMeasurements-091620-AZz.json')
 slFile = os.path.join(DATA_PATH, 'SL-phiMeasurements-091720.json')
+slFile = os.path.join(DATA_PATH, 'SL-phiMeasurements-092920.json')
 
 print('Loading "all regexes" measurements from {}'.format(allFile))
 allReg = loadNDJSON(allFile)
@@ -169,9 +171,12 @@ ax = sns.boxplot(x="Measure", y="Value", hue=hue, data=dfRaw,
                  whis=rawPlt_whis, showfliers=rawPlt_showfliers
                 #, palette="Set3"
                  )
+ax.legend(prop={'size': 16})
 plt.title('Sizes of selected vertex-sets', fontsize=20)
-plt.xticks(fontsize=20)
+plt.xticks(plt.xticks()[0], ['$Q$', '$Q_{in-deg>1}$', '$Q_{ancestor}$'], fontsize=24)
 plt.yticks(fontsize=20)
+plt.xlabel("")
+plt.ylabel("Cardinality")
 plt.tight_layout()
 print("Saving to {}".format(rawPlt_fname))
 plt.savefig(fname=rawPlt_fname, bbox_inches='tight')
