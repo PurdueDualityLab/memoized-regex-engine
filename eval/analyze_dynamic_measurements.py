@@ -92,6 +92,7 @@ def mergeDFs(splitDir):
 #######
 #slFile = os.path.join(DATA_PATH, 'export-060220-1')
 slFile = os.path.join(DATA_PATH, 'export-060220-2')
+slFile = '/users/jamiedavis/Downloads/x.pkl.bz2'
 
 slDF = loadDF(slFile)
 uniqRegexes = slDF['pattern'].unique()
@@ -110,16 +111,16 @@ slDF[spaceCostColName] = -1
 # Calculate relative space cost by slices
 index = slDF['selectionPolicy'] == "full memoization"
 slDF.loc[ index, spaceCostColName ] = \
-  slDF[index]['spaceCost'] / (slDF[index]['|Q|'] * slDF[index]['|w|'])
+  slDF[index]['spaceCostAlgo'] / (slDF[index]['|Q|'] * slDF[index]['|w|'])
 
 index = slDF['selectionPolicy'] == "selective: indeg>1"
 slDF.loc[ index, spaceCostColName ] = \
-  slDF[index]['spaceCost'] / (slDF[index]['|Q|'] * slDF[index]['|w|'])
+  slDF[index]['spaceCostAlgo'] / (slDF[index]['|Q|'] * slDF[index]['|w|'])
   # slDF[index]['spaceCost'] / (slDF[index]['|Phi_{in-deg > 1}|'] * slDF[index]['|w|'])
   
 index = slDF['selectionPolicy'] == "selective: loop"
 slDF.loc[ index, spaceCostColName ] = \
-  slDF[index]['spaceCost'] / (slDF[index]['|Q|'] * slDF[index]['|w|'])
+  slDF[index]['spaceCostAlgo'] / (slDF[index]['|Q|'] * slDF[index]['|w|'])
   #slDF[index]['spaceCost'] / (slDF[index]['|Phi_{ancestor}|'] * slDF[index]['|w|'])
 
 # Print some info and assert some facts
@@ -140,7 +141,7 @@ slDF.loc[slDF['selectionPolicy'] == "selective: indeg>1","selectionPolicy"] = r"
 slDF.loc[slDF['selectionPolicy'] == "selective: loop","selectionPolicy"] = r"$Q_{ancestor}$"
 
 slDF.loc[slDF['encodingPolicy'] == "negative encoding","encodingPolicy"] = r"Positive (hash)"
-slDF.loc[slDF['encodingPolicy'] == "no encoding","encodingPolicy"] = r"Memo table"
+slDF.loc[slDF['encodingPolicy'] == "no encoding","encodingPolicy"] = r"No encoding (memo table)"
 
 # Better column names for legend
 slDF["Encoding policy"] = slDF["encodingPolicy"]
@@ -178,32 +179,44 @@ rawSpacePlt_whis = [5,95]
 rawSpacePlt_showfliers = True
 rawSpacePlt_fname = os.path.join(FIG_PATH, 'raw-space-cost-whis{}-{}-fliers{}.{}'.format(
     rawSpacePlt_whis[0], rawSpacePlt_whis[1], rawSpacePlt_showfliers, FIG_FILE_FORMAT))
-ax = sns.boxplot(x="selectionPolicy", y="spaceCost", hue="Encoding policy",
+ax = sns.boxplot(x="selectionPolicy", y="spaceCostAlgo", hue="Encoding policy",
                  data=slDF[
                     (slDF['Encoding policy'] != "RLE-tuned") # Not a success story
                   ], 
                  order=[r'$Q$', r'$Q_{in-deg > 1}$', r'$Q_{ancestor}$'],
-                 hue_order=['No encoding (full table)', 'Positive (hash)', 'RLE'],
+                 hue_order=['No encoding (memo table)', 'Positive (hash)', 'RLE'],
                  #width=1.0,
                  whis=rawSpacePlt_whis, showfliers=rawSpacePlt_showfliers
                  )
+kb = ax.axhline(1024, color='blue', linestyle='--')
+plt.text(0.8, 1024 + 250, '1 KB', fontstyle='italic')
+
+mb = ax.axhline(1024*1024, color='red', linestyle='--')
+plt.text(0.8, 1024*1024 + 250000, '1 MB', fontstyle='italic')
+
 ax.set_yscale("log")
-plt.title(r'Raw space costs', fontsize=20)
+plt.title(r'Raw space costs (bytes)', fontsize=20)
 plt.xticks(fontsize=20)
 plt.xlabel("Selection scheme")
 plt.yticks(fontsize=20)
-plt.ylabel("Raw cost")
+#locs, labels = plt.yticks()
+#plt.yticks(locs, [], **kwargs)
+plt.ylabel("Raw cost (bytes)")
 #plt.legend(fontsize='small')
-ax.legend(
+leg = ax.legend(
     loc='lower left',
-    bbox_to_anchor= (1.05, 0.1), ncol=1,
+    bbox_to_anchor= (0.665, 0.825), ncol=1,
     borderaxespad=0, 
     frameon=True,
     title='Encoding scheme',
+    prop={'size': 7},
 )
+leg.set_title("Encoding scheme", prop = {'size': 10})
 #plt.tight_layout()
 print("Saving to {}".format(rawSpacePlt_fname))
 plt.savefig(fname=rawSpacePlt_fname, bbox_inches='tight')
+
+########################################################################
 
 plt.figure(2)
 ratioSpacePlt_whis = [1,99]
@@ -272,7 +285,7 @@ for selectionPolicy in selectionPolicies:
   costThreshold = 1000
   rows = slDF[(slDF['encodingPolicy'] == 'RLE') &
               (slDF['selectionPolicy'] == selectionPolicy) &
-              (slDF['spaceCost'] > costThreshold) ]
+              (slDF['spaceCostAlgo'] > costThreshold) ]
   print("{}/{} ({}%) were costly patterns for Phi_quant under RLE".format(len(rows), nPatterns, int(100*len(rows)/nPatterns)))
   
   #for p in rows['pattern']:
@@ -289,10 +302,10 @@ for selectionPolicy in selectionPolicies:
     if row['pattern'] not in pattern2costs:
       pattern2costs[row['pattern']] = { 'pattern': row['pattern'] }
     if row['selectionPolicy'] == selectionPolicy and row['encodingPolicy'] == 'RLE':
-      pattern2costs[row['pattern']]['spaceCost-RLE'] = row['spaceCost']
+      pattern2costs[row['pattern']]['spaceCost-RLE'] = row['spaceCostAlgo']
       anyItem = pattern2costs[row['pattern']]
     elif row['selectionPolicy'] == selectionPolicy and row['encodingPolicy'] == 'RLE-tuned':
-      pattern2costs[row['pattern']]['spaceCost-RLE-tuned'] = row['spaceCost']
+      pattern2costs[row['pattern']]['spaceCost-RLE-tuned'] = row['spaceCostAlgo']
       anyItem = pattern2costs[row['pattern']]
   
   print("\n\n*******\n\nDescribing the space costs for RLE under the {} scheme\n\n********\n\n".format(selectionPolicy))

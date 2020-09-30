@@ -225,15 +225,17 @@ class MemoizationDynamicAnalysis:
     self.phpBehavior = ""
     self.csharpBehavior = ""
 
-    self.selectionPolicy_to_enc2space = {} # Numeric space cost
+    self.selectionPolicy_to_enc2spaceAlgo = {} # Numeric space cost in algorithmic measure
+    self.selectionPolicy_to_enc2spaceBytes = {} # Numeric space cost in bytes
     self.selectionPolicy_to_enc2time = {} # Numeric time cost
 
     for scheme in ProtoRegexEngine.SELECTION_SCHEME.scheme2cox.keys():
       if scheme != ProtoRegexEngine.SELECTION_SCHEME.SS_None:
-        self.selectionPolicy_to_enc2space[scheme] = {}
+        self.selectionPolicy_to_enc2spaceAlgo[scheme] = {}
+        self.selectionPolicy_to_enc2spaceBytes[scheme] = {}
         self.selectionPolicy_to_enc2time[scheme] = {}
   
-  def initFromRaw(self, pattern, automatonSize, phiInDeg, phiQuantifier, inputLength, evilInput, nPumps, selectionPolicy_to_enc2space, selectionPolicy_to_enc2time):
+  def initFromRaw(self, pattern, automatonSize, phiInDeg, phiQuantifier, inputLength, evilInput, nPumps, selectionPolicy_to_enc2spaceAlgo, selectionPolicy_to_enc2spaceBytes, selectionPolicy_to_enc2time):
     self.pattern = pattern
     self.automatonSize = automatonSize
     self.phiInDeg = phiInDeg
@@ -241,8 +243,9 @@ class MemoizationDynamicAnalysis:
     self.inputLength = inputLength
     self.evilInput = evilInput
     self.nPumps = nPumps
-    self.selectionPolicy_to_enc2space = selectionPolicy_to_enc2space
     self.selectionPolicy_to_enc2time = selectionPolicy_to_enc2time
+    self.selectionPolicy_to_enc2spaceAlgo = selectionPolicy_to_enc2spaceAlgo
+    self.selectionPolicy_to_enc2spaceBytes = selectionPolicy_to_enc2spaceBytes
     return self
   
   def initFromNDJSON(self, jsonStr):
@@ -270,8 +273,9 @@ class MemoizationDynamicAnalysis:
     self.phpBehavior = obj['phpBehavior']
     self.csharpBehavior = obj['csharpBehavior']
 
-    self.selectionPolicy_to_enc2space = obj['selectionPolicy_to_enc2space']
     self.selectionPolicy_to_enc2time = obj['selectionPolicy_to_enc2time']
+    self.selectionPolicy_to_enc2spaceAlgo = obj['selectionPolicy_to_enc2spaceAlgo']
+    self.selectionPolicy_to_enc2spaceBytes = obj['selectionPolicy_to_enc2spaceBytes']
     return self
   
   def toNDJSON(self):
@@ -285,8 +289,9 @@ class MemoizationDynamicAnalysis:
       'nPumps': self.nPumps,
       'perlBehavior': self.perlBehavior,
       'productionEnginePumps': self.productionEnginePumps,
-      'selectionPolicy_to_enc2space': self.selectionPolicy_to_enc2space,
       'selectionPolicy_to_enc2time': self.selectionPolicy_to_enc2time,
+      'selectionPolicy_to_enc2spaceAlgo': self.selectionPolicy_to_enc2spaceAlgo,
+      'selectionPolicy_to_enc2spaceBytes': self.selectionPolicy_to_enc2spaceBytes,
     }
     return json.dumps(_dict)
   
@@ -296,19 +301,20 @@ class MemoizationDynamicAnalysis:
     assert self.phiInDeg >= 0, "Negative |Phi_in-deg|?"
     assert self.phiQuantifier >= 0, "Negative |Phi_quantifier|?"
     assert self.inputLength > 0, "no input"
-    # Full space cost for Phi=Q should be |Q| * |w|
-    fullSpaceCost = self.selectionPolicy_to_enc2space[
+    # Full space cost (algorithmic) for Phi=Q should be |Q| * |w|
+    fullSpaceCostAlgo = self.selectionPolicy_to_enc2spaceAlgo[
       ProtoRegexEngine.SELECTION_SCHEME.SS_Full
     ][
       ProtoRegexEngine.ENCODING_SCHEME.ES_None
     ]
-    assert fullSpaceCost == self.automatonSize * (self.inputLength+1), \
-      "fullSpaceCost {} != {} * {}".format(fullSpaceCost, self.automatonSize, self.inputLength)
+    # Should be "bigger" -- the difference can arise due to pump strings being > 1 character long
+    assert fullSpaceCostAlgo <= self.automatonSize * (self.inputLength+1), \
+      "fullSpaceCost {} is not >= {} * {}".format(fullSpaceCostAlgo, self.automatonSize, self.inputLength)
 
     # Full table should have the most space complexity
-    for selectionScheme, enc2space in self.selectionPolicy_to_enc2space.items():
+    for selectionScheme, enc2space in self.selectionPolicy_to_enc2spaceAlgo.items():
       for encodingScheme, spaceCost in enc2space.items():
-        assert spaceCost <= fullSpaceCost, \
+        assert spaceCost <= fullSpaceCostAlgo, \
           "General fullSpaceCost < cost for {}-{}".format(selectionScheme, encodingScheme)
         assert spaceCost <= enc2space[ProtoRegexEngine.ENCODING_SCHEME.ES_None], \
           "Phi-specific fullSpaceCost < cost for {}-{}".format(selectionScheme, encodingScheme)
@@ -321,8 +327,8 @@ class MemoizationDynamicAnalysis:
     This expands the selection-encoding dictionaries
     """
     rows = []
-    for selectionPolicy, d in self.selectionPolicy_to_enc2space.items():
-      for encodingPolicy, space in d.items():
+    for selectionPolicy, d in self.selectionPolicy_to_enc2time.items():
+      for encodingPolicy, _ in d.items():
         rows.append( {
           "pattern": self.pattern,
           "|Q|": self.automatonSize,
@@ -337,7 +343,8 @@ class MemoizationDynamicAnalysis:
           "productionEnginePumps": self.productionEnginePumps,
           "selectionPolicy": selectionPolicy,
           "encodingPolicy": encodingPolicy,
-          "spaceCost": space,
           "timeCost": self.selectionPolicy_to_enc2time[selectionPolicy][encodingPolicy],
+          "spaceCostAlgo": self.selectionPolicy_to_enc2spaceAlgo[selectionPolicy][encodingPolicy],
+          "spaceCostBytes": self.selectionPolicy_to_enc2spaceBytes[selectionPolicy][encodingPolicy],
         })
     return pd.DataFrame(data=rows)

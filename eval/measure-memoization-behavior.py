@@ -93,24 +93,26 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
   # Take 5 samples per evil input
   # Need at least 3 to compute second derivative
   # But keep values low to avoid too-long backtracking stacks
-  PUMPS_TO_TRY = [ i*3 for i in range(1,5) ]
+  MOSTEI_PUMPS = [ i*3 for i in range(1,5) ]
 
   # Can be much longer because memoization prevents geometric growth of the backtracking stack
-  # PERF_PUMPS_TO_TRY = [ 1000 ] # i*500 for i in range(1,5) ]
+  # perfPumps = [ 1000 ] # i*500 for i in range(1,5) ]
 
   #PROD_ENGINE_PUMPS = 500 * 1000
-  PROD_ENGINE_PUMPS = 200 * 1000 # Takes 27 seconds in Node.js on my MacBook. 100K takes 7 seconds, but wine is slow to start (sometimes 5 seconds) so we want to play it safe with a 10 second timeout.
+  #PROD_ENGINE_PUMPS = 200 * 1000 # Takes 27 seconds in Node.js on my MacBook. 100K takes 7 seconds, but wine is slow to start (sometimes 5 seconds) so we want to play it safe with a 10 second timeout.
   #PROD_ENGINE_PUMPS = 1 * 1000
   #PROD_ENGINE_PUMPS = 900
 
-  PERF_PUMPS_TO_TRY = [ int(PROD_ENGINE_PUMPS/10) ] # Hmm?
+  # perfPumps = [ int(PROD_ENGINE_PUMPS/10) ] # Hmm?
 
-  SECURITY_ANALYSIS_PUMPS = list(range(10000, 100000, 10000))
-  SECURITY_ANALYSIS_SELECTION = libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_Full
+  SECURITY_ANALYSIS_PUMPS = list(range(int(1e4), int(1e5), int(1e4))) # 10K, 20K, ..., 100K
+  SECURITY_ANALYSIS_SELECTION = libMemo.ProtoRegexEngine.SELECTION_SCHEME.allMemo
   SECURITY_ANALYSIS_ENCODING = libMemo.ProtoRegexEngine.ENCODING_SCHEME.ES_None
 
-  def __init__(self, regex, nTrialsPerCondition, taskConfig):
+  def __init__(self, regex, perfPumps, queryProtoMaxAttackStringLen, nTrialsPerCondition, taskConfig):
     self.regex = regex
+    self.perfPumps = [ perfPumps ]
+    self.queryProtoMaxAttackStringLen = queryProtoMaxAttackStringLen
     self.nTrialsPerCondition = nTrialsPerCondition
     self.taskConfig = taskConfig
   
@@ -118,7 +120,7 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
     """Run task
     
     Returns:
-      If SL: a pd.DataFrame with the data when run under PERF_PUMPS_TO_TRY[-1]
+      If SL: a pd.DataFrame with the data when run under perfPumps[-1]
       Else: MyTask.NOT_SL
       Captures and returns non-KeyboardInterrupt exceptions raised during execution
     Raises: KeyboardInterrupt
@@ -151,17 +153,20 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
         self.pump_to_mdas = self._runSLDynamicAnalysis(self.regex, ei, self.nTrialsPerCondition)
       else:
         fakeMDA = libMemo.MemoizationDynamicAnalysis()
-        fakeMDA.initFromRaw(self.regex.pattern, -1, -1, -1, -1, ei, MyTask.PERF_PUMPS_TO_TRY[-1], {
-          libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_Full: {
+        fakeMDA.initFromRaw(self.regex.pattern, -1, -1, -1, -1, ei, self.perfPumps[-1], {
+          libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_Full: { # Algo
+            libMemo.ProtoRegexEngine.ENCODING_SCHEME.ES_None: -1,
+          },
+          libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_Full: { # Space
             libMemo.ProtoRegexEngine.ENCODING_SCHEME.ES_None: -1,
           },
         }, {
-          libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_Full: {
+          libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_Full: { # Time
             libMemo.ProtoRegexEngine.ENCODING_SCHEME.ES_None: -1,
           },
         })
         self.pump_to_mdas = {
-          MyTask.PERF_PUMPS_TO_TRY[-1]: fakeMDA
+          self.perfPumps[-1]: fakeMDA
         }
 
       if self.taskConfig.queryProductionEngines():
@@ -172,7 +177,7 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
       # Return
       libLF.log('Completed regex /{}/'.format(self.regex.pattern))
       # Just return the biggest one for now
-      lastMDA = self.pump_to_mdas[MyTask.PERF_PUMPS_TO_TRY[-1]]
+      lastMDA = self.pump_to_mdas[self.perfPumps[-1]]
 
       # Collect pump data for the engines we tested
       if self.taskConfig.queryProductionEngines():
@@ -287,12 +292,12 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
     else:
       return self._engineOutputToBehavior(stdout.decode('utf-8'))
   
-  def _measureCondition(self, regex, mostEI, nPumps, selectionScheme, encodingScheme, nTrialsPerCondition):
+  def _measureCondition(self, regex, mostEI, nPumps, maxAttackStringLen, selectionScheme, encodingScheme, nTrialsPerCondition):
     """Obtain the average time and space costs for this condition
     
-    Returns: automatonSize (integer), phiSize (integer), time (numeric), space (numeric)
+    Returns: automatonSize (integer), phiSize (integer), time (numeric), algoSpace (numeric), bytesSpace (numeric)
     """
-    queryFile = libMemo.ProtoRegexEngine.buildQueryFile(regex.pattern, mostEI.build(nPumps))
+    queryFile = libMemo.ProtoRegexEngine.buildQueryFile(regex.pattern, mostEI.build(nPumps, maxAttackStringLen)[0])
 
     measures = []
     for i in range(0, nTrialsPerCondition):
@@ -308,13 +313,18 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
       os.unlink(queryFile)
 
     indivTimeCosts = [ meas.si_simTimeUS for meas in measures ]
-    indivSpaceCosts = [
-      sum(meas.mi_results_maxObservedCostPerVertex)
+    indivSpaceCostsAlgo = [
+      sum(meas.mi_results_maxObservedAsymptoticCostsPerVertex)
+      for meas in measures
+    ]
+    indivSpaceCostsBytes = [
+      sum(meas.mi_results_maxObservedMemoryBytesPerVertex)
       for meas in measures
     ]
 
     # Space costs should be constant
-    assert min(indivSpaceCosts) == max(indivSpaceCosts), "Space costs are not constant"
+    assert min(indivSpaceCostsAlgo) == max(indivSpaceCostsAlgo), "Space costs are not constant"
+    assert min(indivSpaceCostsBytes) == max(indivSpaceCostsBytes), "Space costs are not constant"
 
     if CHECK_TIME_COEFFICIENT_OF_VARIANCE:
       # Let's check that time costs do not vary too much, warn if it's too high
@@ -327,25 +337,38 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
     automatonSize = measures[0].ii_nStates
     phiSize = measures[0].mi_results_nSelectedVertices
     time = statistics.median_low(indivTimeCosts)
-    space = statistics.median_low(indivSpaceCosts)
+    spaceAlgo = indivSpaceCostsAlgo[0] # Constant 
+    spaceBytes = indivSpaceCostsBytes[0] # Constant
     
-    return automatonSize, phiSize, time, space
+    return automatonSize, phiSize, time, spaceAlgo, spaceBytes
   
   def _runSecurityAnalysis(self, regex, ei):
     # The paper says we check that the number of visits |w| grows linearly with input size
     # Under the Full-None configuration, the prototype tests an assert that #visits <= |Q|x|w|
     # If the program runs without error, then the test passes.
-    for nPumps in MyTask.SECURITY_ANALYSIS_PUMPS:
-      libLF.log("Trying with {} pumps".format(nPumps))
-      queryFile = libMemo.ProtoRegexEngine.buildQueryFile(regex.pattern, ei.build(nPumps))
-      try:
-        em = libMemo.ProtoRegexEngine.query(
-          MyTask.SECURITY_ANALYSIS_SELECTION, MyTask.SECURITY_ANALYSIS_ENCODING, queryFile
-        )
-      except BaseException as err: # Raises on rc != 0
-        libLF.log("Exception on {} pumps: {}".format(nPumps, str(err)))
+    for selMode in MyTask.SECURITY_ANALYSIS_SELECTION:
+      nVisits = []
+      for nPumps in MyTask.SECURITY_ANALYSIS_PUMPS:
+        libLF.log("Trying with {} pumps".format(nPumps))
+        queryFile = libMemo.ProtoRegexEngine.buildQueryFile(regex.pattern, ei.build(nPumps)[0])
+        try:
+          em = libMemo.ProtoRegexEngine.query(
+            selMode, MyTask.SECURITY_ANALYSIS_ENCODING, queryFile
+          )
+          nVisits.append(em.si_nTotalVisits)
+        except BaseException as err: # Raises on rc != 0
+          libLF.log("Exception on {} pumps: {}".format(nPumps, str(err)))
+          return False
+
+      # If we got this far, confirm that growth is linear
+      diffs = [ next - prev for prev, next in zip(nVisits, nVisits[1:]) ]
+      if len(set(diffs)) != 1:
+        libLF.log("{}: Non-linear growth for /{}/. Diffs: {}".format(selMode, regex.pattern, diffs))
         return False
-    libLF.log("No crash!")
+
+      libLF.log("{}: Linear growth for /{}/ (matches theorem)".format(selMode, regex.pattern))
+
+    # No error on any seletcion scheme
     return True
 
   def _runSLDynamicAnalysis(self, regex, mostEI, nTrialsPerCondition):
@@ -354,16 +377,10 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
     returns: pump_to_libMemo.MemoizationDynamicAnalysis
     """
 
+    selectionSchemes = libMemo.ProtoRegexEngine.SELECTION_SCHEME.allMemo
+    encodingSchemes = libMemo.ProtoRegexEngine.ENCODING_SCHEME.all
+
     selectionScheme_to_encodingScheme2engineMeasurement = {}
-
-    nonMemoizationSelectionSchemes = [ libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_None ]
-
-    selectionSchemes = [
-      scheme
-      for scheme in libMemo.ProtoRegexEngine.SELECTION_SCHEME.scheme2cox.keys()
-      if scheme not in nonMemoizationSelectionSchemes
-    ]
-    encodingSchemes = libMemo.ProtoRegexEngine.ENCODING_SCHEME.scheme2cox.keys()
 
     # How many experimental conditions?
     nConditions = len(selectionSchemes) * len(encodingSchemes)
@@ -372,12 +389,12 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
     # Obtain engine measurements for each combination of the
     # memoization selection and encoding schemes
     pump_to_mda = {}
-    for nPumps in MyTask.PERF_PUMPS_TO_TRY:
+    for nPumps in self.perfPumps:
 
       # Prep an MDA
       mda = libMemo.MemoizationDynamicAnalysis()
       mda.pattern = regex.pattern
-      mda.inputLength = len(mostEI.build(nPumps))
+      mda.inputLength = len(mostEI.build(nPumps)[0])
       mda.evilInput = mostEI
       mda.nPumps = nPumps
 
@@ -388,8 +405,8 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
           libLF.log("    Trying selection/encoding combination {}/{}".format(conditionIx, nConditions))
           conditionIx += 1
 
-          automatonSize, phiSize, timeCost, spaceCost = self._measureCondition(regex, mostEI, nPumps, selectionScheme, encodingScheme, nTrialsPerCondition)
-          libLF.log("{}: space cost {}".format(encodingScheme, spaceCost))
+          automatonSize, phiSize, timeCost, spaceCostAlgo, spaceCostBytes = self._measureCondition(regex, mostEI, nPumps, self.queryProtoMaxAttackStringLen, selectionScheme, encodingScheme, nTrialsPerCondition)
+          libLF.log("{}: space cost algo {}, space cost bytes {}".format(encodingScheme, spaceCostAlgo, spaceCostBytes))
 
           # Automaton statistics
           mda.automatonSize = automatonSize
@@ -399,7 +416,8 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
             mda.phiQuantifier = phiSize
 
           mda.selectionPolicy_to_enc2time[selectionScheme][encodingScheme] = timeCost
-          mda.selectionPolicy_to_enc2space[selectionScheme][encodingScheme] = spaceCost
+          mda.selectionPolicy_to_enc2spaceAlgo[selectionScheme][encodingScheme] = spaceCostAlgo
+          mda.selectionPolicy_to_enc2spaceBytes[selectionScheme][encodingScheme] = spaceCostBytes
 
       # Did we screw up?
       mda.validate()
@@ -457,8 +475,8 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
     for i, ei in enumerate(evilInputs):
       libLF.log("Checking evil input {}/{}:\n  {}".format(i, len(evilInputs), ei.toNDJSON()))
       pump2meas = {}
-      for nPumps in MyTask.PUMPS_TO_TRY:
-        queryFile = libMemo.ProtoRegexEngine.buildQueryFile(regex.pattern, ei.build(nPumps))
+      for nPumps in MyTask.MOSTEI_PUMPS:
+        queryFile = libMemo.ProtoRegexEngine.buildQueryFile(regex.pattern, ei.build(nPumps)[0])
         try:
           pump2meas[nPumps] = libMemo.ProtoRegexEngine.query(
             libMemo.ProtoRegexEngine.SELECTION_SCHEME.SS_None, libMemo.ProtoRegexEngine.ENCODING_SCHEME.ES_None, queryFile,
@@ -477,7 +495,7 @@ class MyTask(libLF.parallel.ParallelTask): # Not actually parallel, but keep the
     
       # Compute growth rates -- first derivative
       growthRates = []
-      for i_pump, j_pump in zip(MyTask.PUMPS_TO_TRY[1:], MyTask.PUMPS_TO_TRY[2:]):
+      for i_pump, j_pump in zip(MyTask.MOSTEI_PUMPS[1:], MyTask.MOSTEI_PUMPS[2:]):
         growthRates.append( pump2meas[j_pump].si_nTotalVisits - pump2meas[i_pump].si_nTotalVisits )
       
       # If the growth rates are strictly monotonically increasing, then we have super-linear growth
@@ -514,7 +532,7 @@ def regIsSupportedByPrototype(regex):
     print(err)
     return False
 
-def getTasks(regexFile, nTrialsPerCondition, taskConfig):
+def getTasks(regexFile, perfPumps, maxAttackStringLen, nTrialsPerCondition, taskConfig):
   regexes = loadRegexFile(regexFile)
 
   # Filter for prototype support
@@ -525,7 +543,7 @@ def getTasks(regexFile, nTrialsPerCondition, taskConfig):
   ]
   libLF.log("{} regexes were supported by prototype".format(len(regexes)))
 
-  tasks = [MyTask(regex, nTrialsPerCondition, taskConfig) for regex in regexes]
+  tasks = [MyTask(regex, perfPumps, maxAttackStringLen, nTrialsPerCondition, taskConfig) for regex in regexes]
   libLF.log('Prepared {} tasks'.format(len(tasks)))
   return tasks
 
@@ -555,16 +573,16 @@ def loadRegexFile(regexFile):
 
 ################
 
-def main(regexFile, useCSharpToFindMostEI, queryPrototype, runSecurityAnalysis, nTrialsPerCondition, queryProductionEngines, timeSensitive, parallelism, outFile):
-  libLF.log('regexFile {} useCSharpToFindMostEI, queryPrototype {} runSecurityAnalysis {} nTrialsPerCondition {} queryProductionEngines {} timeSensitive {} parallelism {} outFile {}' \
-    .format(regexFile, useCSharpToFindMostEI, queryPrototype, runSecurityAnalysis, nTrialsPerCondition, queryProductionEngines, timeSensitive, parallelism, outFile))
+def main(regexFile, useCSharpToFindMostEI, perfPumps, maxAttackStringLen, queryPrototype, runSecurityAnalysis, nTrialsPerCondition, queryProductionEngines, timeSensitive, parallelism, outFile):
+  libLF.log('regexFile {} useCSharpToFindMostEI {} perfPumps {} maxAttackStringLen {} queryPrototype {} runSecurityAnalysis {} nTrialsPerCondition {} queryProductionEngines {} timeSensitive {} parallelism {} outFile {}' \
+    .format(regexFile, useCSharpToFindMostEI, perfPumps, queryPrototype, maxAttackStringLen, runSecurityAnalysis, nTrialsPerCondition, queryProductionEngines, timeSensitive, parallelism, outFile))
 
   #### Check dependencies
   libLF.checkShellDependencies(shellDeps)
 
   #### Load data
   taskConfig = TaskConfig(useCSharpToFindMostEI, queryPrototype, runSecurityAnalysis, queryProductionEngines) 
-  tasks = getTasks(regexFile, nTrialsPerCondition, taskConfig)
+  tasks = getTasks(regexFile, perfPumps, maxAttackStringLen, nTrialsPerCondition, taskConfig)
   nRegexes = len(tasks)
 
   #### Collect data
@@ -616,14 +634,18 @@ parser.add_argument('--regex-file', type=str, help='In: NDJSON file of objects c
   dest='regexFile')
 parser.add_argument('--useCSharpToFindMostEI', help='In: Use CSharp to find the most evil input? Default is to use the prototype engine. This is a way of ensuring that the SL regexes you claim to have protected aren\'t easily eliminated by existing optimizations or aren\'t an artifact of an inefficient prototype', action='store_true', default=False,
   dest='useCSharpToFindMostEI')
+parser.add_argument('--perf-pumps', type=int, help='In: Number of pumps to use for performance (Default 20K: Stack Overflow scenario). Try 200K for production engines', required=False, default=20*1000,
+  dest='perfPumps')
+parser.add_argument('--max-attack-stringLen', type=int, help='In: Max attack string len. Acts as a cap on perf pumps. Is only used in queryPrototype.', required=False, default=-1,
+  dest='maxAttackStringLen')
 parser.add_argument('--queryPrototype', help='In: Query prototype?', required=False, action='store_true', default=False,
   dest='queryPrototype')
-parser.add_argument('--runSecurityAnalysis', action='store_true', help='In: Run the security analysis described in the paper', required=False, default=False,
+parser.add_argument('--runSecurityAnalysis', action='store_true', help='In: Run the security analysis described in the S&P submission manuscript. Confirm that the total number of simulation position visits increases *linearly* as we increase attack string length. This is true even for finite ambiguity because the factor is a constant function of Q.', required=False, default=False,
   dest='runSecurityAnalysis')
+parser.add_argument('--queryProductionEngines', help='In: Test resource cap effectiveness (see Davis dissertation, Chapter 9). Queries other engines (C\#, Perl, PHP) on the SL input to see the effectiveness of resource cap-style defenses', required=False, action='store_true', default=False,
+  dest='queryProductionEngines')
 parser.add_argument('--trials', type=int, help='In: Number of trials per experimental condition (only for prototype, and affects time costs not complexity)', required=False, default=20,
   dest='nTrialsPerCondition')
-parser.add_argument('--queryProductionEngines', help='In: Test resource cap effectiveness. Queries other engines (C\#, Perl, PHP) on the SL input to see the effectiveness of resource cap-style defenses', required=False, action='store_true', default=False,
-  dest='queryProductionEngines')
 parser.add_argument('--time-sensitive', help='In: Is this a time-sensitive analysis? If not, run in parallel', required=False, action='store_true', default=False,
   dest='timeSensitive')
 parser.add_argument('--parallelism', type=int, help='Maximum cores to use', required=False, default=libLF.parallel.CPUCount.CPU_BOUND,
@@ -639,4 +661,4 @@ if not args.queryPrototype and not args.runSecurityAnalysis and not args.queryPr
   sys.exit(1)
 
 # Here we go!
-main(args.regexFile, args.useCSharpToFindMostEI, args.queryPrototype, args.runSecurityAnalysis, args.nTrialsPerCondition, args.queryProductionEngines, args.timeSensitive, args.parallelism, args.outFile)
+main(args.regexFile, args.useCSharpToFindMostEI, args.perfPumps, args.maxAttackStringLen, args.queryPrototype, args.runSecurityAnalysis, args.nTrialsPerCondition, args.queryProductionEngines, args.timeSensitive, args.parallelism, args.outFile)

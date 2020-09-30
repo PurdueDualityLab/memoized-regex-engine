@@ -94,14 +94,36 @@ class EvilInput:
       eis += [ei1, ei2, ei3, ei4]
     return eis
   
-  def build(self, nPumps):
-    """Build attack string using this many pumps"""
+  def build(self, maxPumps, maxLen=-1):
+    """Build attack string using up to maxPumps pumps, up to a limit of maxLen characters (-1 means no limit)
+    
+    Returns: attackStr, nPumpsUsed
+    """
+
+    assert(maxPumps >= 0)
+    assert(maxLen >= -1)
+
+    nPumpsUsed = maxPumps
+    if maxLen >= 0:
+      # Honor length limit -- Calculate how many pumps to use
+      baseSize = sum( [ len(pp.prefix) for pp in self.pumpPairs ] ) + len(self.suffix)
+      sizeIncreasePerPump = sum([ len(pp.pump) for pp in self.pumpPairs ])
+
+      nPumpsToReachLen = (maxLen - baseSize) // sizeIncreasePerPump # Round down
+      nPumpsUsed = min(maxPumps, nPumpsToReachLen) # Honor the max pumps cap
+
+    # Pump
     attackStr = ''
     for pp in self.pumpPairs:
       attackStr += pp.prefix
-      attackStr += pp.pump * nPumps
+      attackStr += pp.pump * nPumpsUsed
     attackStr += self.suffix
-    return attackStr
+
+    # Confirm we honored
+    if maxLen >= 0:
+      assert(len(attackStr) <= maxLen)
+
+    return attackStr, nPumpsUsed
 
   def toNDJSON(self):
     _dict = {
