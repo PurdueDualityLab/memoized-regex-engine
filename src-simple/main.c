@@ -76,7 +76,6 @@ loadQuery(char *inFile)
 	}
 
 	// Read file
-	printf("HELLO\n");
 	logMsg(LOG_INFO, "Reading %s", inFile);
 	rawJson = loadFile(inFile);
 	logMsg(LOG_INFO, "Contents: <%s>", rawJson);
@@ -200,6 +199,7 @@ main(int argc, char **argv)
 		printprog(prog);
 		printf("\n");
 	}
+	Prog_assertNoInfiniteLoops(prog);
 
 	// Memoization settings
 	prog->memoMode = memoMode;

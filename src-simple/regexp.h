@@ -166,6 +166,9 @@ struct Inst
 	/* For StringCompare */
 	int cgNum;
 
+	/* Debug */
+	int mark;
+
 	InstInfoForMemoSelPolicy memoInfo;
 };
 
@@ -187,6 +190,7 @@ enum	/* Inst.opcode */
 };
 
 Prog *compile(Regexp*, int);
+void Prog_assertNoInfiniteLoops(Prog *p);
 void printprog(Prog*);
 
 extern int gen;

@@ -1227,3 +1227,102 @@ printprog(Prog *p)
 	}
 }
 
+static void Prog_unmarkAll(Prog *p)
+{
+	int i = 0;
+	for (i = 0; i < p->len; i++) {
+		p->start[i].mark = 0;
+	}
+}
+
+static int Inst_couldStartLoop(Inst *inst)
+{
+    // For the infinite loop check, we check if there's a loop to a branch.
+	// Only branches can introduce a back-edge -- START a loop.
+	switch (inst->opcode) {
+    case Jmp:
+	case Split:
+	case SplitMany:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
+// Return non-zero if we form a cycle, starting from stateNum, without consuming a character
+// Uses a recursive DFS. Will blow the stack on large curlies...
+static int Prog_markAndEpsilon(Prog *p, int stateNum)
+{
+	int i = 0;
+	Inst *curr = &p->start[stateNum];
+
+	logMsg(LOG_DEBUG, "  markAndEpsilon: instr %d", stateNum);
+	if (curr->mark) {
+		logMsg(LOG_DEBUG, "  infinite loop found: returned to instr %d", stateNum);
+		return 1;
+	}
+
+	// Only mark the nodes that could START a cycle
+	// We don't care about redundancy -- e.g. ( (a?) | (a?) ) b -- we can get to b 2 ways, but no big deal
+	if (Inst_couldStartLoop(curr))
+		curr->mark = 1;
+
+	switch(curr->opcode) {
+	case Jmp:
+		return Prog_markAndEpsilon(p, curr->x->stateNum);
+	case Split:
+		return Prog_markAndEpsilon(p, curr->x->stateNum) ? 1 : Prog_markAndEpsilon(p, curr->y->stateNum);
+	case SplitMany:
+		for (i = 0; i < curr->arity; i++) {
+			if (Prog_markAndEpsilon(p, curr->edges[i]->stateNum))
+				return 1;
+		}	
+		return 0;
+    case Char:
+	case Match:
+	case Any:
+	case CharClass:
+		return 0;
+	case Save:
+		// Costs 0, so skip over
+		return Prog_markAndEpsilon(p, stateNum + 1);
+	case StringCompare:
+		return 0; // TODO This requires a more sophisticated analysis. (.)?\1 can match the empty string
+	case InlineZeroWidthAssertion:
+		// InlineZWA costs 0, so skip over
+		return Prog_markAndEpsilon(p, stateNum + 1);
+	case RecursiveZeroWidthAssertion:
+	{
+		// RecursiveZWA costs 0, so skip over
+		// Nesting is verboten
+		while (curr->opcode != RecursiveMatch) curr++;
+		return Prog_markAndEpsilon(p, curr->stateNum + 1);
+	}
+	case RecursiveMatch:
+		// Nothing to do here, we'll explore this from another starting vertex
+		return 0;
+	default:
+		fatal("Unknown inst type");
+	}
+
+	fatal("Never reached");
+	return 0;
+}
+
+void Prog_assertNoInfiniteLoops(Prog *p)
+{
+	int i = 0;
+	for (i = 0; i < p->len; i++ ) {
+		if (Inst_couldStartLoop(&p->start[i])) {
+			Prog_unmarkAll(p);
+
+			logMsg(LOG_DEBUG, "  check for no infinite loops: starting from instr %d", i);
+			if (Prog_markAndEpsilon(p, i)) {
+				logMsg(LOG_DEBUG, "Found infinite loop from instr %d. Unsupported regex", i);
+				fatal("'syntax error': infinite loop possible due to nested *s like (a*)*");
+			}
+		}
+	}
+
+	logMsg(LOG_DEBUG, "No infinite loops found");
+}

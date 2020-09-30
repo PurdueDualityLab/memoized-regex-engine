@@ -326,3 +326,17 @@ a,}         ::   a       ::   SYNTAX
 a1,}        ::   a       ::   SYNTAX
 a,1}        ::   a       ::   SYNTAX
 a}          ::   a1      ::   SYNTAX
+
+# Infinite loops are detected and rejected
+(a*)*       ::   a       ::   SYNTAX
+(a*?)*      ::   a       ::   SYNTAX
+(a*?)+      ::   a       ::   SYNTAX
+(a+)*       ::   a       ::   MATCH
+(a?)*       ::   a       ::   SYNTAX
+(a?)+       ::   a       ::   SYNTAX
+(a*)*?      ::   a       ::   SYNTAX
+^(a*)*$     ::   a       ::   SYNTAX
+^(aa*)*$    ::   a       ::   MATCH
+^(aa*)*$    ::   aa      ::   MATCH
+^(aa*)*$    ::   aaa     ::   MATCH
+(a?|a?)b    ::   b       ::   MATCH
