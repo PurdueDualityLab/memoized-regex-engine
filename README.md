@@ -2,12 +2,13 @@
 
 Prototype of memoized regex engine.
 
+Research paper is available [here](https://davisjam.github.io/publications/).
+
 ## Table of contents
 
 | Item | Description | Location |
 |------|-------------|----------|
 | Simple regex engine | Source code for Cox's simple Thompson regex engine (baseline and variants)       | src-simple/ |
-| WIP (Full-featured regex engine) | WIP (Source code for the Perl regex engine (baseline and variants)) | src-perl/ |
 | Evaluation (semantics / performance) | Prototype evaluation. Test suite, benchmark suite               | eval/ |
 
 ## Configuration
