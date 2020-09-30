@@ -167,7 +167,8 @@ struct Inst
 	int cgNum;
 
 	/* Debug */
-	int mark;
+	int startMark;
+	int visitMark;
 
 	InstInfoForMemoSelPolicy memoInfo;
 };

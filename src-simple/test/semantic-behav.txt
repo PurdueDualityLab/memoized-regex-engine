@@ -340,3 +340,5 @@ a}          ::   a1      ::   SYNTAX
 ^(aa*)*$    ::   aa      ::   MATCH
 ^(aa*)*$    ::   aaa     ::   MATCH
 (a?|a?)b    ::   b       ::   MATCH
+a?a?a?      ::   a       ::   MATCH
+a{0,10}a{0,10}a{0,10} :: a :: MATCH
