@@ -1,13 +1,16 @@
 # memoized-regex-engine
 
-Prototype of memoized regex engine.
+Prototype of memoized backtracking regex engine. Novelty:
+- Demonstrates selective memoization and various encoding schemes for the memo table.
+- Includes benchmarking for large-scale evaluation on real-world regexes.
+
+Research paper is available [here](https://davisjam.github.io/publications/).
 
 ## Table of contents
 
 | Item | Description | Location |
 |------|-------------|----------|
 | Simple regex engine | Source code for Cox's simple Thompson regex engine (baseline and variants)       | src-simple/ |
-| WIP (Full-featured regex engine) | WIP (Source code for the Perl regex engine (baseline and variants)) | src-perl/ |
 | Evaluation (semantics / performance) | Prototype evaluation. Test suite, benchmark suite               | eval/ |
 
 ## Configuration
@@ -27,3 +30,5 @@ The simple and full regex engines are extensions of existing engines.
   - The JSON library used for the CLI is [cJSON](https://github.com/DaveGamble/cJSON), by D. Gamble (and their collaborators).
 
 The memoization extensions, test suite, and benchmark suite are my own.
+
+FYI: Most data in the paper was generated on a 10-node compute cluster. On a standard desktop it would take several days/weeks(?) to replicate.
