@@ -176,7 +176,7 @@ plt.figure(1,
            #figsize=(8,11)
            )
 rawSpacePlt_whis = [5,95]
-rawSpacePlt_showfliers = True
+rawSpacePlt_showfliers = False
 rawSpacePlt_fname = os.path.join(FIG_PATH, 'raw-space-cost-whis{}-{}-fliers{}.{}'.format(
     rawSpacePlt_whis[0], rawSpacePlt_whis[1], rawSpacePlt_showfliers, FIG_FILE_FORMAT))
 ax = sns.boxplot(x="selectionPolicy", y="spaceCostAlgo", hue="Encoding policy",
