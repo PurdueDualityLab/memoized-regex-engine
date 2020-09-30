@@ -40,7 +40,7 @@ cd src-simple;
 ./re [your args here]
 ```
 
-The usage message gives details.
+The usage message gives details. You can also see example queries from the test suite.
 
 The engine is instrumented.
 - You can watch progress by running the engine with the environment variable `MEMOIZATION_LOGLVL=debug`.
