@@ -11,8 +11,8 @@ Research paper is available [here](https://davisjam.github.io/publications/).
 | Item | Description | Location |
 |------|-------------|----------|
 | Simple regex engine | Source code for Cox's simple Thompson regex engine (baseline and variants)       | src-simple/ |
-| Evaluation (semantics / performance) | Prototype evaluation. Test suite, benchmark suite               | eval/ |
-| Prototype size measurements                                                                            | measure-prototype-size/ |
+| Evaluation          | Prototype evaluation. Test suite, benchmark suite                                | eval/ |
+| Prototype size measurements          | Broken down by engine extensions, memoization, and test         | measure-prototype-size/ |
 
 ## Configuration
 
@@ -21,6 +21,55 @@ Set the following environment variables:
 - `ECOSYSTEM_REGEXP_PROJECT_ROOT`: Set this to anything. It's referenced in `eval/`, but not actually used in this project. Needs to be cleaned up...
 
 The file `.sample_config` has examples. You might run `. .sample_config`.
+
+## Tests
+
+Run the tests as follows:
+
+```
+cd src-simple;
+make tests
+```
+
+You can run semantic and performance tests separately. Use `make semtests` and `make perftests`.
+
+The tests are defined in `src-simple/test`: `semantic-behav.txt` and `perf-behav.txt`.
+
+## Using the engine
+
+```
+cd src-simple;
+./re [your args here]
+```
+
+The usage message gives details. You can also see example queries from the test suite.
+
+The engine is instrumented.
+- You can watch progress by running the engine with the environment variable `MEMOIZATION_LOGLVL=debug`.
+- A JSON object is printed at the end with time and space measurements.
+
+## Running evaluation
+
+### Security study
+
+This is Figure 4 plus prose.
+
+- For Figure 4, run `eval/case-study-timeCost.py`.
+- For the security experiment described in the text, run `eval/measure-memoization-behavior.py --regex-file X --runSecurityAnalysis --trials 1 --out-file /tmp/out`. It prints a summary at the end.
+
+### Effectiveness of selective memoization
+
+This is Figure 5 plus prose.
+
+- Run `eval/measure-phi-sizes.py --regex-file X --out-file /tmp/phiSizes.json` to collect data.
+- Set the globals in `eval/analye_phi_measurements.py` to analyze the data and generate the figure.
+
+### Practical space costs
+
+This is Figure 6 plus prose.
+
+- Run `eval/measure-phi-sizes.py --regex-file X --queryPrototype --trials 1 --perf-pumps 20480 --max-attack-stringLen 20480 --out-file /tmp/SOSpaceCost.json` to collect data.
+- Set the globals in `eval/analye_dynamic_measurements.py` to analyze the data and generate the figure.
 
 ## Statement of origin
 
