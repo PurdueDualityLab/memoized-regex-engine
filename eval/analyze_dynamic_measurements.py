@@ -90,10 +90,11 @@ def mergeDFs(splitDir):
 #######
 #######
 #######
-#slFile = os.path.join(DATA_PATH, 'export-060220-1')
-#slFile = os.path.join(DATA_PATH, 'export-060220-2')
-#slFile = '/users/jamiedavis/Downloads/x.pkl.bz2'
+slFile = os.path.join(DATA_PATH, 'export-060220-1')
+slFile = os.path.join(DATA_PATH, 'export-060220-2')
+slFile = '/users/jamiedavis/Downloads/x.pkl.bz2'
 slFile = os.path.join(DATA_PATH, 'exp-092920')
+slFile = os.path.join(DATA_PATH, 'exp-093020')
 
 slDF = loadDF(slFile)
 uniqRegexes = slDF['pattern'].unique()
@@ -201,33 +202,34 @@ ax = sns.boxplot(x="selectionPolicy", y="spaceCostBytes", hue="Encoding policy",
                  order=[r'$Q$', r'$Q_{in-deg > 1}$', r'$Q_{ancestor}$'],
                  hue_order=['No encoding (memo table)', 'Positive (hash)', 'RLE'],
                  #width=1.0,
-                 whis=rawSpacePlt_whis, showfliers=rawSpacePlt_showfliers
+                 whis=rawSpacePlt_whis, showfliers=rawSpacePlt_showfliers, fliersize=2
                  )
-kb = ax.axhline(1024, color='blue', linestyle='--')
-plt.text(2.32, 1024 + 250, '1 KB', fontstyle='italic', fontsize=14)
+kb = ax.axhline(1024, color='black', linestyle='--')
+plt.text(-0.5, 1024 + 250, '1 KB', fontstyle='italic', fontsize=14)
 
-mb = ax.axhline(1024*1024, color='green', linestyle='--')
-plt.text(2.32, 1024*1024 + 250000, '1 MB', fontstyle='italic', fontsize=14)
+mb = ax.axhline(1024*1024, color='black', linestyle='--')
+plt.text(-0.5, 1024*1024 + 250000, '1 MB', fontstyle='italic', fontsize=13.5)
 
-mb = ax.axhline(1024*1024*1024, color='red', linestyle='--')
-plt.text(2.32, 1024*1024*1024 + 75000000, '1 GB', fontstyle='italic', fontsize=14)
+mb = ax.axhline(1024*1024*1024, color='black', linestyle='--')
+plt.text(-0.5, 1024*1024*1024 + 95000000, '1 GB', fontstyle='italic', fontsize=14)
 
 ax.set_yscale("log")
+plt.ylim(bottom=75, top=7e9) # Max is about 6e9
 plt.title(r'Space cost for Stack Overflow scenario', fontsize=20)
 plt.xticks(fontsize=22)
 plt.xlabel("")#"Selection scheme")
 plt.yticks(fontsize=20)
 #locs, labels = plt.yticks()
 #plt.yticks(locs, [], **kwargs)
-plt.ylabel("Space cost (bytes)", fontsize=16)
+plt.ylabel("Space cost (bytes)", fontsize=15)
 leg = ax.legend(
     loc='upper right',
-    framealpha=0.5,
+    framealpha=0.45,
     #bbox_to_anchor= (0.52, 0.86), ncol=1,
     borderaxespad=0, 
     frameon=True,
     title='Encoding scheme',
-    prop={'size': 14},
+    prop={'size': 13},
 )
 leg.set_title("Encoding scheme", prop = {'size': 16})
 #plt.tight_layout()
