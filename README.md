@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/246123959.svg)](https://zenodo.org/badge/latestdoi/246123959)
+
 # memoized-regex-engine
 
 Prototype of memoized backtracking regex engine. Novelty:
